@@ -21,6 +21,7 @@ import type {
 } from './types';
 
 const DEFAULT_STEP_SIZE = 1e-6;
+const CENTRAL_DIFFERENCE_DENOMINATOR = 2.0; // Denominator for central difference formula: (f(x+h) - f(x-h)) / (2h)
 
 /**
  * Computes the gradient vector using central difference method.
@@ -51,7 +52,7 @@ export function finiteDiffGradient(
     const backwardCost = costFunction(backwardParams);
 
     // Central difference: (f(x+h) - f(x-h)) / (2h)
-    gradient[i] = (forwardCost - backwardCost) / (2.0 * stepSize);
+    gradient[i] = (forwardCost - backwardCost) / (CENTRAL_DIFFERENCE_DENOMINATOR * stepSize);
   }
 
   return gradient;
@@ -99,7 +100,7 @@ export function finiteDiffJacobian(
 
     // Central difference for each residual component
     for (let residualIndex = 0; residualIndex < residualCount; residualIndex++) {
-      const derivative = (forwardResidual[residualIndex] - backwardResidual[residualIndex]) / (2.0 * stepSize);
+      const derivative = (forwardResidual[residualIndex] - backwardResidual[residualIndex]) / (CENTRAL_DIFFERENCE_DENOMINATOR * stepSize);
       jacobianData[residualIndex][paramIndex] = derivative;
     }
   }

@@ -27,6 +27,7 @@ const DEFAULT_TOLERANCE = 1e-6;
 const DEFAULT_STEP_SIZE = 0.01;
 const DEFAULT_USE_LINE_SEARCH = true;
 const ZERO_STEP_SIZE = 0.0; // Indicates line search found no valid step (not a descent direction)
+const NEGATIVE_GRADIENT_DIRECTION = -1.0; // Multiplier for negative gradient direction (steepest descent)
 
 /**
  * Determines the step size for gradient descent iteration.
@@ -47,7 +48,7 @@ function determineStepSize(
   }
 
   // Use line search when enabled and no fixed step size provided
-  const searchDirection = scaleVector(currentGradient, -1.0);
+  const searchDirection = scaleVector(currentGradient, NEGATIVE_GRADIENT_DIRECTION);
   const stepSize = backtrackingLineSearch(
     costFunction,
     gradientFunction,
@@ -66,9 +67,84 @@ function updateParametersWithGradientStep(
   currentGradient: Float64Array,
   stepSize: number
 ): { newParameters: Float64Array; step: Float64Array } {
-  const step = scaleVector(currentGradient, -stepSize);
+  const negativeStepSize = NEGATIVE_GRADIENT_DIRECTION * stepSize;
+  const step = scaleVector(currentGradient, negativeStepSize);
   const newParameters = addVectors(currentParameters, step);
   return { newParameters, step };
+}
+
+/**
+ * Checks gradient convergence and returns result if converged.
+ * Early return pattern to reduce nesting.
+ */
+function checkGradientConvergenceAndReturn(
+  currentParameters: Float64Array,
+  iteration: number,
+  currentCost: number,
+  gradientNorm: number,
+  tolerance: number,
+  usedLineSearchFlag: boolean,
+  verbose: boolean
+): { converged: boolean; result?: GradientDescentResult } {
+  if (checkGradientConvergence(gradientNorm, tolerance, iteration)) {
+    if (verbose) {
+      console.log(`Converged at iteration ${iteration}: gradient norm = ${gradientNorm}`);
+    }
+    const result = createConvergenceResult(currentParameters, iteration, true, currentCost, gradientNorm);
+    return { converged: true, result: { ...result, usedLineSearch: usedLineSearchFlag } };
+  }
+  return { converged: false };
+}
+
+/**
+ * Handles line search failure case.
+ * Returns convergence result indicating failure.
+ */
+function handleLineSearchFailure(
+  currentParameters: Float64Array,
+  iteration: number,
+  currentCost: number,
+  gradientNorm: number,
+  verbose: boolean
+): { converged: boolean; result: GradientDescentResult } {
+  if (verbose) {
+    console.log(`Line search failed at iteration ${iteration}`);
+  }
+  return {
+    converged: true,
+    result: {
+      parameters: currentParameters,
+      iterations: iteration,
+      converged: false,
+      finalCost: currentCost,
+      finalGradientNorm: gradientNorm,
+      usedLineSearch: true
+    }
+  };
+}
+
+/**
+ * Checks step size convergence and returns result if converged.
+ * Early return pattern to reduce nesting.
+ */
+function checkStepSizeConvergenceAndReturn(
+  currentParameters: Float64Array,
+  iteration: number,
+  currentCost: number,
+  gradientNorm: number,
+  stepNorm: number,
+  tolerance: number,
+  newUsedLineSearch: boolean,
+  verbose: boolean
+): { converged: boolean; result?: GradientDescentResult } {
+  if (checkStepSizeConvergence(stepNorm, tolerance, iteration)) {
+    if (verbose) {
+      console.log(`Converged at iteration ${iteration}: step size = ${stepNorm}`);
+    }
+    const result = createConvergenceResult(currentParameters, iteration, true, currentCost, gradientNorm);
+    return { converged: true, result: { ...result, usedLineSearch: newUsedLineSearch } };
+  }
+  return { converged: false };
 }
 
 /**
@@ -98,12 +174,17 @@ function performGradientDescentIteration(
   }
 
   // Check gradient convergence - early return
-  if (checkGradientConvergence(gradientNorm, tolerance, iteration)) {
-    if (verbose) {
-      console.log(`Converged at iteration ${iteration}: gradient norm = ${gradientNorm}`);
-    }
-    const result = createConvergenceResult(currentParameters, iteration, true, currentCost, gradientNorm);
-    return { converged: true, result: { ...result, usedLineSearch: usedLineSearchFlag } };
+  const gradientConvergenceResult = checkGradientConvergenceAndReturn(
+    currentParameters,
+    iteration,
+    currentCost,
+    gradientNorm,
+    tolerance,
+    usedLineSearchFlag,
+    verbose
+  );
+  if (gradientConvergenceResult.converged && gradientConvergenceResult.result) {
+    return { converged: true, result: gradientConvergenceResult.result };
   }
 
   // Determine step size
@@ -118,20 +199,14 @@ function performGradientDescentIteration(
 
   // Early return: line search failed
   if (stepSizeResult.stepSize === ZERO_STEP_SIZE) {
-    if (verbose) {
-      console.log(`Line search failed at iteration ${iteration}`);
-    }
-    return {
-      converged: true,
-      result: {
-        parameters: currentParameters,
-        iterations: iteration,
-        converged: false,
-        finalCost: currentCost,
-        finalGradientNorm: gradientNorm,
-        usedLineSearch: true
-      }
-    };
+    const failureResult = handleLineSearchFailure(
+      currentParameters,
+      iteration,
+      currentCost,
+      gradientNorm,
+      verbose
+    );
+    return failureResult;
   }
 
   const newUsedLineSearch = usedLineSearchFlag || stepSizeResult.usedLineSearch;
@@ -146,12 +221,18 @@ function performGradientDescentIteration(
 
   // Check step size convergence - early return
   const stepNorm = vectorNorm(step);
-  if (checkStepSizeConvergence(stepNorm, tolerance, iteration)) {
-    if (verbose) {
-      console.log(`Converged at iteration ${iteration}: step size = ${stepNorm}`);
-    }
-    const result = createConvergenceResult(currentParameters, iteration, true, currentCost, gradientNorm);
-    return { converged: true, result: { ...result, usedLineSearch: newUsedLineSearch } };
+  const stepSizeConvergenceResult = checkStepSizeConvergenceAndReturn(
+    currentParameters,
+    iteration,
+    currentCost,
+    gradientNorm,
+    stepNorm,
+    tolerance,
+    newUsedLineSearch,
+    verbose
+  );
+  if (stepSizeConvergenceResult.converged && stepSizeConvergenceResult.result) {
+    return { converged: true, result: stepSizeConvergenceResult.result };
   }
 
   // Log progress if verbose

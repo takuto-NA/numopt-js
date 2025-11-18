@@ -20,6 +20,7 @@ const DEFAULT_CONTRACTION_FACTOR = 0.5;
 const DEFAULT_ARMIJO_PARAMETER = 0.1;
 const DEFAULT_MAX_LINE_SEARCH_ITERATIONS = 50;
 const INVALID_STEP_SIZE = 0.0; // Returned when search direction is not a descent direction
+const NON_DESCENT_DIRECTION_THRESHOLD = 0.0; // Threshold for directional derivative: >= 0 means not a descent direction
 
 /**
  * Performs backtracking line search to find a step size that satisfies
@@ -56,7 +57,7 @@ export function backtrackingLineSearch(
 
   // Early return if search direction is not a descent direction
   // Directional derivative >= 0 means moving in this direction increases the cost
-  if (directionalDerivative >= 0) {
+  if (directionalDerivative >= NON_DESCENT_DIRECTION_THRESHOLD) {
     return INVALID_STEP_SIZE;
   }
 

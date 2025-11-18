@@ -146,3 +146,13 @@ export function scaleVector(vector: Float64Array, scalar: number): Float64Array 
   return result;
 }
 
+/**
+ * Computes the sum of squared residuals (cost function for least squares problems).
+ * This is the squared L2 norm: ||r||^2 = r^T r = sum(r_i^2)
+ * 
+ * Used to avoid code duplication when computing cost from residual norm.
+ */
+export function computeSumOfSquaredResiduals(residualNorm: number): number {
+  return residualNorm * residualNorm;
+}
+
