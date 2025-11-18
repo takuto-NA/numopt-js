@@ -21,9 +21,9 @@ import type {
   LevenbergMarquardtOptions,
   LevenbergMarquardtResult
 } from './types';
-import { finiteDiffJacobian } from './finiteDiff';
-import { float64ArrayToMatrix, matrixToFloat64Array, vectorNorm } from '../utils/matrix';
+import { float64ArrayToMatrix, matrixToFloat64Array, vectorNorm, computeSumOfSquaredResiduals } from '../utils/matrix';
 import { checkGradientConvergence, checkStepSizeConvergence, checkResidualConvergence } from './convergence';
+import { computeJacobianMatrix } from './jacobianComputation';
 
 const DEFAULT_MAX_ITERATIONS = 1000;
 const DEFAULT_LAMBDA_INITIAL = 1e-3;
@@ -34,36 +34,132 @@ const DEFAULT_TOL_RESIDUAL = 1e-6;
 const DEFAULT_USE_NUMERIC_JACOBIAN = true;
 const DEFAULT_JACOBIAN_STEP = 1e-6;
 const MAXIMUM_LAMBDA_THRESHOLD = 1e10; // Maximum lambda before giving up (prevents infinite loop)
+const NEGATIVE_COEFFICIENT = -1.0; // Coefficient for negative right-hand side in damped normal equations: (J^T J + λI) δ = -J^T r
 
 /**
- * Computes the Jacobian matrix using analytical function or numerical differentiation.
- * Early return pattern: prefers analytical Jacobian if available.
+ * Computes J^T J and J^T r matrices needed for normal equations.
+ * Returns both matrices for use in solving damped normal equations.
  */
-function computeJacobianMatrix(
-  jacobianFunction: JacobianFn | undefined,
-  residualFunction: ResidualFn,
+function computeNormalEquationsMatrices(
+  jacobianMatrix: Matrix,
+  residual: Float64Array
+): { jtj: Matrix; jtr: Matrix } {
+  const jacobianTranspose = jacobianMatrix.transpose();
+  const jtj = jacobianTranspose.mmul(jacobianMatrix);
+  const residualMatrix = float64ArrayToMatrix(residual);
+  const jtr = jacobianTranspose.mmul(residualMatrix);
+  return { jtj, jtr };
+}
+
+/**
+ * Creates a convergence result object for Levenberg-Marquardt algorithm.
+ * Centralizes result creation to avoid code duplication.
+ */
+function createConvergenceResultForLM(
   parameters: Float64Array,
-  useNumericJacobian: boolean,
-  jacobianStep: number
-): Matrix {
-  // Early return: use analytical Jacobian if provided
-  if (jacobianFunction) {
-    return jacobianFunction(parameters);
+  iteration: number,
+  converged: boolean,
+  finalCost: number,
+  finalGradientNorm: number,
+  finalResidualNorm: number,
+  finalLambda: number
+): LevenbergMarquardtResult {
+  return {
+    parameters,
+    iterations: iteration + 1,
+    converged,
+    finalCost,
+    finalGradientNorm,
+    finalResidualNorm,
+    finalLambda
+  };
+}
+
+/**
+ * Tries a Levenberg-Marquardt step by solving damped normal equations.
+ * Returns whether step was accepted and updated parameters/lambda.
+ */
+function tryLevenbergMarquardtStep(
+  jtj: Matrix,
+  jtr: Matrix,
+  currentParameters: Float64Array,
+  currentLambda: number,
+  lambdaFactor: number,
+  residualFunction: ResidualFn,
+  currentCost: number,
+  tolStep: number,
+  iteration: number,
+  verbose: boolean
+): {
+  stepAccepted: boolean;
+  newParameters?: Float64Array;
+  newLambda: number;
+  stepNorm?: number;
+  shouldStop?: boolean;
+} {
+  // Early return: lambda too large
+  if (currentLambda >= MAXIMUM_LAMBDA_THRESHOLD) {
+    if (verbose) {
+      console.log(`Lambda too large, stopping optimization`);
+    }
+    return { stepAccepted: false, newLambda: currentLambda, shouldStop: true };
   }
 
-  // Early return: use numerical Jacobian if enabled
-  if (useNumericJacobian) {
-    return finiteDiffJacobian(residualFunction, parameters, { stepSize: jacobianStep });
-  }
+  try {
+    // Add damping: J^T J + λI
+    const parameterCount = jtj.rows;
+    const identity = Matrix.eye(parameterCount, parameterCount);
+    const dampedHessian = jtj.add(identity.mul(currentLambda));
 
-  // Neither provided: throw error with helpful message
-  throw new Error(
-    'Jacobian computation is required but not provided. ' +
-    'Please either:\n' +
-    '  1. Provide a jacobian in options: levenbergMarquardt(params, residualFn, { jacobian: jacobianFn })\n' +
-    '  2. Enable numerical Jacobian: levenbergMarquardt(params, residualFn, { useNumericJacobian: true })\n' +
-    'Note: Numerical Jacobian is enabled by default. If you see this error, it may have been explicitly disabled.'
-  );
+    // Solve: (J^T J + λI) δ = -J^T r
+    const negativeJtr = jtr.mul(NEGATIVE_COEFFICIENT);
+    const stepMatrix = solve(dampedHessian, negativeJtr);
+    const step = matrixToFloat64Array(stepMatrix);
+    const stepNorm = vectorNorm(step);
+
+    // Check step size convergence
+    if (checkStepSizeConvergence(stepNorm, tolStep, iteration)) {
+      return { stepAccepted: false, newLambda: currentLambda, stepNorm };
+    }
+
+    // Try the step: x_new = x_old + δ
+    const newParameters = new Float64Array(currentParameters.length);
+    for (let i = 0; i < currentParameters.length; i++) {
+      newParameters[i] = currentParameters[i] + step[i];
+    }
+
+    const newResidual = residualFunction(newParameters);
+    const newResidualNorm = vectorNorm(newResidual);
+    const newCost = computeSumOfSquaredResiduals(newResidualNorm);
+
+    // Check if step improved the cost
+    if (newCost < currentCost) {
+      // Step successful: accept it and decrease lambda
+      const newLambda = currentLambda / lambdaFactor;
+      if (verbose) {
+        console.log(
+          `Iteration ${iteration}: cost improved ${currentCost} -> ${newCost}, lambda = ${newLambda}`
+        );
+      }
+      return { stepAccepted: true, newParameters, newLambda };
+    }
+
+    // Step failed: reject it and increase lambda
+    const newLambda = currentLambda * lambdaFactor;
+    if (verbose) {
+      console.log(
+        `Iteration ${iteration}: step rejected, cost increased ${currentCost} -> ${newCost}, lambda = ${newLambda}`
+      );
+    }
+    return { stepAccepted: false, newLambda };
+  } catch (error) {
+    // Singular matrix or numerical issues: increase lambda and retry
+    const newLambda = currentLambda * lambdaFactor;
+    if (verbose) {
+      console.log(`Singular matrix at iteration ${iteration}, increasing lambda to ${newLambda}`);
+    }
+    return { stepAccepted: false, newLambda };
+  }
 }
 
 /**
@@ -110,7 +206,7 @@ export function levenbergMarquardt(
     // Compute residual vector
     const residual = residualFunction(currentParameters);
     const residualNorm = vectorNorm(residual);
-    const cost = residualNorm * residualNorm; // Sum of squared residuals
+    const cost = computeSumOfSquaredResiduals(residualNorm);
 
     // Track best solution so far
     if (cost < bestCost) {
@@ -130,14 +226,12 @@ export function levenbergMarquardt(
       residualFunction,
       currentParameters,
       useNumericJacobian,
-      jacobianStep
+      jacobianStep,
+      'levenbergMarquardt'
     );
 
     // Compute J^T J and J^T r
-    const jacobianTranspose = jacobianMatrix.transpose();
-    const jtj = jacobianTranspose.mmul(jacobianMatrix);
-    const residualMatrix = float64ArrayToMatrix(residual);
-    const jtr = jacobianTranspose.mmul(residualMatrix);
+    const { jtj, jtr } = computeNormalEquationsMatrices(jacobianMatrix, residual);
 
     // Compute gradient norm: ||J^T r||
     const gradientVector = matrixToFloat64Array(jtr);
@@ -148,107 +242,69 @@ export function levenbergMarquardt(
       if (verbose) {
         console.log(`Converged at iteration ${iteration}: gradient norm = ${gradientNorm}`);
       }
-      return {
-        parameters: currentParameters,
-        iterations: iteration + 1,
-        converged: true,
-        finalCost: cost,
-        finalGradientNorm: gradientNorm,
-        finalResidualNorm: residualNorm,
-        finalLambda: currentLambda
-      };
+      return createConvergenceResultForLM(
+        currentParameters,
+        iteration,
+        true,
+        cost,
+        gradientNorm,
+        residualNorm,
+        currentLambda
+      );
     }
 
     // Try to solve damped normal equations: (J^T J + λI) δ = -J^T r
-    let step: Float64Array;
     let stepAccepted = false;
-
     while (!stepAccepted && currentLambda < MAXIMUM_LAMBDA_THRESHOLD) {
-      try {
-        // Add damping: J^T J + λI
-        const parameterCount = jtj.rows;
-        const identity = Matrix.eye(parameterCount, parameterCount);
-        const dampedHessian = jtj.add(identity.mul(currentLambda));
+      const stepResult = tryLevenbergMarquardtStep(
+        jtj,
+        jtr,
+        currentParameters,
+        currentLambda,
+        lambdaFactor,
+        residualFunction,
+        cost,
+        tolStep,
+        iteration,
+        verbose
+      );
 
-        // Solve: (J^T J + λI) δ = -J^T r
-        const negativeJtr = jtr.mul(-1.0);
-        const stepMatrix = solve(dampedHessian, negativeJtr);
-        step = matrixToFloat64Array(stepMatrix);
+      // Early return: lambda too large
+      if (stepResult.shouldStop) {
+        return createConvergenceResultForLM(
+          bestParameters,
+          iteration,
+          false,
+          bestCost,
+          gradientNorm,
+          residualNorm,
+          stepResult.newLambda
+        );
+      }
 
-        // Check step size convergence
-        const stepNorm = vectorNorm(step);
-        if (checkStepSizeConvergence(stepNorm, tolStep, iteration)) {
-          if (verbose) {
-            console.log(`Converged at iteration ${iteration}: step size = ${stepNorm}`);
-          }
-          return {
-            parameters: currentParameters,
-            iterations: iteration + 1,
-            converged: true,
-            finalCost: cost,
-            finalGradientNorm: gradientNorm,
-            finalResidualNorm: residualNorm,
-            finalLambda: currentLambda
-          };
-        }
-
-        // Try the step: x_new = x_old + δ
-        const newParameters = new Float64Array(currentParameters.length);
-        for (let i = 0; i < currentParameters.length; i++) {
-          newParameters[i] = currentParameters[i] + step[i];
-        }
-
-        const newResidual = residualFunction(newParameters);
-        const newResidualNorm = vectorNorm(newResidual);
-        const newCost = newResidualNorm * newResidualNorm;
-
-        // Check if step improved the cost
-        // Early return: handle successful step first
-        if (newCost < cost) {
-          // Step successful: accept it and decrease lambda
-          currentParameters = newParameters;
-          currentLambda = currentLambda / lambdaFactor;
-          stepAccepted = true;
-
-          if (verbose) {
-            console.log(
-              `Iteration ${iteration}: cost improved ${cost} -> ${newCost}, lambda = ${currentLambda}`
-            );
-          }
-          continue;
-        }
-
-        // Step failed: reject it and increase lambda
-        currentLambda = currentLambda * lambdaFactor;
+      // Early return: step size convergence
+      if (stepResult.stepNorm !== undefined && checkStepSizeConvergence(stepResult.stepNorm, tolStep, iteration)) {
         if (verbose) {
-          console.log(
-            `Iteration ${iteration}: step rejected, cost increased ${cost} -> ${newCost}, lambda = ${currentLambda}`
-          );
+          console.log(`Converged at iteration ${iteration}: step size = ${stepResult.stepNorm}`);
         }
-      } catch (error) {
-        // Singular matrix or numerical issues: increase lambda and retry
-        currentLambda = currentLambda * lambdaFactor;
+        return createConvergenceResultForLM(
+          currentParameters,
+          iteration,
+          true,
+          cost,
+          gradientNorm,
+          residualNorm,
+          currentLambda
+        );
+      }
 
-        if (verbose) {
-          console.log(`Singular matrix at iteration ${iteration}, increasing lambda to ${currentLambda}`);
-        }
+      // Update lambda
+      currentLambda = stepResult.newLambda;
 
-        // Early return: lambda too large, give up
-        if (currentLambda >= MAXIMUM_LAMBDA_THRESHOLD) {
-          // Lambda too large, give up (prevents infinite loop when matrix is severely ill-conditioned)
-          if (verbose) {
-            console.log(`Lambda too large, stopping optimization`);
-          }
-          return {
-            parameters: bestParameters,
-            iterations: iteration + 1,
-            converged: false,
-            finalCost: bestCost,
-            finalGradientNorm: gradientNorm,
-            finalResidualNorm: residualNorm,
-            finalLambda: currentLambda
-          };
-        }
+      // Accept step if successful
+      if (stepResult.stepAccepted && stepResult.newParameters) {
+        currentParameters = new Float64Array(stepResult.newParameters);
+        stepAccepted = true;
       }
     }
 
@@ -259,15 +315,15 @@ export function levenbergMarquardt(
       if (verbose) {
         console.log(`Converged at iteration ${iteration}: residual norm = ${currentResidualNorm}`);
       }
-      return {
-        parameters: currentParameters,
-        iterations: iteration + 1,
-        converged: true,
-        finalCost: cost,
-        finalGradientNorm: gradientNorm,
-        finalResidualNorm: currentResidualNorm,
-        finalLambda: currentLambda
-      };
+      return createConvergenceResultForLM(
+        currentParameters,
+        iteration,
+        true,
+        cost,
+        gradientNorm,
+        currentResidualNorm,
+        currentLambda
+      );
     }
   }
 

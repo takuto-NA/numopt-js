@@ -19,45 +19,16 @@ import type {
   GaussNewtonOptions,
   OptimizationResult
 } from './types';
-import { finiteDiffJacobian } from './finiteDiff';
-import { float64ArrayToMatrix, matrixToFloat64Array, vectorNorm } from '../utils/matrix';
+import { float64ArrayToMatrix, matrixToFloat64Array, vectorNorm, computeSumOfSquaredResiduals } from '../utils/matrix';
 import { checkStepSizeConvergence, checkResidualConvergence, createConvergenceResult } from './convergence';
+import { computeJacobianMatrix } from './jacobianComputation';
 
 const DEFAULT_MAX_ITERATIONS = 1000;
 const DEFAULT_TOLERANCE = 1e-6;
 const DEFAULT_USE_NUMERIC_JACOBIAN = true;
 const DEFAULT_JACOBIAN_STEP = 1e-6;
+const NEGATIVE_COEFFICIENT = -1.0; // Coefficient for negative right-hand side in normal equations: (J^T J) δ = -J^T r
 
-/**
- * Computes the Jacobian matrix using analytical function or numerical differentiation.
- * Early return pattern: prefers analytical Jacobian if available.
- */
-function computeJacobianMatrix(
-  jacobianFunction: JacobianFn | undefined,
-  residualFunction: ResidualFn,
-  parameters: Float64Array,
-  useNumericJacobian: boolean,
-  jacobianStep: number
-): Matrix {
-  // Early return: use analytical Jacobian if provided
-  if (jacobianFunction) {
-    return jacobianFunction(parameters);
-  }
-
-  // Early return: use numerical Jacobian if enabled
-  if (useNumericJacobian) {
-    return finiteDiffJacobian(residualFunction, parameters, { stepSize: jacobianStep });
-  }
-
-  // Neither provided: throw error with helpful message
-  throw new Error(
-    'Jacobian computation is required but not provided. ' +
-    'Please either:\n' +
-    '  1. Provide a jacobian in options: gaussNewton(params, residualFn, { jacobian: jacobianFn })\n' +
-    '  2. Enable numerical Jacobian: gaussNewton(params, residualFn, { useNumericJacobian: true })\n' +
-    'Note: Numerical Jacobian is enabled by default. If you see this error, it may have been explicitly disabled.'
-  );
-}
 
 /**
  * Performs Gauss-Newton optimization for nonlinear least squares problems.
@@ -93,7 +64,7 @@ export function gaussNewton(
     // Compute residual vector
     const residual = residualFunction(currentParameters);
     const residualNorm = vectorNorm(residual);
-    const cost = residualNorm * residualNorm; // Sum of squared residuals
+    const cost = computeSumOfSquaredResiduals(residualNorm);
 
     // Call progress callback if provided (after first iteration)
     if (onIteration && iteration > 0) {
@@ -107,7 +78,8 @@ export function gaussNewton(
       residualFunction,
       currentParameters,
       useNumericJacobian,
-      jacobianStep
+      jacobianStep,
+      'gaussNewton'
     );
 
     // Compute J^T J and J^T r
@@ -120,7 +92,7 @@ export function gaussNewton(
     // This gives us: δ = -(J^T J)^(-1) J^T r
     let step: Float64Array;
     try {
-      const negativeJtr = jtr.mul(-1.0);
+      const negativeJtr = jtr.mul(NEGATIVE_COEFFICIENT);
       const stepMatrix = solve(jtj, negativeJtr);
       step = matrixToFloat64Array(stepMatrix);
     } catch (error) {
@@ -169,7 +141,7 @@ export function gaussNewton(
   // Maximum iterations reached
   const finalResidual = residualFunction(currentParameters);
   const finalResidualNorm = vectorNorm(finalResidual);
-  const finalCost = finalResidualNorm * finalResidualNorm;
+  const finalCost = computeSumOfSquaredResiduals(finalResidualNorm);
 
   if (verbose) {
     console.log(`Maximum iterations reached: ${maxIterations}`);
