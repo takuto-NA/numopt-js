@@ -74,8 +74,25 @@ export interface CommonOptimizationOptions {
    * Enable verbose logging for debugging.
    * When true, detailed information is logged to console.
    * Default: false
+   * 
+   * @deprecated Use logLevel instead for more fine-grained control.
+   * If both logLevel and verbose are specified, logLevel takes precedence.
    */
   verbose?: boolean;
+
+  /**
+   * Log level for detailed logging output.
+   * Controls which log messages are displayed:
+   * - DEBUG: Detailed progress information (cost, gradient norm, step size, etc.)
+   * - INFO: Convergence messages and important state changes
+   * - WARN: Warnings (singular matrix, max iterations reached, line search failure, etc.)
+   * - ERROR: Fatal errors (currently not used, reserved for future extensions)
+   * 
+   * If verbose is true and logLevel is not specified, logLevel defaults to INFO.
+   * If both logLevel and verbose are specified, logLevel takes precedence.
+   * Default: undefined (no logging)
+   */
+  logLevel?: 'DEBUG' | 'INFO' | 'WARN' | 'ERROR';
 }
 
 /**

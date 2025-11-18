@@ -24,6 +24,7 @@ import type {
 import { float64ArrayToMatrix, matrixToFloat64Array, vectorNorm, computeSumOfSquaredResiduals } from '../utils/matrix';
 import { checkGradientConvergence, checkStepSizeConvergence, checkResidualConvergence } from './convergence';
 import { computeJacobianMatrix } from './jacobianComputation';
+import { Logger } from './logger';
 
 const DEFAULT_MAX_ITERATIONS = 1000;
 const DEFAULT_LAMBDA_INITIAL = 1e-3;
@@ -89,7 +90,7 @@ function tryLevenbergMarquardtStep(
   currentCost: number,
   tolStep: number,
   iteration: number,
-  verbose: boolean
+  logger: Logger
 ): {
   stepAccepted: boolean;
   newParameters?: Float64Array;
@@ -99,9 +100,10 @@ function tryLevenbergMarquardtStep(
 } {
   // Early return: lambda too large
   if (currentLambda >= MAXIMUM_LAMBDA_THRESHOLD) {
-    if (verbose) {
-      console.log(`Lambda too large, stopping optimization`);
-    }
+    logger.warn('levenbergMarquardt', iteration, 'Lambda too large, stopping optimization', [
+      { key: 'Lambda:', value: currentLambda },
+      { key: 'Cost:', value: currentCost }
+    ]);
     return { stepAccepted: false, newLambda: currentLambda, shouldStop: true };
   }
 
@@ -136,28 +138,29 @@ function tryLevenbergMarquardtStep(
     if (newCost < currentCost) {
       // Step successful: accept it and decrease lambda
       const newLambda = currentLambda / lambdaFactor;
-      if (verbose) {
-        console.log(
-          `Iteration ${iteration}: cost improved ${currentCost} -> ${newCost}, lambda = ${newLambda}`
-        );
-      }
+      logger.debug('levenbergMarquardt', iteration, 'Step accepted', [
+        { key: 'Cost:', value: currentCost },
+        { key: 'New cost:', value: newCost },
+        { key: 'Lambda:', value: newLambda }
+      ]);
       return { stepAccepted: true, newParameters, newLambda };
     }
 
     // Step failed: reject it and increase lambda
     const newLambda = currentLambda * lambdaFactor;
-    if (verbose) {
-      console.log(
-        `Iteration ${iteration}: step rejected, cost increased ${currentCost} -> ${newCost}, lambda = ${newLambda}`
-      );
-    }
+    logger.debug('levenbergMarquardt', iteration, 'Step rejected', [
+      { key: 'Cost:', value: currentCost },
+      { key: 'New cost:', value: newCost },
+      { key: 'Lambda:', value: newLambda }
+    ]);
     return { stepAccepted: false, newLambda };
   } catch (error) {
     // Singular matrix or numerical issues: increase lambda and retry
     const newLambda = currentLambda * lambdaFactor;
-    if (verbose) {
-      console.log(`Singular matrix at iteration ${iteration}, increasing lambda to ${newLambda}`);
-    }
+    logger.warn('levenbergMarquardt', iteration, 'Singular matrix encountered, increasing lambda', [
+      { key: 'Lambda:', value: newLambda },
+      { key: 'Cost:', value: currentCost }
+    ]);
     return { stepAccepted: false, newLambda };
   }
 }
@@ -195,7 +198,7 @@ export function levenbergMarquardt(
   const useNumericJacobian = actualOptions.useNumericJacobian ?? DEFAULT_USE_NUMERIC_JACOBIAN;
   const jacobianStep = actualOptions.jacobianStep ?? DEFAULT_JACOBIAN_STEP;
   const onIteration = actualOptions.onIteration;
-  const verbose = actualOptions.verbose ?? false;
+  const logger = new Logger(actualOptions.logLevel, actualOptions.verbose);
 
   let currentParameters = new Float64Array(initialParameters);
   let currentLambda = lambdaInitial;
@@ -239,9 +242,12 @@ export function levenbergMarquardt(
 
     // Check convergence: gradient norm is small enough
     if (checkGradientConvergence(gradientNorm, tolGradient, iteration)) {
-      if (verbose) {
-        console.log(`Converged at iteration ${iteration}: gradient norm = ${gradientNorm}`);
-      }
+      logger.info('levenbergMarquardt', iteration, 'Converged', [
+        { key: 'Cost:', value: cost },
+        { key: 'Gradient norm:', value: gradientNorm },
+        { key: 'Residual norm:', value: residualNorm },
+        { key: 'Lambda:', value: currentLambda }
+      ]);
       return createConvergenceResultForLM(
         currentParameters,
         iteration,
@@ -266,7 +272,7 @@ export function levenbergMarquardt(
         cost,
         tolStep,
         iteration,
-        verbose
+        logger
       );
 
       // Early return: lambda too large
@@ -284,9 +290,13 @@ export function levenbergMarquardt(
 
       // Early return: step size convergence
       if (stepResult.stepNorm !== undefined && checkStepSizeConvergence(stepResult.stepNorm, tolStep, iteration)) {
-        if (verbose) {
-          console.log(`Converged at iteration ${iteration}: step size = ${stepResult.stepNorm}`);
-        }
+        logger.info('levenbergMarquardt', iteration, 'Converged', [
+          { key: 'Cost:', value: cost },
+          { key: 'Gradient norm:', value: gradientNorm },
+          { key: 'Residual norm:', value: residualNorm },
+          { key: 'Step size:', value: stepResult.stepNorm },
+          { key: 'Lambda:', value: currentLambda }
+        ]);
         return createConvergenceResultForLM(
           currentParameters,
           iteration,
@@ -312,9 +322,12 @@ export function levenbergMarquardt(
     const currentResidual = residualFunction(currentParameters);
     const currentResidualNorm = vectorNorm(currentResidual);
     if (checkResidualConvergence(currentResidualNorm, tolResidual, iteration)) {
-      if (verbose) {
-        console.log(`Converged at iteration ${iteration}: residual norm = ${currentResidualNorm}`);
-      }
+      logger.info('levenbergMarquardt', iteration, 'Converged', [
+        { key: 'Cost:', value: cost },
+        { key: 'Gradient norm:', value: gradientNorm },
+        { key: 'Residual norm:', value: currentResidualNorm },
+        { key: 'Lambda:', value: currentLambda }
+      ]);
       return createConvergenceResultForLM(
         currentParameters,
         iteration,
@@ -337,9 +350,13 @@ export function levenbergMarquardt(
     : undefined;
   const finalGradientNorm = finalGradient ? vectorNorm(finalGradient) : undefined;
 
-  if (verbose) {
-    console.log(`Maximum iterations reached: ${maxIterations}`);
-  }
+  logger.warn('levenbergMarquardt', undefined, 'Maximum iterations reached', [
+    { key: 'Iterations:', value: maxIterations },
+    { key: 'Final cost:', value: bestCost },
+    { key: 'Final gradient norm:', value: finalGradientNorm ?? 0 },
+    { key: 'Final residual norm:', value: finalResidualNorm },
+    { key: 'Final lambda:', value: currentLambda }
+  ]);
 
   return {
     parameters: bestParameters,
