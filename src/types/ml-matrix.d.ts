@@ -33,4 +33,16 @@ declare module 'ml-matrix' {
   }
 
   export function solve(A: Matrix, b: Matrix): Matrix;
+
+  export class CholeskyDecomposition {
+    constructor(value: Matrix | number[][] | number[]);
+    isPositiveDefinite(): boolean;
+    solve(value: Matrix): Matrix;
+    readonly lowerTriangularMatrix: Matrix;
+  }
+}
+
+declare module 'ml-matrix/src/dc/cholesky' {
+  import { CholeskyDecomposition } from 'ml-matrix';
+  export default CholeskyDecomposition;
 }

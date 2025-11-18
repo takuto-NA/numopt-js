@@ -14,7 +14,7 @@
  * - Debug features (callbacks, verbose logging) are top priority
  */
 
-import { Matrix, solve } from 'ml-matrix';
+import { Matrix, solve, CholeskyDecomposition } from 'ml-matrix';
 import type {
   ResidualFn,
   JacobianFn,
@@ -114,8 +114,21 @@ function tryLevenbergMarquardtStep(
     const dampedHessian = jtj.add(identity.mul(currentLambda));
 
     // Solve: (J^T J + λI) δ = -J^T r
+    // Use Cholesky decomposition for efficiency (dampedHessian is always positive definite when λ > 0)
     const negativeJtr = jtr.mul(NEGATIVE_COEFFICIENT);
-    const stepMatrix = solve(dampedHessian, negativeJtr);
+    let stepMatrix: Matrix;
+    try {
+      const cholesky = new CholeskyDecomposition(dampedHessian);
+      if (cholesky.isPositiveDefinite()) {
+        stepMatrix = cholesky.solve(negativeJtr);
+      } else {
+        // Fallback to LU decomposition if Cholesky fails (should not happen when λ > 0)
+        stepMatrix = solve(dampedHessian, negativeJtr);
+      }
+    } catch (choleskyError) {
+      // Fallback to LU decomposition if Cholesky decomposition fails
+      stepMatrix = solve(dampedHessian, negativeJtr);
+    }
     const step = matrixToFloat64Array(stepMatrix);
     const stepNorm = vectorNorm(step);
 
@@ -318,12 +331,39 @@ export function levenbergMarquardt(
       }
     }
 
+    // Check if step was never accepted (lambda became too large)
+    if (!stepAccepted && currentLambda >= MAXIMUM_LAMBDA_THRESHOLD) {
+      logger.warn('levenbergMarquardt', iteration, 'Could not find acceptable step even with maximum lambda. Stopping optimization.', [
+        { key: 'Lambda:', value: currentLambda },
+        { key: 'Cost:', value: cost },
+        { key: 'Best cost:', value: bestCost }
+      ]);
+      const finalResidual = residualFunction(bestParameters);
+      const finalResidualNorm = vectorNorm(finalResidual);
+      const finalGradient = jacobianFunction
+        ? matrixToFloat64Array(
+            jacobianFunction(bestParameters).transpose().mmul(float64ArrayToMatrix(finalResidual))
+          )
+        : undefined;
+      const finalGradientNorm = finalGradient ? vectorNorm(finalGradient) : undefined;
+      return createConvergenceResultForLM(
+        bestParameters,
+        iteration,
+        false,
+        bestCost,
+        finalGradientNorm ?? gradientNorm,
+        finalResidualNorm,
+        currentLambda
+      );
+    }
+
     // Check residual norm convergence
     const currentResidual = residualFunction(currentParameters);
     const currentResidualNorm = vectorNorm(currentResidual);
+    const currentCost = computeSumOfSquaredResiduals(currentResidualNorm);
     if (checkResidualConvergence(currentResidualNorm, tolResidual, iteration)) {
       logger.info('levenbergMarquardt', iteration, 'Converged', [
-        { key: 'Cost:', value: cost },
+        { key: 'Cost:', value: currentCost },
         { key: 'Gradient norm:', value: gradientNorm },
         { key: 'Residual norm:', value: currentResidualNorm },
         { key: 'Lambda:', value: currentLambda }
@@ -332,7 +372,7 @@ export function levenbergMarquardt(
         currentParameters,
         iteration,
         true,
-        cost,
+        currentCost,
         gradientNorm,
         currentResidualNorm,
         currentLambda
