@@ -1,0 +1,44 @@
+{
+  "name": "numopt-js",
+  "version": "0.1.0",
+  "description": "A flexible numerical optimization library for JavaScript/TypeScript that works smoothly in browsers",
+  "main": "dist/index.js",
+  "module": "dist/index.esm.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "CODING_RULES.md"
+  ],
+  "scripts": {
+    "build": "tsc && tsc -p tsconfig.build.json",
+    "test": "vitest",
+    "test:coverage": "vitest --coverage",
+    "lint": "eslint src --ext .ts",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [
+    "optimization",
+    "numerical-optimization",
+    "levenberg-marquardt",
+    "gradient-descent",
+    "gauss-newton",
+    "nonlinear-least-squares",
+    "typescript"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "ml-matrix": "^6.10.5"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@vitest/coverage-v8": "^1.1.0",
+    "typescript": "^5.3.3",
+    "vitest": "^1.1.0"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}
+
