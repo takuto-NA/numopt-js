@@ -22,6 +22,7 @@ import type {
 import { float64ArrayToMatrix, matrixToFloat64Array, vectorNorm, computeSumOfSquaredResiduals } from '../utils/matrix';
 import { checkStepSizeConvergence, checkResidualConvergence, createConvergenceResult } from './convergence';
 import { computeJacobianMatrix } from './jacobianComputation';
+import { Logger } from './logger';
 
 const DEFAULT_MAX_ITERATIONS = 1000;
 const DEFAULT_TOLERANCE = 1e-6;
@@ -56,7 +57,7 @@ export function gaussNewton(
   const useNumericJacobian = actualOptions.useNumericJacobian ?? DEFAULT_USE_NUMERIC_JACOBIAN;
   const jacobianStep = actualOptions.jacobianStep ?? DEFAULT_JACOBIAN_STEP;
   const onIteration = actualOptions.onIteration;
-  const verbose = actualOptions.verbose ?? false;
+  const logger = new Logger(actualOptions.logLevel, actualOptions.verbose);
 
   let currentParameters = new Float64Array(initialParameters);
 
@@ -97,9 +98,10 @@ export function gaussNewton(
       step = matrixToFloat64Array(stepMatrix);
     } catch (error) {
       // Handle singular matrix (J^T J is not invertible)
-      if (verbose) {
-        console.log(`Singular matrix encountered at iteration ${iteration}`);
-      }
+      logger.warn('gaussNewton', iteration, 'Singular matrix encountered', [
+        { key: 'Cost:', value: cost },
+        { key: 'Residual norm:', value: residualNorm }
+      ]);
       const result = createConvergenceResult(currentParameters, iteration, false, cost, undefined);
       return { ...result, finalResidualNorm: residualNorm };
     }
@@ -107,9 +109,11 @@ export function gaussNewton(
     // Check convergence: step size is small enough
     const stepNorm = vectorNorm(step);
     if (checkStepSizeConvergence(stepNorm, tolerance, iteration)) {
-      if (verbose) {
-        console.log(`Converged at iteration ${iteration}: step size = ${stepNorm}`);
-      }
+      logger.info('gaussNewton', iteration, 'Converged', [
+        { key: 'Cost:', value: cost },
+        { key: 'Residual norm:', value: residualNorm },
+        { key: 'Step size:', value: stepNorm }
+      ]);
       const result = createConvergenceResult(currentParameters, iteration, true, cost, undefined);
       return { ...result, finalResidualNorm: residualNorm };
     }
@@ -122,18 +126,19 @@ export function gaussNewton(
 
     // Check convergence: residual norm is small enough
     if (checkResidualConvergence(residualNorm, tolerance, iteration)) {
-      if (verbose) {
-        console.log(`Converged at iteration ${iteration}: residual norm = ${residualNorm}`);
-      }
+      logger.info('gaussNewton', iteration, 'Converged', [
+        { key: 'Cost:', value: cost },
+        { key: 'Residual norm:', value: residualNorm }
+      ]);
       const result = createConvergenceResult(currentParameters, iteration, true, cost, undefined);
       return { ...result, finalResidualNorm: residualNorm };
     }
 
-    if (verbose) {
-      console.log(
-        `Iteration ${iteration}: cost = ${cost}, residual norm = ${residualNorm}, step norm = ${stepNorm}`
-      );
-    }
+    logger.debug('gaussNewton', iteration, 'Progress', [
+      { key: 'Cost:', value: cost },
+      { key: 'Residual norm:', value: residualNorm },
+      { key: 'Step norm:', value: stepNorm }
+    ]);
 
     currentParameters = newParameters;
   }
@@ -143,9 +148,11 @@ export function gaussNewton(
   const finalResidualNorm = vectorNorm(finalResidual);
   const finalCost = computeSumOfSquaredResiduals(finalResidualNorm);
 
-  if (verbose) {
-    console.log(`Maximum iterations reached: ${maxIterations}`);
-  }
+  logger.warn('gaussNewton', undefined, 'Maximum iterations reached', [
+    { key: 'Iterations:', value: maxIterations },
+    { key: 'Final cost:', value: finalCost },
+    { key: 'Final residual norm:', value: finalResidualNorm }
+  ]);
 
   return {
     parameters: currentParameters,

@@ -21,6 +21,7 @@ import type {
 import { backtrackingLineSearch } from './lineSearch';
 import { vectorNorm, scaleVector, addVectors } from '../utils/matrix';
 import { checkGradientConvergence, checkStepSizeConvergence, createConvergenceResult } from './convergence';
+import { Logger } from './logger';
 
 const DEFAULT_MAX_ITERATIONS = 1000;
 const DEFAULT_TOLERANCE = 1e-6;
@@ -84,12 +85,13 @@ function checkGradientConvergenceAndReturn(
   gradientNorm: number,
   tolerance: number,
   usedLineSearchFlag: boolean,
-  verbose: boolean
+  logger: Logger
 ): { converged: boolean; result?: GradientDescentResult } {
   if (checkGradientConvergence(gradientNorm, tolerance, iteration)) {
-    if (verbose) {
-      console.log(`Converged at iteration ${iteration}: gradient norm = ${gradientNorm}`);
-    }
+    logger.info('gradientDescent', iteration, 'Converged', [
+      { key: 'Cost:', value: currentCost },
+      { key: 'Gradient norm:', value: gradientNorm }
+    ]);
     const result = createConvergenceResult(currentParameters, iteration, true, currentCost, gradientNorm);
     return { converged: true, result: { ...result, usedLineSearch: usedLineSearchFlag } };
   }
@@ -105,11 +107,12 @@ function handleLineSearchFailure(
   iteration: number,
   currentCost: number,
   gradientNorm: number,
-  verbose: boolean
+  logger: Logger
 ): { converged: boolean; result: GradientDescentResult } {
-  if (verbose) {
-    console.log(`Line search failed at iteration ${iteration}`);
-  }
+  logger.warn('gradientDescent', iteration, 'Line search failed', [
+    { key: 'Cost:', value: currentCost },
+    { key: 'Gradient norm:', value: gradientNorm }
+  ]);
   return {
     converged: true,
     result: {
@@ -135,12 +138,14 @@ function checkStepSizeConvergenceAndReturn(
   stepNorm: number,
   tolerance: number,
   newUsedLineSearch: boolean,
-  verbose: boolean
+  logger: Logger
 ): { converged: boolean; result?: GradientDescentResult } {
   if (checkStepSizeConvergence(stepNorm, tolerance, iteration)) {
-    if (verbose) {
-      console.log(`Converged at iteration ${iteration}: step size = ${stepNorm}`);
-    }
+    logger.info('gradientDescent', iteration, 'Converged', [
+      { key: 'Cost:', value: currentCost },
+      { key: 'Gradient norm:', value: gradientNorm },
+      { key: 'Step size:', value: stepNorm }
+    ]);
     const result = createConvergenceResult(currentParameters, iteration, true, currentCost, gradientNorm);
     return { converged: true, result: { ...result, usedLineSearch: newUsedLineSearch } };
   }
@@ -161,7 +166,7 @@ function performGradientDescentIteration(
   useLineSearch: boolean,
   fixedStepSize: number | undefined,
   onIteration: ((iteration: number, cost: number, parameters: Float64Array) => void) | undefined,
-  verbose: boolean,
+  logger: Logger,
   usedLineSearchFlag: boolean
 ): { converged: boolean; result?: GradientDescentResult; newParameters?: Float64Array; newCost?: number; newUsedLineSearch?: boolean } {
   const currentGradient = gradientFunction(currentParameters);
@@ -181,7 +186,7 @@ function performGradientDescentIteration(
     gradientNorm,
     tolerance,
     usedLineSearchFlag,
-    verbose
+    logger
   );
   if (gradientConvergenceResult.converged && gradientConvergenceResult.result) {
     return { converged: true, result: gradientConvergenceResult.result };
@@ -204,7 +209,7 @@ function performGradientDescentIteration(
       iteration,
       currentCost,
       gradientNorm,
-      verbose
+      logger
     );
     return failureResult;
   }
@@ -229,18 +234,18 @@ function performGradientDescentIteration(
     stepNorm,
     tolerance,
     newUsedLineSearch,
-    verbose
+    logger
   );
   if (stepSizeConvergenceResult.converged && stepSizeConvergenceResult.result) {
     return { converged: true, result: stepSizeConvergenceResult.result };
   }
 
-  // Log progress if verbose
-  if (verbose) {
-    console.log(
-      `Iteration ${iteration}: cost = ${currentCost}, gradient norm = ${gradientNorm}, step size = ${stepSizeResult.stepSize}`
-    );
-  }
+  // Log progress
+  logger.debug('gradientDescent', iteration, 'Progress', [
+    { key: 'Cost:', value: currentCost },
+    { key: 'Gradient norm:', value: gradientNorm },
+    { key: 'Step size:', value: stepSizeResult.stepSize }
+  ]);
 
   return { converged: false, newParameters, newCost, newUsedLineSearch };
 }
@@ -271,7 +276,7 @@ export function gradientDescent(
   const stepSize = options.stepSize;
   const useLineSearch = options.useLineSearch ?? DEFAULT_USE_LINE_SEARCH;
   const onIteration = options.onIteration;
-  const verbose = options.verbose ?? false;
+  const logger = new Logger(options.logLevel, options.verbose);
 
   let currentParameters = new Float64Array(initialParameters);
   let currentCost = costFunction(currentParameters);
@@ -288,7 +293,7 @@ export function gradientDescent(
       useLineSearch,
       stepSize,
       onIteration,
-      verbose,
+      logger,
       usedLineSearchFlag
     );
 
@@ -309,9 +314,11 @@ export function gradientDescent(
   const finalGradient = gradientFunction(currentParameters);
   const finalGradientNorm = vectorNorm(finalGradient);
 
-  if (verbose) {
-    console.log(`Maximum iterations reached: ${maxIterations}`);
-  }
+  logger.warn('gradientDescent', undefined, 'Maximum iterations reached', [
+    { key: 'Iterations:', value: maxIterations },
+    { key: 'Final cost:', value: currentCost },
+    { key: 'Final gradient norm:', value: finalGradientNorm }
+  ]);
 
   return {
     parameters: currentParameters,
