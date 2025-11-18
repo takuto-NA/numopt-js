@@ -161,6 +161,21 @@ See the `examples/` directory for complete working examples:
 - Curve fitting with Levenberg-Marquardt
 - Linear and nonlinear regression
 
+To run the examples:
+
+```bash
+# Using npm scripts (recommended)
+npm run example:gradient
+npm run example:rosenbrock
+npm run example:lm
+npm run example:gauss-newton
+
+# Or directly with tsx
+npx tsx examples/gradient-descent-example.ts
+npx tsx examples/curve-fitting-lm.ts
+npx tsx examples/rosenbrock-optimization.ts
+```
+
 ## MVP Scope
 
 ### Included
