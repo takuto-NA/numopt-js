@@ -12,7 +12,7 @@
  * - This is a special case of Newton's method for least squares
  */
 
-import { Matrix, solve } from 'ml-matrix';
+import { Matrix, solve, CholeskyDecomposition } from 'ml-matrix';
 import type {
   ResidualFn,
   JacobianFn,
@@ -91,14 +91,28 @@ export function gaussNewton(
 
     // Solve normal equations: (J^T J) δ = -J^T r
     // This gives us: δ = -(J^T J)^(-1) J^T r
+    // Try Cholesky decomposition first for efficiency (if J^T J is positive definite)
     let step: Float64Array;
     try {
       const negativeJtr = jtr.mul(NEGATIVE_COEFFICIENT);
-      const stepMatrix = solve(jtj, negativeJtr);
+      let stepMatrix: Matrix;
+      try {
+        const cholesky = new CholeskyDecomposition(jtj);
+        if (cholesky.isPositiveDefinite()) {
+          // Use Cholesky decomposition for efficiency (about 2x faster than LU)
+          stepMatrix = cholesky.solve(negativeJtr);
+        } else {
+          // J^T J is not positive definite, fallback to LU decomposition
+          stepMatrix = solve(jtj, negativeJtr);
+        }
+      } catch (choleskyError) {
+        // Cholesky decomposition failed (non-symmetric or other issues), fallback to LU
+        stepMatrix = solve(jtj, negativeJtr);
+      }
       step = matrixToFloat64Array(stepMatrix);
     } catch (error) {
       // Handle singular matrix (J^T J is not invertible)
-      logger.warn('gaussNewton', iteration, 'Singular matrix encountered', [
+      logger.warn('gaussNewton', iteration, 'Singular matrix encountered. Consider using Levenberg-Marquardt method for better robustness.', [
         { key: 'Cost:', value: cost },
         { key: 'Residual norm:', value: residualNorm }
       ]);
@@ -124,14 +138,19 @@ export function gaussNewton(
       newParameters[i] = currentParameters[i] + step[i];
     }
 
+    // Compute residual for new parameters
+    const newResidual = residualFunction(newParameters);
+    const newResidualNorm = vectorNorm(newResidual);
+    const newCost = computeSumOfSquaredResiduals(newResidualNorm);
+
     // Check convergence: residual norm is small enough
-    if (checkResidualConvergence(residualNorm, tolerance, iteration)) {
+    if (checkResidualConvergence(newResidualNorm, tolerance, iteration)) {
       logger.info('gaussNewton', iteration, 'Converged', [
-        { key: 'Cost:', value: cost },
-        { key: 'Residual norm:', value: residualNorm }
+        { key: 'Cost:', value: newCost },
+        { key: 'Residual norm:', value: newResidualNorm }
       ]);
-      const result = createConvergenceResult(currentParameters, iteration, true, cost, undefined);
-      return { ...result, finalResidualNorm: residualNorm };
+      const result = createConvergenceResult(newParameters, iteration, true, newCost, undefined);
+      return { ...result, finalResidualNorm: newResidualNorm };
     }
 
     logger.debug('gaussNewton', iteration, 'Progress', [
