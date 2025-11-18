@@ -15,7 +15,11 @@
     "test": "vitest",
     "test:coverage": "vitest --coverage",
     "lint": "eslint src --ext .ts",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "example:gradient": "tsx examples/gradient-descent-example.ts",
+    "example:rosenbrock": "tsx examples/rosenbrock-optimization.ts",
+    "example:lm": "tsx examples/curve-fitting-lm.ts",
+    "example:gauss-newton": "tsx examples/gauss-newton-example.ts"
   },
   "keywords": [
     "optimization",
@@ -34,6 +38,7 @@
   "devDependencies": {
     "@types/node": "^20.10.0",
     "@vitest/coverage-v8": "^1.1.0",
+    "tsx": "^4.20.6",
     "typescript": "^5.3.3",
     "vitest": "^1.1.0"
   },
@@ -41,4 +46,3 @@
     "node": ">=14.0.0"
   }
 }
-
