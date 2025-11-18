@@ -8,7 +8,8 @@
   "files": [
     "dist",
     "README.md",
-    "CODING_RULES.md"
+    "CODING_RULES.md",
+    "LICENSE"
   ],
   "scripts": {
     "build": "tsc && tsc -p tsconfig.build.json",
@@ -30,8 +31,16 @@
     "nonlinear-least-squares",
     "typescript"
   ],
-  "author": "",
+  "author": "takuto-NA <takuto.takahashi@nature-architects.com>",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/takuto-NA/numopt-js.git"
+  },
+  "bugs": {
+    "url": "https://github.com/takuto-NA/numopt-js/issues"
+  },
+  "homepage": "https://github.com/takuto-NA/numopt-js#readme",
   "dependencies": {
     "ml-matrix": "^6.10.5"
   },

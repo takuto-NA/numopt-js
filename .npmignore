@@ -1,0 +1,47 @@
+# Source files (only dist/ is needed)
+src/
+examples/
+test/
+*.ts
+!*.d.ts
+
+# Configuration files
+tsconfig.json
+tsconfig.build.json
+vitest.config.ts
+.gitignore
+.npmignore
+
+# Development files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Documentation (keep README.md and CODING_RULES.md)
+# README.md and CODING_RULES.md are explicitly included in package.json files
+
+# Build artifacts (keep dist/)
+*.tsbuildinfo
+
+# Test coverage
+coverage/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment
+.env
+.env.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# CI/CD
+.github/
+
