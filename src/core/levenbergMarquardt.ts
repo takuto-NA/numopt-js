@@ -22,11 +22,11 @@ import type {
   JacobianFn,
   LevenbergMarquardtOptions,
   LevenbergMarquardtResult
-} from './types';
-import { float64ArrayToMatrix, matrixToFloat64Array, vectorNorm, computeSumOfSquaredResiduals } from '../utils/matrix';
-import { checkGradientConvergence, checkStepSizeConvergence, checkResidualConvergence } from './convergence';
-import { computeJacobianMatrix } from './jacobianComputation';
-import { Logger } from './logger';
+} from './types.js';
+import { float64ArrayToMatrix, matrixToFloat64Array, vectorNorm, computeSumOfSquaredResiduals } from '../utils/matrix.js';
+import { checkGradientConvergence, checkStepSizeConvergence, checkResidualConvergence } from './convergence.js';
+import { computeJacobianMatrix } from './jacobianComputation.js';
+import { Logger } from './logger.js';
 
 const DEFAULT_MAX_ITERATIONS = 1000;
 const DEFAULT_LAMBDA_INITIAL = 1e-3;
@@ -346,8 +346,8 @@ export function levenbergMarquardt(
       const finalResidualNorm = vectorNorm(finalResidual);
       const finalGradient = jacobianFunction
         ? matrixToFloat64Array(
-            jacobianFunction(bestParameters).transpose().mmul(float64ArrayToMatrix(finalResidual))
-          )
+          jacobianFunction(bestParameters).transpose().mmul(float64ArrayToMatrix(finalResidual))
+        )
         : undefined;
       const finalGradientNorm = finalGradient ? vectorNorm(finalGradient) : undefined;
       return createConvergenceResultForLM(
@@ -389,8 +389,8 @@ export function levenbergMarquardt(
   const finalResidualNorm = vectorNorm(finalResidual);
   const finalGradient = jacobianFunction
     ? matrixToFloat64Array(
-        jacobianFunction(bestParameters).transpose().mmul(float64ArrayToMatrix(finalResidual))
-      )
+      jacobianFunction(bestParameters).transpose().mmul(float64ArrayToMatrix(finalResidual))
+    )
     : undefined;
   const finalGradientNorm = finalGradient ? vectorNorm(finalGradient) : undefined;
 

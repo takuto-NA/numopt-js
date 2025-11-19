@@ -13,13 +13,13 @@
  */
 
 // Core algorithms
-export { gradientDescent } from './core/gradientDescent';
-export { backtrackingLineSearch } from './core/lineSearch';
-export { gaussNewton } from './core/gaussNewton';
-export { levenbergMarquardt } from './core/levenbergMarquardt';
+export { gradientDescent } from './core/gradientDescent.js';
+export { backtrackingLineSearch } from './core/lineSearch.js';
+export { gaussNewton } from './core/gaussNewton.js';
+export { levenbergMarquardt } from './core/levenbergMarquardt.js';
 
 // Numerical differentiation utilities
-export { finiteDiffGradient, finiteDiffJacobian } from './core/finiteDiff';
+export { finiteDiffGradient, finiteDiffJacobian } from './core/finiteDiff.js';
 
 // Type definitions
 export type {
@@ -36,7 +36,7 @@ export type {
   OptimizationResult,
   LevenbergMarquardtResult,
   GradientDescentResult
-} from './core/types';
+} from './core/types.js';
 
 // Utility functions (exported for advanced users)
 export {
@@ -48,5 +48,5 @@ export {
   addVectors,
   subtractVectors,
   scaleVector
-} from './utils/matrix';
+} from './utils/matrix.js';
 

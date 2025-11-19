@@ -13,8 +13,8 @@
  */
 
 import { Matrix } from 'ml-matrix';
-import type { ResidualFn, JacobianFn } from './types';
-import { finiteDiffJacobian } from './finiteDiff';
+import type { ResidualFn, JacobianFn } from './types.js';
+import { finiteDiffJacobian } from './finiteDiff.js';
 
 /**
  * Computes the Jacobian matrix using analytical function or numerical differentiation.

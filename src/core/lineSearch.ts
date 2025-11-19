@@ -15,7 +15,7 @@
  * - Line search prevents overshooting the minimum
  */
 
-import type { CostFn, GradientFn, LineSearchOptions } from './types';
+import type { CostFn, GradientFn, LineSearchOptions } from './types.js';
 
 const DEFAULT_INITIAL_STEP_SIZE = 1.0;
 // Typical values recommended in Nocedal & Wright (Algorithm 3.1) are β = 0.5 and c = 1e-4.
@@ -54,7 +54,7 @@ export function backtrackingLineSearch(
 
   const currentCost = costFunction(currentParameters);
   const currentGradient = gradientFunction(currentParameters);
-  
+
   // Compute directional derivative: ∇f(x)^T * d
   let directionalDerivative = 0.0;
   for (let i = 0; i < currentGradient.length; i++) {

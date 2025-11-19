@@ -12,7 +12,7 @@
  * - Each function checks a specific convergence criterion
  */
 
-import type { OptimizationResult } from './types';
+import type { OptimizationResult } from './types.js';
 
 /**
  * Creates a convergence result object with consistent structure.

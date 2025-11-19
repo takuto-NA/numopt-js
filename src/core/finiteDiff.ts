@@ -18,7 +18,7 @@ import type {
   CostFn,
   ResidualFn,
   NumericalDifferentiationOptions
-} from './types';
+} from './types.js';
 
 const DEFAULT_STEP_SIZE = 1e-6;
 const CENTRAL_DIFFERENCE_DENOMINATOR = 2.0; // Denominator for central difference formula: (f(x+h) - f(x-h)) / (2h)

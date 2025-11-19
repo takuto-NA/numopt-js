@@ -21,11 +21,11 @@ import type {
   GradientFn,
   GradientDescentOptions,
   GradientDescentResult
-} from './types';
-import { backtrackingLineSearch } from './lineSearch';
-import { vectorNorm, scaleVector, addVectors } from '../utils/matrix';
-import { checkGradientConvergence, checkStepSizeConvergence, createConvergenceResult } from './convergence';
-import { Logger } from './logger';
+} from './types.js';
+import { backtrackingLineSearch } from './lineSearch.js';
+import { vectorNorm, scaleVector, addVectors } from '../utils/matrix.js';
+import { checkGradientConvergence, checkStepSizeConvergence, createConvergenceResult } from './convergence.js';
+import { Logger } from './logger.js';
 
 const DEFAULT_MAX_ITERATIONS = 1000;
 const DEFAULT_TOLERANCE = 1e-6;
