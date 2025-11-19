@@ -84,6 +84,80 @@ function isResidualFunction(
 }
 
 /**
+ * Computes cost from either a cost function or residual function.
+ * For residual functions r(p,x), computes f = 1/2 r^T r.
+ */
+function computeCost(
+  costFunction: ConstrainedCostFn | ConstrainedResidualFn,
+  parameters: Float64Array,
+  states: Float64Array
+): number {
+  if (isResidualFunction(costFunction, parameters, states)) {
+    const residual = costFunction(parameters, states);
+    const residualNorm = vectorNorm(residual);
+    return RESIDUAL_COST_COEFFICIENT * residualNorm * residualNorm;
+  }
+  
+  return costFunction(parameters, states);
+}
+
+/**
+ * Computes ∂f/∂p or ∂r/∂p using analytical functions or finite differences.
+ */
+function computeDfdp(
+  parameters: Float64Array,
+  states: Float64Array,
+  costFunction: ConstrainedCostFn | ConstrainedResidualFn,
+  options: AdjointGradientDescentOptions
+): Float64Array {
+  const stepSizeP = options.stepSizeP ?? DEFAULT_STEP_SIZE_P;
+  
+  if (options.dfdp) {
+    return options.dfdp(parameters, states);
+  }
+  
+  const isResidual = isResidualFunction(costFunction, parameters, states);
+  if (isResidual) {
+    const drdp = finiteDiffResidualPartialP(parameters, states, costFunction, { stepSize: stepSizeP });
+    const residual = costFunction(parameters, states);
+    // df/dp = r^T ∂r/∂p
+    const residualMatrix = float64ArrayToMatrix(residual);
+    const dfdpMatrix = residualMatrix.transpose().mmul(drdp);
+    return matrixToFloat64Array(dfdpMatrix);
+  }
+  
+  return finiteDiffPartialP(parameters, states, costFunction, { stepSize: stepSizeP });
+}
+
+/**
+ * Computes ∂f/∂x or ∂r/∂x using analytical functions or finite differences.
+ */
+function computeDfdx(
+  parameters: Float64Array,
+  states: Float64Array,
+  costFunction: ConstrainedCostFn | ConstrainedResidualFn,
+  options: AdjointGradientDescentOptions
+): Float64Array {
+  const stepSizeX = options.stepSizeX ?? DEFAULT_STEP_SIZE_X;
+  
+  if (options.dfdx) {
+    return options.dfdx(parameters, states);
+  }
+  
+  const isResidual = isResidualFunction(costFunction, parameters, states);
+  if (isResidual) {
+    const drdx = finiteDiffResidualPartialX(parameters, states, costFunction, { stepSize: stepSizeX });
+    const residual = costFunction(parameters, states);
+    // df/dx = r^T ∂r/∂x
+    const residualMatrix = float64ArrayToMatrix(residual);
+    const dfdxMatrix = residualMatrix.transpose().mmul(drdx);
+    return matrixToFloat64Array(dfdxMatrix);
+  }
+  
+  return finiteDiffPartialX(parameters, states, costFunction, { stepSize: stepSizeX });
+}
+
+/**
  * Computes partial derivatives using analytical functions or finite differences.
  */
 function computePartialDerivatives(
@@ -100,37 +174,9 @@ function computePartialDerivatives(
 } {
   const stepSizeP = options.stepSizeP ?? DEFAULT_STEP_SIZE_P;
   const stepSizeX = options.stepSizeX ?? DEFAULT_STEP_SIZE_X;
-  const isResidual = isResidualFunction(costFunction, parameters, states);
-
-  // Compute ∂f/∂p or ∂r/∂p
-  let dfdp: Float64Array;
-  if (options.dfdp) {
-    dfdp = options.dfdp(parameters, states);
-  } else if (isResidual) {
-    const drdp = finiteDiffResidualPartialP(parameters, states, costFunction, { stepSize: stepSizeP });
-    const residual = costFunction(parameters, states);
-    // df/dp = r^T ∂r/∂p
-    const residualMatrix = float64ArrayToMatrix(residual);
-    const dfdpMatrix = residualMatrix.transpose().mmul(drdp);
-    dfdp = matrixToFloat64Array(dfdpMatrix);
-  } else {
-    dfdp = finiteDiffPartialP(parameters, states, costFunction, { stepSize: stepSizeP });
-  }
-
-  // Compute ∂f/∂x or ∂r/∂x
-  let dfdx: Float64Array;
-  if (options.dfdx) {
-    dfdx = options.dfdx(parameters, states);
-  } else if (isResidual) {
-    const drdx = finiteDiffResidualPartialX(parameters, states, costFunction, { stepSize: stepSizeX });
-    const residual = costFunction(parameters, states);
-    // df/dx = r^T ∂r/∂x
-    const residualMatrix = float64ArrayToMatrix(residual);
-    const dfdxMatrix = residualMatrix.transpose().mmul(drdx);
-    dfdx = matrixToFloat64Array(dfdxMatrix);
-  } else {
-    dfdx = finiteDiffPartialX(parameters, states, costFunction, { stepSize: stepSizeX });
-  }
+  
+  const dfdp = computeDfdp(parameters, states, costFunction, options);
+  const dfdx = computeDfdx(parameters, states, costFunction, options);
 
   // Compute ∂c/∂p
   const dcdp = options.dcdp
@@ -262,24 +308,16 @@ function updateStates(
 }
 
 /**
- * Determines the step size for gradient descent iteration.
+ * Creates a cost function wrapper for line search that updates states using linear approximation.
  */
-function determineStepSize(
-  currentGradient: Float64Array,
+function createCostFunctionWrapper(
   currentParameters: Float64Array,
   currentStates: Float64Array,
   costFunction: ConstrainedCostFn | ConstrainedResidualFn,
   constraintFunction: ConstraintFn,
-  useLineSearch: boolean,
-  fixedStepSize: number | undefined,
   options: AdjointGradientDescentOptions
-): { stepSize: number; usedLineSearch: boolean } {
-  if (!useLineSearch || fixedStepSize !== undefined) {
-    return { stepSize: fixedStepSize ?? DEFAULT_STEP_SIZE, usedLineSearch: false };
-  }
-
-  // Create a cost function wrapper for line search
-  const costFnWrapper = (params: Float64Array): number => {
+): (params: Float64Array) => number {
+  return (params: Float64Array): number => {
     // For line search, we need to update states as well
     // Use linear approximation: x_new = x_old + dx where dx solves (∂c/∂x) dx = -∂c/∂p · Δp
     const deltaP = subtractVectors(params, currentParameters);
@@ -294,20 +332,22 @@ function determineStepSize(
     );
 
     const newStates = updateStates(currentStates, dcdx, dcdp, deltaP);
-    
-    if (isResidualFunction(costFunction, params, newStates)) {
-      // ConstrainedResidualFn: f = 1/2 r^T r
-      const residual = costFunction(params, newStates);
-      const residualNorm = vectorNorm(residual);
-      return RESIDUAL_COST_COEFFICIENT * residualNorm * residualNorm;
-    } else {
-      // ConstrainedCostFn
-      return costFunction(params, newStates);
-    }
+    return computeCost(costFunction, params, newStates);
   };
+}
 
-  // Create a gradient function wrapper for line search
-  const gradientFnWrapper = (_params: Float64Array): Float64Array => {
+/**
+ * Creates a gradient function wrapper for line search.
+ */
+function createGradientFunctionWrapper(
+  currentParameters: Float64Array,
+  currentStates: Float64Array,
+  costFunction: ConstrainedCostFn | ConstrainedResidualFn,
+  constraintFunction: ConstraintFn,
+  options: AdjointGradientDescentOptions,
+  logger: Logger
+): (_params: Float64Array) => Float64Array {
+  return (_params: Float64Array): Float64Array => {
     const partials = computePartialDerivatives(
       currentParameters,
       currentStates,
@@ -316,9 +356,44 @@ function determineStepSize(
       options
     );
 
-    const lambda = solveAdjointEquation(partials.dcdx, partials.dfdx, new Logger(undefined, undefined));
+    const lambda = solveAdjointEquation(partials.dcdx, partials.dfdx, logger);
     return computeAdjointGradient(partials.dfdp, lambda, partials.dcdp);
   };
+}
+
+/**
+ * Determines the step size for gradient descent iteration.
+ */
+function determineStepSize(
+  currentGradient: Float64Array,
+  currentParameters: Float64Array,
+  currentStates: Float64Array,
+  costFunction: ConstrainedCostFn | ConstrainedResidualFn,
+  constraintFunction: ConstraintFn,
+  useLineSearch: boolean,
+  fixedStepSize: number | undefined,
+  options: AdjointGradientDescentOptions,
+  logger: Logger
+): { stepSize: number; usedLineSearch: boolean } {
+  if (!useLineSearch || fixedStepSize !== undefined) {
+    return { stepSize: fixedStepSize ?? DEFAULT_STEP_SIZE, usedLineSearch: false };
+  }
+
+  const costFnWrapper = createCostFunctionWrapper(
+    currentParameters,
+    currentStates,
+    costFunction,
+    constraintFunction,
+    options
+  );
+  const gradientFnWrapper = createGradientFunctionWrapper(
+    currentParameters,
+    currentStates,
+    costFunction,
+    constraintFunction,
+    options,
+    logger
+  );
 
   const searchDirection = scaleVector(currentGradient, NEGATIVE_GRADIENT_DIRECTION);
   const stepSize = backtrackingLineSearch(
@@ -463,15 +538,7 @@ function updateParametersAndStates(
   const newParameters = addVectors(currentParameters, step);
   const deltaP = subtractVectors(newParameters, currentParameters);
   const newStates = updateStates(currentStates, partials.dcdx, partials.dcdp, deltaP);
-
-  let newCost: number;
-  if (isResidualFunction(costFunction, newParameters, newStates)) {
-    const residual = costFunction(newParameters, newStates);
-    const residualNorm = vectorNorm(residual);
-    newCost = RESIDUAL_COST_COEFFICIENT * residualNorm * residualNorm;
-  } else {
-    newCost = costFunction(newParameters, newStates);
-  }
+  const newCost = computeCost(costFunction, newParameters, newStates);
 
   return { newParameters, newStates, newCost };
 }
@@ -550,6 +617,192 @@ function createProgressLogDetails(
 }
 
 /**
+ * Handles callback and checks gradient convergence.
+ */
+function checkConvergenceAndHandleCallback(
+  iteration: number,
+  currentParameters: Float64Array,
+  currentStates: Float64Array,
+  currentCost: number,
+  gradientNorm: number,
+  constraintNorm: number,
+  tolerance: number,
+  usedLineSearchFlag: boolean,
+  onIteration: ((iteration: number, cost: number, parameters: Float64Array) => void) | undefined,
+  logger: Logger
+): { converged: boolean; result?: AdjointGradientDescentResult } {
+  // Handle callback
+  if (onIteration) {
+    const callbackIteration = iteration === 0 ? 0 : iteration;
+    onIteration(callbackIteration, currentCost, currentParameters);
+  }
+
+  // Check gradient convergence
+  const gradientConvergenceResult = checkGradientConvergenceAndReturn(
+    currentParameters,
+    currentStates,
+    iteration,
+    currentCost,
+    gradientNorm,
+    constraintNorm,
+    tolerance,
+    usedLineSearchFlag,
+    logger
+  );
+  if (gradientConvergenceResult.converged && gradientConvergenceResult.result) {
+    return gradientConvergenceResult;
+  }
+  return { converged: false };
+}
+
+/**
+ * Handles step size determination, parameter update, and step size convergence check.
+ */
+function handleStepSizeAndUpdate(
+  adjointGradient: Float64Array,
+  currentParameters: Float64Array,
+  currentStates: Float64Array,
+  constraint: Float64Array,
+  currentCost: number,
+  gradientNorm: number,
+  constraintNorm: number,
+  iteration: number,
+  tolerance: number,
+  costFunction: ConstrainedCostFn | ConstrainedResidualFn,
+  constraintFunction: ConstraintFn,
+  useLineSearch: boolean,
+  fixedStepSize: number | undefined,
+  usedLineSearchFlag: boolean,
+  partials: { dcdx: Matrix; dcdp: Matrix },
+  options: AdjointGradientDescentOptions,
+  logger: Logger
+): {
+  converged: boolean;
+  result?: AdjointGradientDescentResult;
+  newParameters?: Float64Array;
+  newStates?: Float64Array;
+  newCost?: number;
+  newUsedLineSearch?: boolean;
+} {
+  // Determine step size
+  const stepSizeResult = determineStepSize(
+    adjointGradient,
+    currentParameters,
+    currentStates,
+    costFunction,
+    constraintFunction,
+    useLineSearch,
+    fixedStepSize,
+    options,
+    logger
+  );
+
+  if (stepSizeResult.stepSize === ZERO_STEP_SIZE) {
+    return handleLineSearchFailure(
+      currentParameters,
+      currentStates,
+      iteration,
+      currentCost,
+      gradientNorm,
+      constraintNorm,
+      logger
+    );
+  }
+
+  const newUsedLineSearch = usedLineSearchFlag || stepSizeResult.usedLineSearch;
+
+  // Update parameters and states, compute new cost
+  const { newParameters, newStates, newCost } = updateParametersAndStates(
+    currentParameters,
+    currentStates,
+    adjointGradient,
+    stepSizeResult.stepSize,
+    partials,
+    costFunction
+  );
+
+  // Check step size convergence and log progress
+  if (newParameters) {
+    const stepSizeConvergenceResult = checkStepSizeConvergenceAndLog(
+      currentParameters,
+      currentStates,
+      constraint,
+      currentCost,
+      gradientNorm,
+      stepSizeResult.stepSize,
+      constraintNorm,
+      iteration,
+      tolerance,
+      newUsedLineSearch,
+      newParameters,
+      logger
+    );
+    if (stepSizeConvergenceResult.converged && stepSizeConvergenceResult.result) {
+      return stepSizeConvergenceResult;
+    }
+  }
+
+  return {
+    converged: false,
+    newParameters,
+    newStates,
+    newCost,
+    newUsedLineSearch
+  };
+}
+
+/**
+ * Checks step size convergence and logs progress.
+ */
+function checkStepSizeConvergenceAndLog(
+  currentParameters: Float64Array,
+  currentStates: Float64Array,
+  constraint: Float64Array,
+  currentCost: number,
+  gradientNorm: number,
+  stepSize: number,
+  constraintNorm: number,
+  iteration: number,
+  tolerance: number,
+  newUsedLineSearch: boolean,
+  newParameters: Float64Array,
+  logger: Logger
+): { converged: boolean; result?: AdjointGradientDescentResult } {
+  // Check step size convergence
+  const step = subtractVectors(newParameters, currentParameters);
+  const stepNorm = vectorNorm(step);
+  const stepSizeConvergenceResult = checkStepSizeConvergenceAndReturn(
+    currentParameters,
+    currentStates,
+    iteration,
+    currentCost,
+    gradientNorm,
+    stepNorm,
+    constraintNorm,
+    tolerance,
+    newUsedLineSearch,
+    logger
+  );
+  if (stepSizeConvergenceResult.converged && stepSizeConvergenceResult.result) {
+    return stepSizeConvergenceResult;
+  }
+
+  // Log progress with detailed information
+  const logDetails = createProgressLogDetails(
+    currentParameters,
+    currentStates,
+    constraint,
+    currentCost,
+    gradientNorm,
+    stepSize,
+    constraintNorm
+  );
+  logger.debug('adjointGradientDescent', iteration, 'Progress', logDetails);
+
+  return { converged: false };
+}
+
+/**
  * Performs a single adjoint gradient descent iteration.
  */
 function performAdjointGradientDescentIteration(
@@ -595,101 +848,134 @@ function performAdjointGradientDescentIteration(
     logger
   );
 
-  // Handle callback
-  if (onIteration) {
-    const callbackIteration = iteration === 0 ? 0 : iteration;
-    onIteration(callbackIteration, currentCost, currentParameters);
-  }
-
-  // Check gradient convergence
-  const gradientConvergenceResult = checkGradientConvergenceAndReturn(
+  // Handle callback and check gradient convergence
+  const convergenceResult = checkConvergenceAndHandleCallback(
+    iteration,
     currentParameters,
     currentStates,
-    iteration,
     currentCost,
     gradientNorm,
     constraintNorm,
     tolerance,
     usedLineSearchFlag,
+    onIteration,
     logger
   );
-  if (gradientConvergenceResult.converged && gradientConvergenceResult.result) {
-    return gradientConvergenceResult;
+  if (convergenceResult.converged && convergenceResult.result) {
+    return convergenceResult;
   }
 
-  // Determine step size
-  const stepSizeResult = determineStepSize(
+  // Handle step size and update
+  const updateResult = handleStepSizeAndUpdate(
     adjointGradient,
-    currentParameters,
-    currentStates,
-    costFunction,
-    constraintFunction,
-    useLineSearch,
-    fixedStepSize,
-    options
-  );
-
-  if (stepSizeResult.stepSize === ZERO_STEP_SIZE) {
-    return handleLineSearchFailure(
-      currentParameters,
-      currentStates,
-      iteration,
-      currentCost,
-      gradientNorm,
-      constraintNorm,
-      logger
-    );
-  }
-
-  const newUsedLineSearch = usedLineSearchFlag || stepSizeResult.usedLineSearch;
-
-  // Update parameters and states, compute new cost
-  const { newParameters, newStates, newCost } = updateParametersAndStates(
-    currentParameters,
-    currentStates,
-    adjointGradient,
-    stepSizeResult.stepSize,
-    partials,
-    costFunction
-  );
-
-  // Check step size convergence
-  const step = subtractVectors(newParameters, currentParameters);
-  const stepNorm = vectorNorm(step);
-  const stepSizeConvergenceResult = checkStepSizeConvergenceAndReturn(
-    currentParameters,
-    currentStates,
-    iteration,
-    currentCost,
-    gradientNorm,
-    stepNorm,
-    constraintNorm,
-    tolerance,
-    newUsedLineSearch,
-    logger
-  );
-  if (stepSizeConvergenceResult.converged && stepSizeConvergenceResult.result) {
-    return stepSizeConvergenceResult;
-  }
-
-  // Log progress with detailed information
-  const logDetails = createProgressLogDetails(
     currentParameters,
     currentStates,
     constraint,
     currentCost,
     gradientNorm,
-    stepSizeResult.stepSize,
-    constraintNorm
+    constraintNorm,
+    iteration,
+    tolerance,
+    costFunction,
+    constraintFunction,
+    useLineSearch,
+    fixedStepSize,
+    usedLineSearchFlag,
+    partials,
+    options,
+    logger
   );
-  logger.debug('adjointGradientDescent', iteration, 'Progress', logDetails);
+  if (updateResult.converged && updateResult.result) {
+    return updateResult;
+  }
+
+  return updateResult;
+}
+
+/**
+ * Validates initial conditions including constraint satisfaction and dimensions.
+ */
+function validateInitialConditions(
+  initialParameters: Float64Array,
+  initialStates: Float64Array,
+  constraintFunction: ConstraintFn,
+  constraintTolerance: number,
+  logger: Logger
+): void {
+  const initialConstraint = constraintFunction(initialParameters, initialStates);
+  const initialConstraintNorm = vectorNorm(initialConstraint);
+  if (initialConstraintNorm > constraintTolerance) {
+    logger.warn('adjointGradientDescent', undefined, 'Initial constraint violation', [
+      { key: '||c(p0,x0)||:', value: initialConstraintNorm },
+      { key: 'Tolerance:', value: constraintTolerance }
+    ]);
+  }
+
+  // Validate constraint dimensions
+  const constraintCount = initialConstraint.length;
+  const stateCount = initialStates.length;
+  if (constraintCount !== stateCount) {
+    throw new Error(
+      `Constraint count (${constraintCount}) must equal state count (${stateCount}) ` +
+      `for adjoint method. The constraint Jacobian ∂c/∂x must be square.`
+    );
+  }
+}
+
+/**
+ * Computes initial cost from initial parameters and states.
+ */
+function computeInitialCost(
+  costFunction: ConstrainedCostFn | ConstrainedResidualFn,
+  initialParameters: Float64Array,
+  initialStates: Float64Array
+): number {
+  return computeCost(costFunction, initialParameters, initialStates);
+}
+
+/**
+ * Creates result for maximum iterations reached case.
+ */
+function createMaxIterationsResult(
+  currentParameters: Float64Array,
+  currentStates: Float64Array,
+  currentCost: number,
+  costFunction: ConstrainedCostFn | ConstrainedResidualFn,
+  constraintFunction: ConstraintFn,
+  maxIterations: number,
+  usedLineSearchFlag: boolean,
+  options: AdjointGradientDescentOptions,
+  logger: Logger
+): AdjointGradientDescentResult {
+  const partials = computePartialDerivatives(
+    currentParameters,
+    currentStates,
+    costFunction,
+    constraintFunction,
+    options
+  );
+  const lambda = solveAdjointEquation(partials.dcdx, partials.dfdx, logger);
+  const finalGradient = computeAdjointGradient(partials.dfdp, lambda, partials.dcdp);
+  const finalGradientNorm = vectorNorm(finalGradient);
+  const finalConstraint = constraintFunction(currentParameters, currentStates);
+  const finalConstraintNorm = vectorNorm(finalConstraint);
+
+  logger.warn('adjointGradientDescent', undefined, 'Maximum iterations reached', [
+    { key: 'Iterations:', value: maxIterations },
+    { key: 'Final cost:', value: currentCost },
+    { key: 'Final gradient norm:', value: finalGradientNorm },
+    { key: 'Final constraint norm:', value: finalConstraintNorm }
+  ]);
 
   return {
+    parameters: currentParameters,
+    iterations: maxIterations,
     converged: false,
-    newParameters,
-    newStates,
-    newCost,
-    newUsedLineSearch
+    finalCost: currentCost,
+    finalGradientNorm: finalGradientNorm,
+    usedLineSearch: usedLineSearchFlag,
+    finalStates: currentStates,
+    finalConstraintNorm: finalConstraintNorm
   };
 }
 
@@ -729,39 +1015,11 @@ export function adjointGradientDescent(
   const onIteration = options.onIteration;
   const logger = new Logger(options.logLevel, options.verbose);
 
-  // Validate initial constraint satisfaction
-  const initialConstraint = constraintFunction(initialParameters, initialStates);
-  const initialConstraintNorm = vectorNorm(initialConstraint);
-  if (initialConstraintNorm > constraintTolerance) {
-    logger.warn('adjointGradientDescent', undefined, 'Initial constraint violation', [
-      { key: '||c(p0,x0)||:', value: initialConstraintNorm },
-      { key: 'Tolerance:', value: constraintTolerance }
-    ]);
-  }
-
-  // Validate constraint dimensions
-  const constraintCount = initialConstraint.length;
-  const stateCount = initialStates.length;
-  if (constraintCount !== stateCount) {
-    throw new Error(
-      `Constraint count (${constraintCount}) must equal state count (${stateCount}) ` +
-      `for adjoint method. The constraint Jacobian ∂c/∂x must be square.`
-    );
-  }
+  validateInitialConditions(initialParameters, initialStates, constraintFunction, constraintTolerance, logger);
 
   let currentParameters = new Float64Array(initialParameters);
   let currentStates = new Float64Array(initialStates);
-  
-  // Compute initial cost
-  let currentCost: number;
-  if (isResidualFunction(costFunction, currentParameters, currentStates)) {
-    const residual = costFunction(currentParameters, currentStates);
-    const residualNorm = vectorNorm(residual);
-    currentCost = RESIDUAL_COST_COEFFICIENT * residualNorm * residualNorm;
-  } else {
-    currentCost = costFunction(currentParameters, currentStates);
-  }
-
+  let currentCost = computeInitialCost(costFunction, currentParameters, currentStates);
   let usedLineSearchFlag = false;
 
   for (let iteration = 0; iteration < maxIterations; iteration++) {
@@ -786,46 +1044,28 @@ export function adjointGradientDescent(
       return iterationResult.result;
     }
 
-    if (iterationResult.newParameters && iterationResult.newStates && iterationResult.newCost !== undefined) {
-      currentParameters = new Float64Array(iterationResult.newParameters);
-      currentStates = new Float64Array(iterationResult.newStates);
-      currentCost = iterationResult.newCost;
-      if (iterationResult.newUsedLineSearch !== undefined) {
-        usedLineSearchFlag = iterationResult.newUsedLineSearch;
-      }
+    if (!iterationResult.newParameters || !iterationResult.newStates || iterationResult.newCost === undefined) {
+      continue;
+    }
+
+    currentParameters = new Float64Array(iterationResult.newParameters);
+    currentStates = new Float64Array(iterationResult.newStates);
+    currentCost = iterationResult.newCost;
+    if (iterationResult.newUsedLineSearch !== undefined) {
+      usedLineSearchFlag = iterationResult.newUsedLineSearch;
     }
   }
 
-  // Maximum iterations reached
-  const partials = computePartialDerivatives(
+  return createMaxIterationsResult(
     currentParameters,
     currentStates,
+    currentCost,
     costFunction,
     constraintFunction,
-    options
+    maxIterations,
+    usedLineSearchFlag,
+    options,
+    logger
   );
-  const lambda = solveAdjointEquation(partials.dcdx, partials.dfdx, logger);
-  const finalGradient = computeAdjointGradient(partials.dfdp, lambda, partials.dcdp);
-  const finalGradientNorm = vectorNorm(finalGradient);
-  const finalConstraint = constraintFunction(currentParameters, currentStates);
-  const finalConstraintNorm = vectorNorm(finalConstraint);
-
-  logger.warn('adjointGradientDescent', undefined, 'Maximum iterations reached', [
-    { key: 'Iterations:', value: maxIterations },
-    { key: 'Final cost:', value: currentCost },
-    { key: 'Final gradient norm:', value: finalGradientNorm },
-    { key: 'Final constraint norm:', value: finalConstraintNorm }
-  ]);
-
-  return {
-    parameters: currentParameters,
-    iterations: maxIterations,
-    converged: false,
-    finalCost: currentCost,
-    finalGradientNorm: finalGradientNorm,
-    usedLineSearch: usedLineSearchFlag,
-    finalStates: currentStates,
-    finalConstraintNorm: finalConstraintNorm
-  };
 }
 
