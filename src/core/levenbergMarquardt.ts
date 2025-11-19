@@ -1,6 +1,8 @@
 /**
  * This file implements the Levenberg-Marquardt algorithm for solving
- * nonlinear least squares problems.
+ * nonlinear least squares problems, following the derivations in:
+ * - Moré, "The Levenberg-Marquardt Algorithm: Implementation and Theory", 1978 (Lecture Notes in Mathematics 630)
+ * - Lourakis, "A Brief Description of the Levenberg-Marquardt Algorithm", 2005 tutorial
  * 
  * Role in system:
  * - Phase 3 advanced algorithm (main MVP target)
@@ -132,7 +134,7 @@ function tryLevenbergMarquardtStep(
     const step = matrixToFloat64Array(stepMatrix);
     const stepNorm = vectorNorm(step);
 
-    // Check step size convergence
+    // Check step size convergence (termination test suggested in Lourakis 2005, Section 5)
     if (checkStepSizeConvergence(stepNorm, tolStep, iteration)) {
       return { stepAccepted: false, newLambda: currentLambda, stepNorm };
     }
@@ -150,6 +152,7 @@ function tryLevenbergMarquardtStep(
     // Check if step improved the cost
     if (newCost < currentCost) {
       // Step successful: accept it and decrease lambda
+      // (trust-region style update per Moré 1978, Section 4 and Lourakis 2005, Section 4.1)
       const newLambda = currentLambda / lambdaFactor;
       logger.debug('levenbergMarquardt', iteration, 'Step accepted', [
         { key: 'Cost:', value: currentCost },
@@ -160,6 +163,7 @@ function tryLevenbergMarquardtStep(
     }
 
     // Step failed: reject it and increase lambda
+    // (damping increase strategy from Moré 1978, Section 4 and Lourakis 2005, Section 4.1)
     const newLambda = currentLambda * lambdaFactor;
     logger.debug('levenbergMarquardt', iteration, 'Step rejected', [
       { key: 'Cost:', value: currentCost },
@@ -253,7 +257,7 @@ export function levenbergMarquardt(
     const gradientVector = matrixToFloat64Array(jtr);
     const gradientNorm = vectorNorm(gradientVector);
 
-    // Check convergence: gradient norm is small enough
+    // Check convergence: gradient norm is small enough (Moré 1978, Section 4 termination test; Lourakis 2005, Section 5)
     if (checkGradientConvergence(gradientNorm, tolGradient, iteration)) {
       logger.info('levenbergMarquardt', iteration, 'Converged', [
         { key: 'Cost:', value: cost },
@@ -301,7 +305,7 @@ export function levenbergMarquardt(
         );
       }
 
-      // Early return: step size convergence
+      // Early return: step size convergence (Lourakis 2005, Section 5)
       if (stepResult.stepNorm !== undefined && checkStepSizeConvergence(stepResult.stepNorm, tolStep, iteration)) {
         logger.info('levenbergMarquardt', iteration, 'Converged', [
           { key: 'Cost:', value: cost },
@@ -357,7 +361,7 @@ export function levenbergMarquardt(
       );
     }
 
-    // Check residual norm convergence
+    // Check residual norm convergence (Moré 1978, Section 4 stopping rule; Lourakis 2005, Section 5)
     const currentResidual = residualFunction(currentParameters);
     const currentResidualNorm = vectorNorm(currentResidual);
     const currentCost = computeSumOfSquaredResiduals(currentResidualNorm);
