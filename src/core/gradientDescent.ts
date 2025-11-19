@@ -1,11 +1,15 @@
 /**
  * This file implements the gradient descent optimization algorithm.
- * 
+ *
+ * References:
+ * - Nocedal & Wright, "Numerical Optimization" (2nd ed.), Chapter 2 (steepest descent and line search basics)
+ * - Boyd & Vandenberghe, "Convex Optimization", Section 9.3 (backtracking line search with Armijo rule)
+ *
  * Role in system:
  * - Phase 1 foundation algorithm (simple, testable)
  * - Establishes basic optimization framework
  * - Used as building block for more advanced methods
- * 
+ *
  * For first-time readers:
  * - Start with gradientDescent function
  * - Understand how it uses line search or fixed step size
@@ -50,6 +54,8 @@ function determineStepSize(
 
   // Use line search when enabled and no fixed step size provided
   const searchDirection = scaleVector(currentGradient, NEGATIVE_GRADIENT_DIRECTION);
+  // Backtracking line search with Armijo condition (Boyd & Vandenberghe, Sec. 9.3)
+  // to choose a step satisfying sufficient decrease (Nocedal & Wright, Ch. 2)
   const stepSize = backtrackingLineSearch(
     costFunction,
     gradientFunction,
@@ -170,7 +176,7 @@ function performGradientDescentIteration(
   usedLineSearchFlag: boolean
 ): { converged: boolean; result?: GradientDescentResult; newParameters?: Float64Array; newCost?: number; newUsedLineSearch?: boolean } {
   const currentGradient = gradientFunction(currentParameters);
-  const gradientNorm = vectorNorm(currentGradient);
+  const gradientNorm = vectorNorm(currentGradient); // Uses Euclidean norm for steepest descent direction (Nocedal & Wright, Ch. 2)
 
   // Handle callback (different behavior for first iteration)
   if (onIteration) {
@@ -225,7 +231,7 @@ function performGradientDescentIteration(
   const newCost = costFunction(newParameters);
 
   // Check step size convergence - early return
-  const stepNorm = vectorNorm(step);
+  const stepNorm = vectorNorm(step); // Step length via 2-norm for step-size convergence (Boyd & Vandenberghe, Sec. 9.3)
   const stepSizeConvergenceResult = checkStepSizeConvergenceAndReturn(
     currentParameters,
     iteration,
