@@ -20,6 +20,7 @@ export { levenbergMarquardt } from './core/levenbergMarquardt.js';
 
 // Numerical differentiation utilities
 export { finiteDiffGradient, finiteDiffJacobian } from './core/finiteDiff.js';
+export { createFiniteDiffGradient, createFiniteDiffJacobian } from './core/createGradientFunction.js';
 
 // Type definitions
 export type {

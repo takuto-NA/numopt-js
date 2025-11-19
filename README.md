@@ -97,7 +97,68 @@ const result = levenbergMarquardt(initialParams, residualFunction, {
 });
 ```
 
-## API Reference
+### Numerical Differentiation
+
+If you don't have analytical gradients or Jacobians, you can use numerical differentiation:
+
+#### Option 1: Helper Functions (Recommended)
+
+The easiest way to use numerical differentiation is with the helper functions:
+
+```typescript
+import { gradientDescent, createFiniteDiffGradient } from 'numopt-js';
+
+const costFn = (params: Float64Array) => {
+  return Math.pow(params[0] - 3, 2) + Math.pow(params[1] - 2, 2);
+};
+
+// Create a gradient function automatically
+const gradientFn = createFiniteDiffGradient(costFn);
+
+const result = gradientDescent(
+  new Float64Array([0, 0]),
+  costFn,
+  gradientFn,  // No parameter order confusion!
+  { maxIterations: 100, tolerance: 1e-6 }
+);
+```
+
+#### Option 2: Direct Usage
+
+You can also use `finiteDiffGradient` directly:
+
+```typescript
+import { gradientDescent, finiteDiffGradient } from 'numopt-js';
+
+const costFn = (params: Float64Array) => {
+  return Math.pow(params[0] - 3, 2) + Math.pow(params[1] - 2, 2);
+};
+
+const result = gradientDescent(
+  new Float64Array([0, 0]),
+  costFn,
+  (params) => finiteDiffGradient(params, costFn),  // ⚠️ Note: params first!
+  { maxIterations: 100, tolerance: 1e-6 }
+);
+```
+
+**Important**: When using `finiteDiffGradient` directly, note the parameter order:
+- ✅ Correct: `finiteDiffGradient(params, costFn)`
+- ❌ Wrong: `finiteDiffGradient(costFn, params)`
+
+#### Custom Step Size
+
+Both approaches support custom step sizes for the finite difference approximation:
+
+```typescript
+// With helper function
+const gradientFn = createFiniteDiffGradient(costFn, { stepSize: 1e-8 });
+
+// Direct usage
+const gradient = finiteDiffGradient(params, costFn, { stepSize: 1e-8 });
+```
+
+
 
 ### Gradient Descent
 

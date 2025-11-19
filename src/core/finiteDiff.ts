@@ -30,6 +30,58 @@ const CENTRAL_DIFFERENCE_DENOMINATOR = 2.0; // Denominator for central differenc
  * 
  * This is more accurate than forward difference but requires two function
  * evaluations per parameter. The trade-off is worth it for better convergence.
+ * 
+ * @param parameters - The point at which to evaluate the gradient
+ * @param costFunction - The cost function to differentiate
+ * @param options - Optional numerical differentiation settings
+ * @returns The gradient vector at the given parameters
+ * 
+ * @example
+ * ```typescript
+ * // Standalone usage - compute gradient at a specific point
+ * const costFn = (params) => params[0] ** 2 + params[1] ** 2;
+ * const params = new Float64Array([1.0, 2.0]);
+ * const gradient = finiteDiffGradient(params, costFn);
+ * // gradient ≈ [2.0, 4.0]
+ * ```
+ * 
+ * @example
+ * ```typescript
+ * // Usage with gradientDescent - note the parameter order!
+ * import { gradientDescent, finiteDiffGradient } from 'numopt-js';
+ * 
+ * const costFn = (params) => Math.pow(params[0] - 3, 2) + Math.pow(params[1] - 2, 2);
+ * 
+ * const result = gradientDescent(
+ *   new Float64Array([0, 0]),
+ *   costFn,
+ *   (params) => finiteDiffGradient(params, costFn),  // ✅ Correct: params first!
+ *   { maxIterations: 100, tolerance: 1e-6 }
+ * );
+ * ```
+ * 
+ * @example
+ * ```typescript
+ * // For easier usage with optimizers, consider using createFiniteDiffGradient:
+ * import { gradientDescent, createFiniteDiffGradient } from 'numopt-js';
+ * 
+ * const costFn = (params) => Math.pow(params[0] - 3, 2) + Math.pow(params[1] - 2, 2);
+ * const gradientFn = createFiniteDiffGradient(costFn);  // No parameter order confusion!
+ * 
+ * const result = gradientDescent(
+ *   new Float64Array([0, 0]),
+ *   costFn,
+ *   gradientFn,
+ *   { maxIterations: 100, tolerance: 1e-6 }
+ * );
+ * ```
+ * 
+ * @remarks
+ * **Important:** When using with optimization algorithms, note the parameter order:
+ * - ✅ Correct: `(params) => finiteDiffGradient(params, costFn)`
+ * - ❌ Wrong: `(params) => finiteDiffGradient(costFn, params)`
+ * 
+ * Consider using {@link createFiniteDiffGradient} for a more intuitive API.
  */
 export function finiteDiffGradient(
   parameters: Float64Array,
