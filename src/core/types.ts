@@ -49,6 +49,32 @@ export type CostFn = (parameters: Float64Array) => number;
 export type GradientFn = (parameters: Float64Array) => Float64Array;
 
 /**
+ * Function that computes the constraint vector for constrained optimization problems.
+ * Takes parameter vector and state vector, returns constraint vector.
+ * The constraint c(p, x) = 0 must be satisfied.
+ * 
+ * Note: The constraint vector length must equal the state vector length for the adjoint method.
+ */
+export type ConstraintFn = (parameters: Float64Array, states: Float64Array) => Float64Array;
+
+/**
+ * Function that computes the cost (objective function value) for constrained optimization.
+ * Takes parameter vector and state vector, returns scalar cost value.
+ * 
+ * Note: The state vector x must satisfy c(p, x) = 0.
+ */
+export type ConstrainedCostFn = (parameters: Float64Array, states: Float64Array) => number;
+
+/**
+ * Function that computes the residual vector for constrained nonlinear least squares problems.
+ * Takes parameter vector and state vector, returns residual vector.
+ * The cost function is f(p, x) = 1/2 r(p, x)^T r(p, x).
+ * 
+ * Note: The state vector x must satisfy c(p, x) = 0.
+ */
+export type ConstrainedResidualFn = (parameters: Float64Array, states: Float64Array) => Float64Array;
+
+/**
  * Common options shared across optimization algorithms.
  */
 export interface CommonOptimizationOptions {
@@ -275,5 +301,73 @@ export interface GradientDescentResult extends OptimizationResult {
    * Whether line search was used.
    */
   usedLineSearch: boolean;
+}
+
+/**
+ * Options for adjoint gradient descent algorithm.
+ */
+export interface AdjointGradientDescentOptions extends GradientDescentOptions {
+  /**
+   * Analytical partial derivative of cost function with respect to parameters.
+   * If provided, this will be used instead of numerical differentiation.
+   * Function signature: (p: Float64Array, x: Float64Array) => Float64Array
+   */
+  dfdp?: (parameters: Float64Array, states: Float64Array) => Float64Array;
+
+  /**
+   * Analytical partial derivative of cost function with respect to states.
+   * If provided, this will be used instead of numerical differentiation.
+   * Function signature: (p: Float64Array, x: Float64Array) => Float64Array
+   */
+  dfdx?: (parameters: Float64Array, states: Float64Array) => Float64Array;
+
+  /**
+   * Analytical partial derivative of constraint function with respect to parameters.
+   * If provided, this will be used instead of numerical differentiation.
+   * Returns a Matrix of size (constraintCount × parameterCount).
+   */
+  dcdp?: (parameters: Float64Array, states: Float64Array) => Matrix;
+
+  /**
+   * Analytical partial derivative of constraint function with respect to states.
+   * If provided, this will be used instead of numerical differentiation.
+   * Returns a Matrix of size (constraintCount × stateCount).
+   * Must be square (constraintCount == stateCount) for the adjoint method.
+   */
+  dcdx?: (parameters: Float64Array, states: Float64Array) => Matrix;
+
+  /**
+   * Step size for numerical differentiation with respect to parameters.
+   * Default: 1e-6
+   */
+  stepSizeP?: number;
+
+  /**
+   * Step size for numerical differentiation with respect to states.
+   * Default: 1e-6
+   */
+  stepSizeX?: number;
+
+  /**
+   * Tolerance for checking constraint satisfaction c(p, x) = 0.
+   * If ||c(p, x)|| exceeds this value, a warning will be issued.
+   * Default: 1e-6
+   */
+  constraintTolerance?: number;
+}
+
+/**
+ * Result returned by adjoint gradient descent algorithm.
+ */
+export interface AdjointGradientDescentResult extends GradientDescentResult {
+  /**
+   * Final state vector (satisfies constraint c(p, x) = 0).
+   */
+  finalStates: Float64Array;
+
+  /**
+   * Final constraint violation norm ||c(p, x)||.
+   */
+  finalConstraintNorm?: number;
 }
 

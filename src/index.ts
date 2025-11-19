@@ -17,9 +17,19 @@ export { gradientDescent } from './core/gradientDescent.js';
 export { backtrackingLineSearch } from './core/lineSearch.js';
 export { gaussNewton } from './core/gaussNewton.js';
 export { levenbergMarquardt } from './core/levenbergMarquardt.js';
+export { adjointGradientDescent } from './core/adjointGradientDescent.js';
 
 // Numerical differentiation utilities
-export { finiteDiffGradient, finiteDiffJacobian } from './core/finiteDiff.js';
+export {
+  finiteDiffGradient,
+  finiteDiffJacobian,
+  finiteDiffPartialP,
+  finiteDiffPartialX,
+  finiteDiffConstraintPartialP,
+  finiteDiffConstraintPartialX,
+  finiteDiffResidualPartialP,
+  finiteDiffResidualPartialX
+} from './core/finiteDiff.js';
 export { createFiniteDiffGradient, createFiniteDiffJacobian } from './core/createGradientFunction.js';
 
 // Type definitions
@@ -28,15 +38,20 @@ export type {
   JacobianFn,
   CostFn,
   GradientFn,
+  ConstraintFn,
+  ConstrainedCostFn,
+  ConstrainedResidualFn,
   CommonOptimizationOptions,
   GradientDescentOptions,
   LineSearchOptions,
   NumericalDifferentiationOptions,
   GaussNewtonOptions,
   LevenbergMarquardtOptions,
+  AdjointGradientDescentOptions,
   OptimizationResult,
   LevenbergMarquardtResult,
-  GradientDescentResult
+  GradientDescentResult,
+  AdjointGradientDescentResult
 } from './core/types.js';
 
 // Utility functions (exported for advanced users)
