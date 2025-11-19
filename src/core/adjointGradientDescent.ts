@@ -184,9 +184,7 @@ function solveAdjointEquation(
     try {
       lambdaMatrix = solve(dcdxTranspose, dfdxMatrix);
     } catch (solveError) {
-      logger.warn('adjointGradientDescent', undefined, 'Failed to solve adjoint equation', [
-        { key: 'Error:', value: String(solveError) }
-      ]);
+      logger.warn('adjointGradientDescent', undefined, `Failed to solve adjoint equation: ${solveError}`);
       throw new Error(
         `Failed to solve adjoint equation (∂c/∂x)^T λ = (∂f/∂x)^T. ` +
         `The constraint Jacobian ∂c/∂x may be singular or ill-conditioned. ` +
@@ -309,7 +307,7 @@ function determineStepSize(
   };
 
   // Create a gradient function wrapper for line search
-  const gradientFnWrapper = (params: Float64Array): Float64Array => {
+  const gradientFnWrapper = (_params: Float64Array): Float64Array => {
     const partials = computePartialDerivatives(
       currentParameters,
       currentStates,
@@ -318,7 +316,7 @@ function determineStepSize(
       options
     );
 
-    const lambda = solveAdjointEquation(partials.dcdx, partials.dfdx, new Logger());
+    const lambda = solveAdjointEquation(partials.dcdx, partials.dfdx, new Logger(undefined, undefined));
     return computeAdjointGradient(partials.dfdp, lambda, partials.dcdp);
   };
 
