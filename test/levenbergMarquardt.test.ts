@@ -118,22 +118,31 @@ describe('Levenberg-Marquardt Method', () => {
     expect(result.finalLambda).toBeLessThan(1e3); // Should decrease from initial
   });
 
-  it('should call onIteration callback if provided', () => {
+  it('should call onIteration starting from iteration zero', () => {
     const initialParams = new Float64Array([0.0]);
-    let callbackCalled = false;
+    const iterations: number[] = [];
+    const firstParams: number[] = [];
 
-    levenbergMarquardt(initialParams, linearResidual, {
+    const result = levenbergMarquardt(initialParams, linearResidual, {
       jacobian: linearJacobian,
-      maxIterations: 5,
-      tolGradient: 1e-6,
+      maxIterations: 3,
+      lambdaInitial: 1e-3,
+      lambdaFactor: 2,
+      tolGradient: 1e-12,
+      tolStep: 1e-12,
+      tolResidual: 1e-12,
       onIteration: (iteration, cost, params) => {
-        callbackCalled = true;
-        expect(typeof cost).toBe('number');
-        expect(params).toBeInstanceOf(Float64Array);
+        iterations.push(iteration);
+        expect(cost).toBeGreaterThanOrEqual(0);
+        if (iteration === 0) {
+          firstParams.push(params[0]);
+        }
       }
     });
 
-    expect(callbackCalled).toBe(true);
+    const expectedIterations = Array.from({ length: result.iterations }, (_, idx) => idx);
+    expect(iterations).toEqual(expectedIterations);
+    expect(firstParams[0]).toBe(initialParams[0]);
   });
 
   it('should return best solution when max iterations reached', () => {
