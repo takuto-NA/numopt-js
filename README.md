@@ -23,6 +23,8 @@ npm install numopt-js
 
 ### Gradient Descent
 
+Based on standard steepest-descent with backtracking line search (Nocedal & Wright, "Numerical Optimization" 2/e, Ch. 2; Boyd & Vandenberghe, "Convex Optimization", Sec. 9.3).
+
 ```typescript
 import { gradientDescent } from 'numopt-js';
 
