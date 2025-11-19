@@ -5,7 +5,7 @@ A flexible numerical optimization library for JavaScript/TypeScript that works s
 ## Features
 
 - **Gradient Descent**: Simple, robust optimization algorithm with line search support
-- **Line Search**: Backtracking line search with Armijo condition for optimal step sizes
+- **Line Search**: Backtracking line search with Armijo condition for optimal step sizes (following Nocedal & Wright, *Numerical Optimization* (2nd ed.), Algorithm 3.1)
 - **Gauss-Newton Method**: Efficient method for nonlinear least squares problems
 - **Levenberg-Marquardt Algorithm**: Robust algorithm combining Gauss-Newton with damping
 - **Numerical Differentiation**: Automatic gradient and Jacobian computation via finite differences
