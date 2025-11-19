@@ -1,12 +1,14 @@
 /**
  * This file implements line search algorithms for determining optimal step sizes
- * in optimization algorithms.
- * 
+ * in optimization algorithms. The implementation follows the backtracking
+ * Armijo line search described in Nocedal & Wright, "Numerical Optimization"
+ * (2nd ed.), Algorithm 3.1.
+ *
  * Role in system:
  * - Used by gradient descent to find appropriate step sizes
  * - Implements backtracking line search with Armijo condition
  * - Critical for convergence of gradient-based methods
- * 
+ *
  * For first-time readers:
  * - Start with backtrackingLineSearch function
  * - Understand Armijo condition (sufficient decrease)
@@ -16,23 +18,27 @@
 import type { CostFn, GradientFn, LineSearchOptions } from './types';
 
 const DEFAULT_INITIAL_STEP_SIZE = 1.0;
+// Typical values recommended in Nocedal & Wright (Algorithm 3.1) are β = 0.5 and c = 1e-4.
 const DEFAULT_CONTRACTION_FACTOR = 0.5;
-const DEFAULT_ARMIJO_PARAMETER = 0.1;
+const DEFAULT_ARMIJO_PARAMETER = 1e-4;
 const DEFAULT_MAX_LINE_SEARCH_ITERATIONS = 50;
 const INVALID_STEP_SIZE = 0.0; // Returned when search direction is not a descent direction
 const NON_DESCENT_DIRECTION_THRESHOLD = 0.0; // Threshold for directional derivative: >= 0 means not a descent direction
 
 /**
  * Performs backtracking line search to find a step size that satisfies
- * the Armijo condition (sufficient decrease).
- * 
+ * the Armijo condition (sufficient decrease). This follows the textbook
+ * backtracking scheme in Nocedal & Wright, "Numerical Optimization"
+ * (2nd ed.), Algorithm 3.1.
+ *
  * The Armijo condition ensures that the function value decreases sufficiently:
  * f(x + α * d) <= f(x) + c * α * ∇f(x)^T * d
- * 
+ *
  * where:
  * - α is the step size
  * - d is the search direction (typically -gradient)
- * - c is the Armijo parameter (typically 0.1)
+ * - c is the Armijo parameter (typically chosen around 1e-4 per Nocedal & Wright)
+ * - β is the backtracking contraction factor (Algorithm 3.1 suggests β = 0.5)
  */
 export function backtrackingLineSearch(
   costFunction: CostFn,
