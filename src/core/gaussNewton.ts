@@ -67,9 +67,9 @@ export function gaussNewton(
     const residualNorm = vectorNorm(residual);
     const cost = computeSumOfSquaredResiduals(residualNorm);
 
-    // Call progress callback if provided (after first iteration)
-    if (onIteration && iteration > 0) {
-      onIteration(iteration - 1, cost, currentParameters);
+    // Call progress callback if provided
+    if (onIteration) {
+      onIteration(iteration, cost, currentParameters);
     }
 
     // Compute Jacobian matrix
