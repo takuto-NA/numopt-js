@@ -119,7 +119,11 @@ export interface GradientDescentOptions extends CommonOptimizationOptions {
 export interface LineSearchOptions {
   /**
    * Initial step size to try.
-   * Default: 1.0
+   * If not provided, the initial step size is automatically scaled by the gradient norm:
+   * α₀ = 1.0 / ||∇f(x)||
+   * This prevents steps from being too large when gradients are large, improving
+   * convergence performance. If the gradient norm is very small (< 1e-10) or the
+   * computed step size is not finite, the default value of 1.0 is used.
    */
   initialStepSize?: number;
 

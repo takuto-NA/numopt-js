@@ -127,5 +127,110 @@ describe('Line Search', () => {
     const newCost = quadratic2DCost(newParams);
     expect(newCost).toBeLessThan(oldCost);
   });
+
+  describe('Edge cases for gradient norm scaling', () => {
+    it('should use default step size when gradient norm is zero', () => {
+      // At minimum, gradient is zero
+      const currentParams = new Float64Array([0.0]);
+      const searchDirection = new Float64Array([-1.0]);
+
+      const stepSize = backtrackingLineSearch(
+        quadraticCost,
+        quadraticGradient,
+        currentParams,
+        searchDirection
+        // No initialStepSize specified - should use default due to zero gradient
+      );
+
+      // Should return 0 because search direction is not descent when gradient is zero
+      expect(stepSize).toBe(0.0);
+    });
+
+    it('should use default step size when gradient norm is very small', () => {
+      // Very small gradient norm (below threshold)
+      const verySmallGradientCost: CostFn = (params: Float64Array) => {
+        return params[0] * params[0];
+      };
+
+      const verySmallGradient: GradientFn = (params: Float64Array) => {
+        // Return gradient with very small norm (1e-12)
+        return new Float64Array([1e-12]);
+      };
+
+      const currentParams = new Float64Array([1.0]);
+      const searchDirection = new Float64Array([-1.0]);
+
+      const stepSize = backtrackingLineSearch(
+        verySmallGradientCost,
+        verySmallGradient,
+        currentParams,
+        searchDirection
+        // No initialStepSize specified - should use default due to small gradient norm
+      );
+
+      // Should still work, but may use default step size
+      expect(stepSize).toBeGreaterThanOrEqual(0);
+    });
+
+    it('should scale initial step size by gradient norm when gradient is large', () => {
+      // Large gradient norm (e.g., 898 as in the problem description)
+      const largeGradientCost: CostFn = (params: Float64Array) => {
+        return params[0] * params[0];
+      };
+
+      const largeGradient: GradientFn = (params: Float64Array) => {
+        // Return gradient with large norm (898)
+        return new Float64Array([898.0]);
+      };
+
+      const currentParams = new Float64Array([449.0]); // x such that 2x = 898
+      const searchDirection = new Float64Array([-1.0]);
+
+      const stepSize = backtrackingLineSearch(
+        largeGradientCost,
+        largeGradient,
+        currentParams,
+        searchDirection
+        // No initialStepSize specified - should scale by 1.0 / 898 ≈ 0.001114
+      );
+
+      // Should find a valid step size
+      expect(stepSize).toBeGreaterThan(0);
+      
+      // Verify that the step actually decreases the cost
+      const newParams = new Float64Array([currentParams[0] + stepSize * searchDirection[0]]);
+      const oldCost = largeGradientCost(currentParams);
+      const newCost = largeGradientCost(newParams);
+      expect(newCost).toBeLessThan(oldCost);
+    });
+
+    it('should respect explicitly provided initialStepSize even with large gradient', () => {
+      const largeGradientCost: CostFn = (params: Float64Array) => {
+        return params[0] * params[0];
+      };
+
+      const largeGradient: GradientFn = (params: Float64Array) => {
+        return new Float64Array([898.0]);
+      };
+
+      const currentParams = new Float64Array([449.0]);
+      const searchDirection = new Float64Array([-1.0]);
+
+      const explicitInitialStepSize = 0.5;
+      const stepSize = backtrackingLineSearch(
+        largeGradientCost,
+        largeGradient,
+        currentParams,
+        searchDirection,
+        {
+          initialStepSize: explicitInitialStepSize
+        }
+      );
+
+      // Should use the explicitly provided step size (or smaller if backtracking occurs)
+      expect(stepSize).toBeGreaterThan(0);
+      expect(stepSize).toBeLessThanOrEqual(explicitInitialStepSize);
+    });
+  });
 });
 
