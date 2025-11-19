@@ -111,22 +111,29 @@ describe('Gauss-Newton Method', () => {
     expect(result.finalCost).toBeLessThan(1e-6);
   });
 
-  it('should call onIteration callback if provided', () => {
+  it('should call onIteration with the current iteration starting at zero', () => {
     const initialParams = new Float64Array([0.0]);
-    let callbackCalled = false;
+    const iterations: number[] = [];
+    const firstParams: number[] = [];
+    const costs: number[] = [];
 
-    gaussNewton(initialParams, linearResidual, {
+    const result = gaussNewton(initialParams, linearResidual, {
       jacobian: linearJacobian,
-      maxIterations: 5,
-      tolerance: 1e-6,
+      maxIterations: 3,
+      tolerance: 0,
       onIteration: (iteration, cost, params) => {
-        callbackCalled = true;
-        expect(typeof cost).toBe('number');
-        expect(params).toBeInstanceOf(Float64Array);
+        iterations.push(iteration);
+        costs.push(cost);
+        if (iteration === 0) {
+          firstParams.push(params[0]);
+        }
       }
     });
 
-    expect(callbackCalled).toBe(true);
+    expect(iterations).toEqual([0, 1, 2]);
+    expect(result.iterations).toBe(3);
+    expect(firstParams[0]).toBe(initialParams[0]);
+    expect(costs[0]).toBeCloseTo(4);
   });
 
   it('should handle maximum iterations gracefully', () => {
