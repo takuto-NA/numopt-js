@@ -8,6 +8,7 @@ A flexible numerical optimization library for JavaScript/TypeScript that works s
 - **Line Search**: Backtracking line search with Armijo condition for optimal step sizes (following Nocedal & Wright, *Numerical Optimization* (2nd ed.), Algorithm 3.1)
 - **Gauss-Newton Method**: Efficient method for nonlinear least squares problems
 - **Levenberg-Marquardt Algorithm**: Robust algorithm combining Gauss-Newton with damping
+- **Adjoint Method**: Efficient constrained optimization using adjoint variables (solves only one linear system per iteration instead of parameterCount systems)
 - **Numerical Differentiation**: Automatic gradient and Jacobian computation via finite differences
 - **Browser-Compatible**: Works seamlessly in modern browsers
 - **TypeScript-First**: Full TypeScript support with comprehensive type definitions
@@ -158,7 +159,85 @@ const gradientFn = createFiniteDiffGradient(costFn, { stepSize: 1e-8 });
 const gradient = finiteDiffGradient(params, costFn, { stepSize: 1e-8 });
 ```
 
+### Adjoint Method (Constrained Optimization)
 
+The adjoint method efficiently solves constrained optimization problems by solving for an adjoint variable λ instead of explicitly inverting matrices. This requires solving only one linear system per iteration, making it much more efficient than naive approaches.
+
+**Mathematical background**: For constraint `c(p, x) = 0`, the method computes `df/dp = ∂f/∂p - λ^T ∂c/∂p` where λ solves `(∂c/∂x)^T λ = (∂f/∂x)^T`.
+
+```typescript
+import { adjointGradientDescent } from 'numopt-js';
+
+// Define cost function: f(p, x) = p² + x²
+const costFunction = (p: Float64Array, x: Float64Array) => {
+  return p[0] * p[0] + x[0] * x[0];
+};
+
+// Define constraint: c(p, x) = p + x - 1 = 0
+const constraintFunction = (p: Float64Array, x: Float64Array) => {
+  return new Float64Array([p[0] + x[0] - 1.0]);
+};
+
+// Initial values (should satisfy constraint: c(p₀, x₀) = 0)
+const initialP = new Float64Array([2.0]);
+const initialX = new Float64Array([-1.0]); // 2 + (-1) - 1 = 0
+
+// Optimize
+const result = adjointGradientDescent(
+  initialP,
+  initialX,
+  costFunction,
+  constraintFunction,
+  {
+    maxIterations: 100,
+    tolerance: 1e-6,
+    useLineSearch: true,
+    logLevel: 'DEBUG' // Enable detailed iteration logging
+  }
+);
+
+console.log('Optimized parameters:', result.parameters);
+console.log('Final states:', result.finalStates);
+console.log('Final cost:', result.finalCost);
+console.log('Constraint norm:', result.finalConstraintNorm);
+```
+
+**With Residual Functions**: The method also supports residual functions `r(p, x)` where `f = 1/2 r^T r`:
+
+```typescript
+// Residual function: r(p, x) = [p - 0.5, x - 0.5]
+const residualFunction = (p: Float64Array, x: Float64Array) => {
+  return new Float64Array([p[0] - 0.5, x[0] - 0.5]);
+};
+
+const result = adjointGradientDescent(
+  initialP,
+  initialX,
+  residualFunction, // Can use residual function directly
+  constraintFunction,
+  { maxIterations: 100, tolerance: 1e-6 }
+);
+```
+
+**With Analytical Derivatives**: For better performance, you can provide analytical partial derivatives:
+
+```typescript
+import { Matrix } from 'ml-matrix';
+
+const result = adjointGradientDescent(
+  initialP,
+  initialX,
+  costFunction,
+  constraintFunction,
+  {
+    dfdp: (p: Float64Array, x: Float64Array) => new Float64Array([2 * p[0]]),
+    dfdx: (p: Float64Array, x: Float64Array) => new Float64Array([2 * x[0]]),
+    dcdp: (p: Float64Array, x: Float64Array) => new Matrix([[1]]),
+    dcdx: (p: Float64Array, x: Float64Array) => new Matrix([[1]]),
+    maxIterations: 100
+  }
+);
+```
 
 ### Gradient Descent
 
@@ -179,6 +258,18 @@ function levenbergMarquardt(
   residualFunction: ResidualFn,
   options?: LevenbergMarquardtOptions
 ): LevenbergMarquardtResult
+```
+
+### Adjoint Gradient Descent
+
+```typescript
+function adjointGradientDescent(
+  initialParameters: Float64Array,
+  initialStates: Float64Array,
+  costFunction: ConstrainedCostFn | ConstrainedResidualFn,
+  constraintFunction: ConstraintFn,
+  options?: AdjointGradientDescentOptions
+): AdjointGradientDescentResult
 ```
 
 ### Options
@@ -217,6 +308,18 @@ All algorithms support common options:
 - `useNumericJacobian?: boolean` - Use numerical differentiation for Jacobian (default: true)
 - `jacobianStep?: number` - Step size for numerical Jacobian computation (default: 1e-6)
 
+#### Adjoint Gradient Descent Options
+
+- `dfdp?: (p: Float64Array, x: Float64Array) => Float64Array` - Analytical partial derivative ∂f/∂p (optional)
+- `dfdx?: (p: Float64Array, x: Float64Array) => Float64Array` - Analytical partial derivative ∂f/∂x (optional)
+- `dcdp?: (p: Float64Array, x: Float64Array) => Matrix` - Analytical partial derivative ∂c/∂p (optional)
+- `dcdx?: (p: Float64Array, x: Float64Array) => Matrix` - Analytical partial derivative ∂c/∂x (optional)
+- `stepSizeP?: number` - Step size for numerical differentiation w.r.t. parameters (default: 1e-6)
+- `stepSizeX?: number` - Step size for numerical differentiation w.r.t. states (default: 1e-6)
+- `constraintTolerance?: number` - Tolerance for constraint satisfaction check (default: 1e-6)
+
+**Note**: The constraint function `c(p, x)` must return a vector with the same length as the state vector `x` (i.e., `constraintCount == stateCount`) for the adjoint method to work. The constraint Jacobian `∂c/∂x` must be square and invertible.
+
 #### Numerical Differentiation Options
 
 - `stepSize?: number` - Step size for finite difference approximation (default: 1e-6)
@@ -228,6 +331,7 @@ See the `examples/` directory for complete working examples:
 - Gradient descent with Rosenbrock function
 - Curve fitting with Levenberg-Marquardt
 - Linear and nonlinear regression
+- Constrained optimization with adjoint method
 
 To run the examples:
 
@@ -242,12 +346,15 @@ npm run example:gauss-newton
 npx tsx examples/gradient-descent-example.ts
 npx tsx examples/curve-fitting-lm.ts
 npx tsx examples/rosenbrock-optimization.ts
+npx tsx examples/adjoint-example.ts
+npx tsx examples/adjoint-advanced-example.ts
 ```
 
 ## References
 
 - Moré, J. J., "The Levenberg-Marquardt Algorithm: Implementation and Theory," in *Numerical Analysis*, Lecture Notes in Mathematics 630, 1978. DOI: https://doi.org/10.1007/BFb0067700
 - Lourakis, M. I. A., "A Brief Description of the Levenberg-Marquardt Algorithm," 2005 tutorial. PDF: http://www.ics.forth.gr/~lourakis/publ/2005/LM.pdf
+- Nocedal, J. & Wright, S. J., "Numerical Optimization" (2nd ed.), Chapter 12 (constrained optimization), 2006
 
 ## MVP Scope
 
@@ -256,6 +363,7 @@ npx tsx examples/rosenbrock-optimization.ts
 - Gradient descent with line search
 - Gauss-Newton method
 - Levenberg-Marquardt algorithm
+- Adjoint method for constrained optimization (equality constraints)
 - Numerical differentiation (central difference)
 - Browser compatibility
 - TypeScript support
@@ -263,7 +371,7 @@ npx tsx examples/rosenbrock-optimization.ts
 ### Not Included (Future Work)
 
 - Automatic differentiation
-- Constraint handling (inequality/equality constraints)
+- Constraint handling (inequality constraints)
 - Global optimization guarantees
 - Evolutionary algorithms (CMA-ES, etc.)
 - Other optimization algorithms (BFGS, etc.)
@@ -346,14 +454,26 @@ const matrix = new Matrix([[1, 2], [3, 4]]);
 3. Try different initial parameters
 4. Increase numerical Jacobian step size (`jacobianStep`)
 
+#### Singular matrix error (Adjoint Method)
+
+**Problem**: The constraint Jacobian `∂c/∂x` is singular or ill-conditioned, making the adjoint equation unsolvable.
+
+**Solutions**:
+1. Ensure the constraint function `c(p, x)` returns a vector with the same length as the state vector `x`
+2. Check that `∂c/∂x` is square and invertible
+3. Verify initial states satisfy the constraint approximately (`c(p₀, x₀) ≈ 0`)
+4. Try different initial values that don't make `∂c/∂x` singular
+5. For nonlinear constraints, ensure initial values are on the constraint manifold
+
 #### Results don't match expectations
 
 **Check**:
 1. Verify your cost/residual function is correct
 2. Check that gradient/Jacobian functions are correct (if provided)
-3. Try enabling `verbose: true` to see iteration details
+3. Try enabling `verbose: true` or `logLevel: 'DEBUG'` to see iteration details
 4. Use `onIteration` callback to monitor progress
 5. Verify initial parameters are reasonable
+6. For adjoint method, ensure initial states satisfy constraints approximately
 
 ### Debugging Tips
 

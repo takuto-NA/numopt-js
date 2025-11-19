@@ -24,6 +24,8 @@
     "example:rosenbrock": "tsx examples/rosenbrock-optimization.ts",
     "example:lm": "tsx examples/curve-fitting-lm.ts",
     "example:gauss-newton": "tsx examples/gauss-newton-example.ts",
+    "example:adjoint": "tsx examples/adjoint-example.ts",
+    "example:adjoint-advanced": "tsx examples/adjoint-advanced-example.ts",
     "docs": "typedoc --out docs src"
   },
   "keywords": [
@@ -32,6 +34,8 @@
     "levenberg-marquardt",
     "gradient-descent",
     "gauss-newton",
+    "adjoint-method",
+    "constrained-optimization",
     "nonlinear-least-squares",
     "typescript"
   ],

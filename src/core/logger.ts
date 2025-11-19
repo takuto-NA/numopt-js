@@ -83,8 +83,14 @@ export function shouldLog(
  * Formats a number using scientific notation for readability.
  * Small numbers (< 0.01) and large numbers (> 1000) use scientific notation.
  * Otherwise, uses standard decimal notation.
+ * Handles non-numeric values gracefully.
  */
-function formatNumber(value: number): string {
+function formatNumber(value: number | string): string {
+  // Handle non-numeric values
+  if (typeof value !== 'number' || !isFinite(value)) {
+    return String(value);
+  }
+  
   const absoluteValue = Math.abs(value);
   if (absoluteValue === 0) {
     return '0';
