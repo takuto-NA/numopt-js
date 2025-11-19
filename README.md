@@ -143,6 +143,11 @@ All algorithms support common options:
 - `tolStep?: number` - Tolerance for step size convergence (default: 1e-6)
 - `tolResidual?: number` - Tolerance for residual norm convergence (default: 1e-6)
 
+**Levenberg-Marquardt References**
+
+- Moré, J. J., "The Levenberg-Marquardt Algorithm: Implementation and Theory," in *Numerical Analysis*, Lecture Notes in Mathematics 630, 1978. DOI: https://doi.org/10.1007/BFb0067700
+- Lourakis, M. I. A., "A Brief Description of the Levenberg-Marquardt Algorithm," 2005 tutorial. PDF: http://www.ics.forth.gr/~lourakis/publ/2005/LM.pdf
+
 #### Gauss-Newton Options
 
 - `jacobian?: JacobianFn` - Analytical Jacobian function (if provided, used instead of numerical differentiation)
@@ -175,6 +180,11 @@ npx tsx examples/gradient-descent-example.ts
 npx tsx examples/curve-fitting-lm.ts
 npx tsx examples/rosenbrock-optimization.ts
 ```
+
+## References
+
+- Moré, J. J., "The Levenberg-Marquardt Algorithm: Implementation and Theory," in *Numerical Analysis*, Lecture Notes in Mathematics 630, 1978. DOI: https://doi.org/10.1007/BFb0067700
+- Lourakis, M. I. A., "A Brief Description of the Levenberg-Marquardt Algorithm," 2005 tutorial. PDF: http://www.ics.forth.gr/~lourakis/publ/2005/LM.pdf
 
 ## MVP Scope
 
