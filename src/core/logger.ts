@@ -36,6 +36,11 @@ const LOG_LEVEL_EMOJI: Record<LogLevel, string> = {
   ERROR: '❌'
 };
 
+const SCIENTIFIC_NOTATION_LOWER_THRESHOLD = 0.01;
+const SCIENTIFIC_NOTATION_UPPER_THRESHOLD = 1000;
+const SCIENTIFIC_NOTATION_FRACTION_DIGITS = 3;
+const FIXED_NOTATION_FRACTION_DIGITS = 6;
+
 /**
  * Determines the effective log level from options.
  * Handles backward compatibility with verbose option.
@@ -80,14 +85,16 @@ export function shouldLog(
  * Otherwise, uses standard decimal notation.
  */
 function formatNumber(value: number): string {
-  const absValue = Math.abs(value);
-  if (absValue === 0) {
+  const absoluteValue = Math.abs(value);
+  if (absoluteValue === 0) {
     return '0';
   }
-  if (absValue < 0.01 || absValue >= 1000) {
-    return value.toExponential(3);
+  // Use scientific notation for very small or very large numbers to avoid long strings of zeros
+  if (absoluteValue < SCIENTIFIC_NOTATION_LOWER_THRESHOLD || absoluteValue >= SCIENTIFIC_NOTATION_UPPER_THRESHOLD) {
+    return value.toExponential(SCIENTIFIC_NOTATION_FRACTION_DIGITS);
   }
-  return value.toFixed(6).replace(/\.?0+$/, '');
+  // Use fixed notation for standard range numbers for easier reading
+  return value.toFixed(FIXED_NOTATION_FRACTION_DIGITS).replace(/\.?0+$/, '');
 }
 
 /**
@@ -104,8 +111,8 @@ function formatKeyValuePairs(pairs: Array<{ key: string; value: number }>): stri
     return '';
   }
 
-  // Find maximum label length
-  const maxLabelLength = Math.max(...pairs.map(p => p.key.length));
+  // Find maximum label length to align values
+  const maxLabelLength = Math.max(...pairs.map(pair => pair.key.length));
 
   // Format each pair with aligned labels
   return pairs
@@ -135,15 +142,15 @@ function formatLogMessage(
   const timestamp = new Date().toISOString();
   const emoji = LOG_LEVEL_EMOJI[level];
   const levelLabel = `[${level}]`;
-  
+
   const iterationPart = iteration !== undefined ? `Iteration ${iteration}` : '';
   const header = `${emoji} [${timestamp}] ${levelLabel} [${algorithm}]${iterationPart ? ` ${iterationPart}` : ''}: ${message}`;
-  
+
   if (details && details.length > 0) {
     const detailsFormatted = formatKeyValuePairs(details);
     return `${header}\n${detailsFormatted}`;
   }
-  
+
   return header;
 }
 
@@ -159,6 +166,29 @@ export class Logger {
   }
 
   /**
+   * Internal log method to handle common logging logic.
+   * Checks log level, formats message, and outputs to console.
+   */
+  private log(
+    level: LogLevel,
+    algorithm: string,
+    iteration: number | undefined,
+    message: string,
+    details?: Array<{ key: string; value: number }>
+  ): void {
+    if (!shouldLog(level, this.effectiveLogLevel)) {
+      return;
+    }
+    const formatted = formatLogMessage(level, algorithm, iteration, message, details);
+
+    if (level === 'ERROR') {
+      console.error(formatted);
+    } else {
+      console.log(formatted);
+    }
+  }
+
+  /**
    * Logs a DEBUG level message.
    * Used for detailed progress information (cost, gradient norm, step size, etc.).
    */
@@ -168,11 +198,7 @@ export class Logger {
     message: string,
     details?: Array<{ key: string; value: number }>
   ): void {
-    if (!shouldLog('DEBUG', this.effectiveLogLevel)) {
-      return;
-    }
-    const formatted = formatLogMessage('DEBUG', algorithm, iteration, message, details);
-    console.log(formatted);
+    this.log('DEBUG', algorithm, iteration, message, details);
   }
 
   /**
@@ -185,11 +211,7 @@ export class Logger {
     message: string,
     details?: Array<{ key: string; value: number }>
   ): void {
-    if (!shouldLog('INFO', this.effectiveLogLevel)) {
-      return;
-    }
-    const formatted = formatLogMessage('INFO', algorithm, iteration, message, details);
-    console.log(formatted);
+    this.log('INFO', algorithm, iteration, message, details);
   }
 
   /**
@@ -202,11 +224,7 @@ export class Logger {
     message: string,
     details?: Array<{ key: string; value: number }>
   ): void {
-    if (!shouldLog('WARN', this.effectiveLogLevel)) {
-      return;
-    }
-    const formatted = formatLogMessage('WARN', algorithm, iteration, message, details);
-    console.log(formatted);
+    this.log('WARN', algorithm, iteration, message, details);
   }
 
   /**
@@ -219,11 +237,7 @@ export class Logger {
     message: string,
     details?: Array<{ key: string; value: number }>
   ): void {
-    if (!shouldLog('ERROR', this.effectiveLogLevel)) {
-      return;
-    }
-    const formatted = formatLogMessage('ERROR', algorithm, iteration, message, details);
-    console.error(formatted);
+    this.log('ERROR', algorithm, iteration, message, details);
   }
 }
 
