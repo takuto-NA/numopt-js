@@ -18,11 +18,11 @@ import type {
   JacobianFn,
   GaussNewtonOptions,
   OptimizationResult
-} from './types';
-import { float64ArrayToMatrix, matrixToFloat64Array, vectorNorm, computeSumOfSquaredResiduals } from '../utils/matrix';
-import { checkStepSizeConvergence, checkResidualConvergence, createConvergenceResult } from './convergence';
-import { computeJacobianMatrix } from './jacobianComputation';
-import { Logger } from './logger';
+} from './types.js';
+import { float64ArrayToMatrix, matrixToFloat64Array, vectorNorm, computeSumOfSquaredResiduals } from '../utils/matrix.js';
+import { checkStepSizeConvergence, checkResidualConvergence, createConvergenceResult } from './convergence.js';
+import { computeJacobianMatrix } from './jacobianComputation.js';
+import { Logger } from './logger.js';
 
 const DEFAULT_MAX_ITERATIONS = 1000;
 const DEFAULT_TOLERANCE = 1e-6;
