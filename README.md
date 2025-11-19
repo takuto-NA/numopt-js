@@ -165,6 +165,8 @@ The adjoint method efficiently solves constrained optimization problems by solvi
 
 **Mathematical background**: For constraint `c(p, x) = 0`, the method computes `df/dp = ∂f/∂p - λ^T ∂c/∂p` where λ solves `(∂c/∂x)^T λ = (∂f/∂x)^T`.
 
+**Future extension**: For residual functions `r(p, x)`, the adjoint method can compute `dr/dp` (Jacobian matrix) efficiently. Since `∂c/∂x` decomposition is computed once and reused for all residual components, this approach is more efficient than BFGS or Lagrange multiplier methods for constrained optimization. The computed Jacobian can be used with Gauss-Newton or Levenberg-Marquardt methods, potentially achieving quadratic convergence for constrained optimization problems.
+
 ```typescript
 import { adjointGradientDescent } from 'numopt-js';
 

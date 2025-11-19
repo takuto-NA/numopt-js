@@ -25,6 +25,10 @@
  * - Provides efficient constrained optimization using adjoint method
  * - Supports both cost functions and residual functions
  * - Uses finite differences or analytical derivatives
+ * - For residual functions r(p, x), can compute dr/dp (Jacobian matrix) efficiently
+ *   by reusing ∂c/∂x decomposition for all residual components. This is more efficient
+ *   than BFGS or Lagrange multiplier methods. The Jacobian enables Gauss-Newton or
+ *   Levenberg-Marquardt methods for quadratic convergence in constrained optimization
  * 
  * For first-time readers:
  * - Start with adjointGradientDescent function
