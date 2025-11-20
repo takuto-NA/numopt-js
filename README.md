@@ -24,6 +24,29 @@ npm install numopt-js
 
 ## Quick Start
 
+1. **Install**: `npm install numopt-js`
+2. **Import** the solver you need: `import { gradientDescent } from 'numopt-js';`
+3. **Run a minimal example**:
+
+```typescript
+import { gradientDescent } from 'numopt-js';
+
+const cost = (p: Float64Array) => p[0] * p[0] + p[1] * p[1];
+const grad = (p: Float64Array) => new Float64Array([2 * p[0], 2 * p[1]]);
+
+const result = gradientDescent(new Float64Array([5, -3]), cost, grad);
+console.log(result.parameters);
+```
+
+**Choose the right solver**
+
+| Use it when you need | Algorithm | Sample snippet |
+| --- | --- | --- |
+| Smooth cost with gradients and simple tuning | Gradient Descent | [Gradient Descent](#gradient-descent) |
+| Nonlinear least squares with reliable Jacobians | Gauss-Newton | [Gauss-Newton](#gauss-newton-nonlinear-least-squares) |
+| Nonlinear least squares that need damping or robustness | Levenberg-Marquardt | [Levenberg-Marquardt](#levenberg-marquardt-nonlinear-least-squares) |
+| Equality constraints on parameters/states | Constrained Gauss-Newton / Levenberg-Marquardt | [Constrained Gauss-Newton](#constrained-gauss-newton-constrained-nonlinear-least-squares) / [Constrained Levenberg-Marquardt](#constrained-levenberg-marquardt-robust-constrained-least-squares) |
+
 ### Gradient Descent
 
 Based on standard steepest-descent with backtracking line search (Nocedal & Wright, "Numerical Optimization" 2/e, Ch. 2; Boyd & Vandenberghe, "Convex Optimization", Sec. 9.3).
@@ -31,26 +54,15 @@ Based on standard steepest-descent with backtracking line search (Nocedal & Wrig
 ```typescript
 import { gradientDescent } from 'numopt-js';
 
-// Define cost function and gradient
-const costFunction = (params: Float64Array) => {
-  return params[0] * params[0] + params[1] * params[1];
-};
+const costFunction = (params: Float64Array) => params[0] * params[0] + params[1] * params[1];
+const gradientFunction = (params: Float64Array) => new Float64Array([2 * params[0], 2 * params[1]]);
 
-const gradientFunction = (params: Float64Array) => {
-  return new Float64Array([2 * params[0], 2 * params[1]]);
-};
-
-// Optimize
-const initialParams = new Float64Array([5.0, -3.0]);
-const result = gradientDescent(initialParams, costFunction, gradientFunction, {
-  maxIterations: 1000,
+const result = gradientDescent(new Float64Array([5.0, -3.0]), costFunction, gradientFunction, {
   tolerance: 1e-6,
   useLineSearch: true
 });
 
 console.log('Optimized parameters:', result.parameters);
-console.log('Final cost:', result.finalCost);
-console.log('Converged:', result.converged);
 ```
 
 **Using Result Formatter**: For better formatted output, use the built-in result formatter:
@@ -59,13 +71,32 @@ console.log('Converged:', result.converged);
 import { gradientDescent, printGradientDescentResult } from 'numopt-js';
 
 const result = gradientDescent(initialParams, costFunction, gradientFunction, {
-  maxIterations: 1000,
   tolerance: 1e-6,
   useLineSearch: true
 });
 
 // Automatically formats and prints the result
 printGradientDescentResult(result);
+```
+
+### Gauss-Newton (Nonlinear Least Squares)
+
+```typescript
+import { gaussNewton } from 'numopt-js';
+
+const xData = [0, 1, 2];
+const yData = [1, 3, 5];
+
+const residualFunction = (params: Float64Array) => {
+  const [a, b] = params;
+  return new Float64Array(xData.map((x, i) => a * x + b - yData[i]));
+};
+
+const result = gaussNewton(new Float64Array([0, 0]), residualFunction, {
+  useNumericJacobian: true
+});
+
+console.log('Optimized parameters:', result.parameters);
 ```
 
 ### Levenberg-Marquardt (Nonlinear Least Squares)
