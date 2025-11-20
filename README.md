@@ -733,8 +733,8 @@ const matrix = new Matrix([[1, 2], [3, 4]]);
 
 ## Requirements
 
-- Node.js >= 14.0.0
-- Modern browsers with ES2020 support
+- Node.js >= 18.0.0
+- Modern browsers with ES2020 support (required for running in-browser examples)
 
 ## License
 
