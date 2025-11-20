@@ -18,6 +18,8 @@ export { backtrackingLineSearch } from './core/lineSearch.js';
 export { gaussNewton } from './core/gaussNewton.js';
 export { levenbergMarquardt } from './core/levenbergMarquardt.js';
 export { adjointGradientDescent } from './core/adjointGradientDescent.js';
+export { constrainedGaussNewton } from './core/constrainedGaussNewton.js';
+export { constrainedLevenbergMarquardt } from './core/constrainedLevenbergMarquardt.js';
 
 // Numerical differentiation utilities
 export {
@@ -48,10 +50,14 @@ export type {
   GaussNewtonOptions,
   LevenbergMarquardtOptions,
   AdjointGradientDescentOptions,
+  ConstrainedGaussNewtonOptions,
+  ConstrainedLevenbergMarquardtOptions,
   OptimizationResult,
   LevenbergMarquardtResult,
   GradientDescentResult,
-  AdjointGradientDescentResult
+  AdjointGradientDescentResult,
+  ConstrainedGaussNewtonResult,
+  ConstrainedLevenbergMarquardtResult
 } from './core/types.js';
 
 // Utility functions (exported for advanced users)

@@ -371,3 +371,116 @@ export interface AdjointGradientDescentResult extends GradientDescentResult {
   finalConstraintNorm?: number;
 }
 
+/**
+ * Options for constrained Gauss-Newton method.
+ */
+export interface ConstrainedGaussNewtonOptions extends CommonOptimizationOptions {
+  /**
+   * Analytical partial derivative of residual function with respect to parameters.
+   * If provided, this will be used instead of numerical differentiation.
+   * Returns a Matrix of size (residualCount × parameterCount).
+   */
+  drdp?: (parameters: Float64Array, states: Float64Array) => Matrix;
+
+  /**
+   * Analytical partial derivative of residual function with respect to states.
+   * If provided, this will be used instead of numerical differentiation.
+   * Returns a Matrix of size (residualCount × stateCount).
+   */
+  drdx?: (parameters: Float64Array, states: Float64Array) => Matrix;
+
+  /**
+   * Analytical partial derivative of constraint function with respect to parameters.
+   * If provided, this will be used instead of numerical differentiation.
+   * Returns a Matrix of size (constraintCount × parameterCount).
+   */
+  dcdp?: (parameters: Float64Array, states: Float64Array) => Matrix;
+
+  /**
+   * Analytical partial derivative of constraint function with respect to states.
+   * If provided, this will be used instead of numerical differentiation.
+   * Returns a Matrix of size (constraintCount × stateCount).
+   * Must be square (constraintCount == stateCount) for the adjoint method.
+   */
+  dcdx?: (parameters: Float64Array, states: Float64Array) => Matrix;
+
+  /**
+   * Step size for numerical differentiation with respect to parameters.
+   * Default: 1e-6
+   */
+  stepSizeP?: number;
+
+  /**
+   * Step size for numerical differentiation with respect to states.
+   * Default: 1e-6
+   */
+  stepSizeX?: number;
+
+  /**
+   * Tolerance for checking constraint satisfaction c(p, x) = 0.
+   * If ||c(p, x)|| exceeds this value, a warning will be issued.
+   * Default: 1e-6
+   */
+  constraintTolerance?: number;
+}
+
+/**
+ * Result returned by constrained Gauss-Newton algorithm.
+ */
+export interface ConstrainedGaussNewtonResult extends OptimizationResult {
+  /**
+   * Final state vector (satisfies constraint c(p, x) = 0).
+   */
+  finalStates: Float64Array;
+
+  /**
+   * Final constraint violation norm ||c(p, x)||.
+   */
+  finalConstraintNorm?: number;
+}
+
+/**
+ * Options for constrained Levenberg-Marquardt algorithm.
+ */
+export interface ConstrainedLevenbergMarquardtOptions extends ConstrainedGaussNewtonOptions {
+  /**
+   * Initial value of damping parameter lambda.
+   * Default: 1e-3
+   */
+  lambdaInitial?: number;
+
+  /**
+   * Factor for updating lambda (success: divide, failure: multiply).
+   * Default: 10.0
+   */
+  lambdaFactor?: number;
+
+  /**
+   * Tolerance for gradient norm convergence check.
+   * Default: 1e-6
+   */
+  tolGradient?: number;
+
+  /**
+   * Tolerance for step size convergence check.
+   * Default: 1e-6
+   */
+  tolStep?: number;
+
+  /**
+   * Tolerance for residual norm convergence check.
+   * Default: 1e-6
+   */
+  tolResidual?: number;
+}
+
+/**
+ * Result returned by constrained Levenberg-Marquardt algorithm.
+ */
+export interface ConstrainedLevenbergMarquardtResult extends ConstrainedGaussNewtonResult {
+  /**
+   * Final lambda (damping parameter) value.
+   */
+  finalLambda: number;
+}
+
