@@ -8,6 +8,8 @@ A flexible numerical optimization library for JavaScript/TypeScript that works s
 - **Line Search**: Backtracking line search with Armijo condition for optimal step sizes (following Nocedal & Wright, *Numerical Optimization* (2nd ed.), Algorithm 3.1)
 - **Gauss-Newton Method**: Efficient method for nonlinear least squares problems
 - **Levenberg-Marquardt Algorithm**: Robust algorithm combining Gauss-Newton with damping
+- **Constrained Gauss-Newton**: Efficient constrained nonlinear least squares using effective Jacobian
+- **Constrained Levenberg-Marquardt**: Robust constrained nonlinear least squares with damping
 - **Adjoint Method**: Efficient constrained optimization using adjoint variables (solves only one linear system per iteration instead of parameterCount systems)
 - **Numerical Differentiation**: Automatic gradient and Jacobian computation via finite differences
 - **Browser-Compatible**: Works seamlessly in modern browsers
@@ -165,7 +167,7 @@ The adjoint method efficiently solves constrained optimization problems by solvi
 
 **Mathematical background**: For constraint `c(p, x) = 0`, the method computes `df/dp = ∂f/∂p - λ^T ∂c/∂p` where λ solves `(∂c/∂x)^T λ = (∂f/∂x)^T`.
 
-**Future extension**: For residual functions `r(p, x)`, the adjoint method can compute `dr/dp` (Jacobian matrix) efficiently. Since `∂c/∂x` decomposition is computed once and reused for all residual components, this approach is more efficient than BFGS or Lagrange multiplier methods for constrained optimization. The computed Jacobian can be used with Gauss-Newton or Levenberg-Marquardt methods, potentially achieving quadratic convergence for constrained optimization problems.
+**Constrained Least Squares**: For residual functions `r(p, x)` with constraints `c(p, x) = 0`, the library provides constrained Gauss-Newton and Levenberg-Marquardt methods. These use the effective Jacobian `J_eff = r_p - r_x C_x^+ C_p` to capture constraint effects, enabling quadratic convergence near the solution while maintaining constraint satisfaction.
 
 ```typescript
 import { adjointGradientDescent } from 'numopt-js';
@@ -241,6 +243,88 @@ const result = adjointGradientDescent(
 );
 ```
 
+### Constrained Gauss-Newton (Constrained Nonlinear Least Squares)
+
+For constrained nonlinear least squares problems, use the constrained Gauss-Newton method:
+
+```typescript
+import { constrainedGaussNewton } from 'numopt-js';
+
+// Define residual function: r(p, x) = [p - 0.5, x - 0.5]
+const residualFunction = (p: Float64Array, x: Float64Array) => {
+  return new Float64Array([p[0] - 0.5, x[0] - 0.5]);
+};
+
+// Define constraint: c(p, x) = p + x - 1 = 0
+const constraintFunction = (p: Float64Array, x: Float64Array) => {
+  return new Float64Array([p[0] + x[0] - 1.0]);
+};
+
+// Initial values (should satisfy constraint: c(p₀, x₀) = 0)
+const initialP = new Float64Array([2.0]);
+const initialX = new Float64Array([-1.0]); // 2 + (-1) - 1 = 0
+
+// Optimize
+const result = constrainedGaussNewton(
+  initialP,
+  initialX,
+  residualFunction,
+  constraintFunction,
+  {
+    maxIterations: 100,
+    tolerance: 1e-6
+  }
+);
+
+console.log('Optimized parameters:', result.parameters);
+console.log('Final states:', result.finalStates);
+console.log('Final cost:', result.finalCost);
+console.log('Constraint norm:', result.finalConstraintNorm);
+```
+
+### Constrained Levenberg-Marquardt (Robust Constrained Least Squares)
+
+For more robust constrained optimization, use the constrained Levenberg-Marquardt method:
+
+```typescript
+import { constrainedLevenbergMarquardt } from 'numopt-js';
+
+const result = constrainedLevenbergMarquardt(
+  initialP,
+  initialX,
+  residualFunction,
+  constraintFunction,
+  {
+    maxIterations: 100,
+    tolGradient: 1e-6,
+    tolStep: 1e-6,
+    tolResidual: 1e-6,
+    lambdaInitial: 1e-3,
+    lambdaFactor: 10.0
+  }
+);
+```
+
+**With Analytical Derivatives**: For better performance, provide analytical partial derivatives:
+
+```typescript
+import { Matrix } from 'ml-matrix';
+
+const result = constrainedGaussNewton(
+  initialP,
+  initialX,
+  residualFunction,
+  constraintFunction,
+  {
+    drdp: (p: Float64Array, x: Float64Array) => new Matrix([[1], [0]]),
+    drdx: (p: Float64Array, x: Float64Array) => new Matrix([[0], [1]]),
+    dcdp: (p: Float64Array, x: Float64Array) => new Matrix([[1]]),
+    dcdx: (p: Float64Array, x: Float64Array) => new Matrix([[1]]),
+    maxIterations: 100
+  }
+);
+```
+
 ### Gradient Descent
 
 ```typescript
@@ -272,6 +356,30 @@ function adjointGradientDescent(
   constraintFunction: ConstraintFn,
   options?: AdjointGradientDescentOptions
 ): AdjointGradientDescentResult
+```
+
+### Constrained Gauss-Newton
+
+```typescript
+function constrainedGaussNewton(
+  initialParameters: Float64Array,
+  initialStates: Float64Array,
+  residualFunction: ConstrainedResidualFn,
+  constraintFunction: ConstraintFn,
+  options?: ConstrainedGaussNewtonOptions
+): ConstrainedGaussNewtonResult
+```
+
+### Constrained Levenberg-Marquardt
+
+```typescript
+function constrainedLevenbergMarquardt(
+  initialParameters: Float64Array,
+  initialStates: Float64Array,
+  residualFunction: ConstrainedResidualFn,
+  constraintFunction: ConstraintFn,
+  options?: ConstrainedLevenbergMarquardtOptions
+): ConstrainedLevenbergMarquardtResult
 ```
 
 ### Options
@@ -320,6 +428,25 @@ All algorithms support common options:
 - `stepSizeX?: number` - Step size for numerical differentiation w.r.t. states (default: 1e-6)
 - `constraintTolerance?: number` - Tolerance for constraint satisfaction check (default: 1e-6)
 
+#### Constrained Gauss-Newton Options
+
+- `drdp?: (p: Float64Array, x: Float64Array) => Matrix` - Analytical partial derivative ∂r/∂p (optional)
+- `drdx?: (p: Float64Array, x: Float64Array) => Matrix` - Analytical partial derivative ∂r/∂x (optional)
+- `dcdp?: (p: Float64Array, x: Float64Array) => Matrix` - Analytical partial derivative ∂c/∂p (optional)
+- `dcdx?: (p: Float64Array, x: Float64Array) => Matrix` - Analytical partial derivative ∂c/∂x (optional)
+- `stepSizeP?: number` - Step size for numerical differentiation w.r.t. parameters (default: 1e-6)
+- `stepSizeX?: number` - Step size for numerical differentiation w.r.t. states (default: 1e-6)
+- `constraintTolerance?: number` - Tolerance for constraint satisfaction check (default: 1e-6)
+
+#### Constrained Levenberg-Marquardt Options
+
+Extends `ConstrainedGaussNewtonOptions` with:
+- `lambdaInitial?: number` - Initial damping parameter (default: 1e-3)
+- `lambdaFactor?: number` - Factor for updating lambda (default: 10.0)
+- `tolGradient?: number` - Tolerance for gradient norm convergence (default: 1e-6)
+- `tolStep?: number` - Tolerance for step size convergence (default: 1e-6)
+- `tolResidual?: number` - Tolerance for residual norm convergence (default: 1e-6)
+
 **Note**: The constraint function `c(p, x)` must return a vector with the same length as the state vector `x` (i.e., `constraintCount == stateCount`) for the adjoint method to work. The constraint Jacobian `∂c/∂x` must be square and invertible.
 
 #### Numerical Differentiation Options
@@ -334,6 +461,8 @@ See the `examples/` directory for complete working examples:
 - Curve fitting with Levenberg-Marquardt
 - Linear and nonlinear regression
 - Constrained optimization with adjoint method
+- Constrained Gauss-Newton method
+- Constrained Levenberg-Marquardt method
 
 To run the examples:
 
@@ -350,6 +479,8 @@ npx tsx examples/curve-fitting-lm.ts
 npx tsx examples/rosenbrock-optimization.ts
 npx tsx examples/adjoint-example.ts
 npx tsx examples/adjoint-advanced-example.ts
+npx tsx examples/constrained-gauss-newton-example.ts
+npx tsx examples/constrained-levenberg-marquardt-example.ts
 ```
 
 ## References
@@ -365,6 +496,8 @@ npx tsx examples/adjoint-advanced-example.ts
 - Gradient descent with line search
 - Gauss-Newton method
 - Levenberg-Marquardt algorithm
+- Constrained Gauss-Newton method (nonlinear least squares with equality constraints)
+- Constrained Levenberg-Marquardt method (robust constrained nonlinear least squares)
 - Adjoint method for constrained optimization (equality constraints)
 - Numerical differentiation (central difference)
 - Browser compatibility
@@ -455,6 +588,16 @@ const matrix = new Matrix([[1, 2], [3, 4]]);
 2. Check your residual function for numerical issues
 3. Try different initial parameters
 4. Increase numerical Jacobian step size (`jacobianStep`)
+
+#### Singular matrix error (Constrained Gauss-Newton)
+
+**Problem**: The effective Jacobian `J_eff^T J_eff` is singular or ill-conditioned.
+
+**Solutions**:
+1. Use Constrained Levenberg-Marquardt instead (handles singular matrices better with damping)
+2. Check that constraint Jacobian `∂c/∂x` is well-conditioned
+3. Verify initial states satisfy constraints approximately
+4. Try different initial parameters and states
 
 #### Singular matrix error (Adjoint Method)
 
