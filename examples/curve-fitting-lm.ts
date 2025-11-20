@@ -5,7 +5,7 @@
  * to data points using the Levenberg-Marquardt algorithm.
  */
 
-import { levenbergMarquardt } from '../src/index';
+import { levenbergMarquardt, printLevenbergMarquardtResult } from '../src/index';
 import type { ResidualFn } from '../src/core/types';
 
 // Sample data points
@@ -48,11 +48,8 @@ const result = levenbergMarquardt(initialParameters, residualFunction, {
   }
 });
 
-console.log('\nOptimization complete!');
-console.log(`Fitted line: y = ${result.parameters[0].toFixed(4)}x + ${result.parameters[1].toFixed(4)}`);
-console.log('Final residual norm:', result.finalResidualNorm.toFixed(6));
-console.log('Converged:', result.converged);
-console.log('Iterations:', result.iterations);
+printLevenbergMarquardtResult(result);
+console.log(`\nFitted line: y = ${result.parameters[0].toFixed(4)}x + ${result.parameters[1].toFixed(4)}`);
 
 // Show predictions
 console.log('\nPredictions vs Actual:');

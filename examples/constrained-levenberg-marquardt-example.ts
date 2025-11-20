@@ -15,7 +15,7 @@
  * damping parameter lambda for robust convergence, even when the Hessian is singular.
  */
 
-import { constrainedLevenbergMarquardt, constrainedGaussNewton, adjointGradientDescent } from '../src/index';
+import { constrainedLevenbergMarquardt, constrainedGaussNewton, adjointGradientDescent, printConstrainedLevenbergMarquardtResult, printConstrainedGaussNewtonResult, printAdjointGradientDescentResult } from '../src/index';
 import type { ConstrainedResidualFn, ConstraintFn } from '../src/core/types';
 import { vectorNorm } from '../src/utils/matrix';
 
@@ -75,28 +75,12 @@ const result = constrainedLevenbergMarquardt(
 const endTime = performance.now();
 const elapsedTime = endTime - startTime;
 
-console.log('\n=== Optimization Results ===');
-console.log('Optimized parameters:');
-console.log(`  p = ${result.parameters[0].toFixed(8)} (analytical: 0.5)`);
-console.log(`  x = ${result.finalStates[0].toFixed(8)} (analytical: 0.5)`);
-console.log('\nCost:');
-console.log(`  f(p, x) = ${result.finalCost.toFixed(8)} (analytical: 0.0)`);
-console.log('\nConstraint satisfaction:');
 const finalConstraint = constraintFunction(result.parameters, result.finalStates);
-console.log(`  c(p, x) = ${finalConstraint[0].toFixed(10)} (should be ≈ 0)`);
-console.log(`  ||c(p, x)|| = ${result.finalConstraintNorm?.toFixed(10) ?? 'N/A'}`);
-
-console.log('\nConvergence:');
-console.log(`  Converged: ${result.converged}`);
-console.log(`  Iterations: ${result.iterations}`);
-console.log(`  Final gradient norm: ${result.finalGradientNorm?.toFixed(8) ?? 'N/A'}`);
-console.log(`  Final residual norm: ${result.finalResidualNorm?.toFixed(8) ?? 'N/A'}`);
-console.log(`  Final lambda: ${result.finalLambda.toFixed(6)}`);
-
-console.log(`\nExecution time: ${elapsedTime.toFixed(2)} ms`);
-if (result.iterations > 0) {
-  console.log(`Time per iteration: ${(elapsedTime / result.iterations).toFixed(3)} ms`);
-}
+printConstrainedLevenbergMarquardtResult(result, {
+  showExecutionTime: true,
+  elapsedTimeMs: elapsedTime
+});
+console.log(`\n  c(p, x) = ${finalConstraint[0].toFixed(10)} (should be ≈ 0)`);
 
 // Compare with other methods
 console.log('\n=== Comparison with Other Methods ===');
@@ -118,10 +102,11 @@ const endTimeGN = performance.now();
 const elapsedTimeGN = endTimeGN - startTimeGN;
 
 console.log('Constrained Gauss-Newton:');
-console.log(`  Iterations: ${resultGN.iterations}`);
-console.log(`  Final cost: ${resultGN.finalCost.toFixed(8)}`);
-console.log(`  Execution time: ${elapsedTimeGN.toFixed(2)} ms`);
-console.log(`  Constraint norm: ${resultGN.finalConstraintNorm?.toFixed(10) ?? 'N/A'}`);
+printConstrainedGaussNewtonResult(resultGN, {
+  showSectionHeaders: false,
+  showExecutionTime: true,
+  elapsedTimeMs: elapsedTimeGN
+});
 
 // Adjoint Gradient Descent
 const costFunction = (p: Float64Array, x: Float64Array) => {
@@ -146,16 +131,18 @@ const endTimeAGD = performance.now();
 const elapsedTimeAGD = endTimeAGD - startTimeAGD;
 
 console.log('Adjoint Gradient Descent:');
-console.log(`  Iterations: ${resultAGD.iterations}`);
-console.log(`  Final cost: ${resultAGD.finalCost.toFixed(8)}`);
-console.log(`  Execution time: ${elapsedTimeAGD.toFixed(2)} ms`);
-console.log(`  Constraint norm: ${resultAGD.finalConstraintNorm?.toFixed(10) ?? 'N/A'}`);
+printAdjointGradientDescentResult(resultAGD, {
+  showSectionHeaders: false,
+  showExecutionTime: true,
+  elapsedTimeMs: elapsedTimeAGD
+});
 
 console.log('\nConstrained Levenberg-Marquardt:');
-console.log(`  Iterations: ${result.iterations}`);
-console.log(`  Final cost: ${result.finalCost.toFixed(8)}`);
-console.log(`  Execution time: ${elapsedTime.toFixed(2)} ms`);
-console.log(`  Constraint norm: ${result.finalConstraintNorm?.toFixed(10) ?? 'N/A'}`);
+printConstrainedLevenbergMarquardtResult(result, {
+  showSectionHeaders: false,
+  showExecutionTime: true,
+  elapsedTimeMs: elapsedTime
+});
 
 // Find fastest method
 const methods = [

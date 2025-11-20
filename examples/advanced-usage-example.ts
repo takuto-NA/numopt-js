@@ -9,7 +9,7 @@
  * 5. Converting between array types
  */
 
-import { levenbergMarquardt, gaussNewton, gradientDescent, finiteDiffGradient } from '../src/index';
+import { levenbergMarquardt, gaussNewton, gradientDescent, finiteDiffGradient, printLevenbergMarquardtResult, printOptimizationResult, printGradientDescentResult } from '../src/index';
 import { Matrix } from 'ml-matrix';
 import type { ResidualFn, CostFn, GradientFn, JacobianFn } from '../src/core/types';
 
@@ -56,9 +56,10 @@ const resultWithAnalytical = levenbergMarquardt(
 );
 
 console.log(`   Result with analytical Jacobian:`);
-console.log(`     Parameters: [${resultWithAnalytical.parameters[0].toFixed(4)}, ${resultWithAnalytical.parameters[1].toFixed(4)}]`);
-console.log(`     Residual norm: ${resultWithAnalytical.finalResidualNorm.toFixed(6)}`);
-console.log(`     Iterations: ${resultWithAnalytical.iterations}\n`);
+printLevenbergMarquardtResult(resultWithAnalytical, {
+  showSectionHeaders: false
+});
+console.log('');
 
 // Example 2: Comparing Algorithms
 console.log('2. Comparing Different Algorithms:\n');
@@ -73,8 +74,10 @@ const compareAlgorithms = () => {
     maxIterations: 100,
     tolGradient: 1e-6
   });
-  console.log(`     Iterations: ${lmResult.iterations}, Converged: ${lmResult.converged}`);
-  console.log(`     Residual norm: ${lmResult.finalResidualNorm.toFixed(6)}\n`);
+  printLevenbergMarquardtResult(lmResult, {
+    showSectionHeaders: false
+  });
+  console.log('');
   
   console.log('   Gauss-Newton:');
   const gnResult = gaussNewton(params, residualFunction, {
@@ -82,8 +85,10 @@ const compareAlgorithms = () => {
     maxIterations: 100,
     tolerance: 1e-6
   });
-  console.log(`     Iterations: ${gnResult.iterations}, Converged: ${gnResult.converged}`);
-  console.log(`     Residual norm: ${gnResult.finalResidualNorm?.toFixed(6) ?? 'N/A'}\n`);
+  printOptimizationResult(gnResult, {
+    showSectionHeaders: false
+  });
+  console.log('');
 };
 
 compareAlgorithms();
@@ -104,9 +109,10 @@ for (const tol of toleranceValues) {
   });
   
   console.log(`   Tolerance ${tol}:`);
-  console.log(`     Iterations: ${result.iterations}`);
-  console.log(`     Converged: ${result.converged}`);
-  console.log(`     Final residual: ${result.finalResidualNorm.toFixed(8)}\n`);
+  printLevenbergMarquardtResult(result, {
+    showSectionHeaders: false
+  });
+  console.log('');
 }
 
 // Example 4: Using Progress Callbacks
@@ -193,7 +199,8 @@ const gdWithNumGrad = gradientDescent(numGradParams, costFunctionForNumGrad, (pa
 });
 
 console.log(`   Gradient descent with numerical gradient:`);
-console.log(`     Final parameters: [${gdWithNumGrad.parameters[0].toFixed(4)}, ${gdWithNumGrad.parameters[1].toFixed(4)}]`);
-console.log(`     Final cost: ${gdWithNumGrad.finalCost.toFixed(6)}`);
+printGradientDescentResult(gdWithNumGrad, {
+  showSectionHeaders: false
+});
 console.log(`     Converged: ${gdWithNumGrad.converged}`);
 

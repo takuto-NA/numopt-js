@@ -72,3 +72,22 @@ export {
   scaleVector
 } from './utils/matrix.js';
 
+// Result formatting utilities
+export {
+  formatOptimizationResult,
+  formatGradientDescentResult,
+  formatLevenbergMarquardtResult,
+  formatConstrainedGaussNewtonResult,
+  formatConstrainedLevenbergMarquardtResult,
+  formatAdjointGradientDescentResult,
+  formatResult,
+  printOptimizationResult,
+  printGradientDescentResult,
+  printLevenbergMarquardtResult,
+  printConstrainedGaussNewtonResult,
+  printConstrainedLevenbergMarquardtResult,
+  printAdjointGradientDescentResult,
+  printResult,
+  type ResultFormatterOptions
+} from './utils/resultFormatter.js';
+
