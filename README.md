@@ -22,6 +22,19 @@ A flexible numerical optimization library for JavaScript/TypeScript that works s
 npm install numopt-js
 ```
 
+## Examples
+
+After installing dependencies with `npm install`, you can run the example scripts with `npm run <script>`:
+
+- `npm run example:gradient` – Runs a basic gradient-descent optimization example.
+- `npm run example:rosenbrock` – Optimizes the Rosenbrock function to show robust convergence behavior.
+- `npm run example:lm` – Demonstrates Levenberg-Marquardt for nonlinear curve fitting.
+- `npm run example:gauss-newton` – Shows Gauss-Newton applied to a nonlinear least-squares problem.
+- `npm run example:adjoint` – Introduces the adjoint method for constrained optimization.
+- `npm run example:adjoint-advanced` – Explores a more advanced adjoint-based constrained problem.
+- `npm run example:constrained-gauss-newton` – Solves constrained nonlinear least squares via the effective Jacobian.
+- `npm run example:constrained-lm` – Uses constrained Levenberg-Marquardt for robust constrained least squares.
+
 ## Quick Start
 
 ### Gradient Descent
