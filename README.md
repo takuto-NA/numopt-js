@@ -2,6 +2,11 @@
 
 A flexible numerical optimization library for JavaScript/TypeScript that works smoothly in browsers. This library addresses the lack of flexible continuous optimization libraries for JavaScript that work well in browser environments.
 
+## Documentation
+
+- **API Reference (GitHub Pages)**: https://takuto-na.github.io/numopt-js/
+- **Source Repository**: https://github.com/takuto-NA/numopt-js
+
 ## Features
 
 - **Gradient Descent**: Simple, robust optimization algorithm with line search support
@@ -16,6 +21,11 @@ A flexible numerical optimization library for JavaScript/TypeScript that works s
 - **TypeScript-First**: Full TypeScript support with comprehensive type definitions
 - **Debug-Friendly**: Progress callbacks, verbose logging, and detailed diagnostics
 
+## Requirements
+
+- Node.js >= 18.0.0
+- Modern browsers with ES2020 support (for browser builds)
+
 ## Installation
 
 ```bash
@@ -23,6 +33,45 @@ npm install numopt-js
 ```
 
 ## Quick Start
+
+1. Ensure Node.js 18+ is installed.
+2. Install the library with `npm install numopt-js`.
+3. Run the minimal example below to verify your setup:
+
+```typescript
+import { gradientDescent } from 'numopt-js';
+
+const cost = (params: Float64Array) => params[0] * params[0] + params[1] * params[1];
+const grad = (params: Float64Array) => new Float64Array([2 * params[0], 2 * params[1]]);
+
+const result = gradientDescent(new Float64Array([5, -3]), cost, grad, {
+  maxIterations: 200,
+  tolerance: 1e-6,
+  useLineSearch: true,
+});
+
+console.log(result.parameters);
+```
+
+**Pick an algorithm:**
+
+- Gradient Descent — stable first choice for smooth problems (see below)
+- Gauss-Newton — efficient for nonlinear least squares when residuals are available
+- Levenberg–Marquardt — robust least-squares solver with damping
+- Constrained methods & Adjoint — enforce constraints with effective Jacobians or adjoint variables
+
+## Examples
+
+After `npm install`, you can try the bundled scripts:
+
+- `npm run example:gradient` — basic gradient descent on a quadratic bowl
+- `npm run example:rosenbrock` — Rosenbrock optimization with line search
+- `npm run example:gauss-newton` — nonlinear least squares with Gauss-Newton
+- `npm run example:lm` — Levenberg–Marquardt curve fitting
+- `npm run example:adjoint` — simple adjoint-based constrained optimization
+- `npm run example:adjoint-advanced` — adjoint method with custom Jacobians
+- `npm run example:constrained-gauss-newton` — constrained least squares via effective Jacobian
+- `npm run example:constrained-lm` — constrained Levenberg–Marquardt
 
 ### Gradient Descent
 
