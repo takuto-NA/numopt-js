@@ -8,7 +8,7 @@
  * Parameters: [a, b, c]
  */
 
-import { gaussNewton } from '../src/index';
+import { gaussNewton, printOptimizationResult } from '../src/index';
 import type { ResidualFn } from '../src/core/types';
 
 // Sample data points (quadratic relationship with noise)
@@ -64,19 +64,13 @@ const result = gaussNewton(initialParameters, residualFunction, {
   }
 });
 
-console.log('\n=== Optimization Results ===');
-console.log('Fitted parameters:');
-console.log(`  a = ${result.parameters[0].toFixed(6)}`);
-console.log(`  b = ${result.parameters[1].toFixed(6)}`);
-console.log(`  c = ${result.parameters[2].toFixed(6)}`);
 const endTime = performance.now();
 const elapsedTime = endTime - startTime;
 
-console.log('\nFinal residual norm:', Math.sqrt(result.finalCost).toFixed(8));
-console.log('Converged:', result.converged);
-console.log('Iterations:', result.iterations);
-console.log(`Execution time: ${elapsedTime.toFixed(2)} ms (${(elapsedTime / 1000).toFixed(3)} seconds)`);
-console.log(`Time per iteration: ${(elapsedTime / result.iterations).toFixed(3)} ms`);
+printOptimizationResult(result, {
+  showExecutionTime: true,
+  elapsedTimeMs: elapsedTime
+});
 
 // Show predictions vs actual
 console.log('\n=== Predictions vs Actual Data ===');

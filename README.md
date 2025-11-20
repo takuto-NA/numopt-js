@@ -53,6 +53,21 @@ console.log('Final cost:', result.finalCost);
 console.log('Converged:', result.converged);
 ```
 
+**Using Result Formatter**: For better formatted output, use the built-in result formatter:
+
+```typescript
+import { gradientDescent, printGradientDescentResult } from 'numopt-js';
+
+const result = gradientDescent(initialParams, costFunction, gradientFunction, {
+  maxIterations: 1000,
+  tolerance: 1e-6,
+  useLineSearch: true
+});
+
+// Automatically formats and prints the result
+printGradientDescentResult(result);
+```
+
 ### Levenberg-Marquardt (Nonlinear Least Squares)
 
 ```typescript
@@ -81,6 +96,20 @@ const result = levenbergMarquardt(initialParams, residualFunction, {
 
 console.log('Optimized parameters:', result.parameters);
 console.log('Final residual norm:', result.finalResidualNorm);
+```
+
+**Using Result Formatter**:
+
+```typescript
+import { levenbergMarquardt, printLevenbergMarquardtResult } from 'numopt-js';
+
+const result = levenbergMarquardt(initialParams, residualFunction, {
+  useNumericJacobian: true,
+  maxIterations: 100,
+  tolGradient: 1e-6
+});
+
+printLevenbergMarquardtResult(result);
 ```
 
 ### With User-Provided Jacobian
@@ -452,6 +481,74 @@ Extends `ConstrainedGaussNewtonOptions` with:
 #### Numerical Differentiation Options
 
 - `stepSize?: number` - Step size for finite difference approximation (default: 1e-6)
+
+## Result Formatting
+
+The library provides helper functions for formatting and displaying optimization results in a consistent, user-friendly manner. These functions replace repetitive `console.log` statements and provide better readability.
+
+### Basic Usage
+
+```typescript
+import { gradientDescent, printGradientDescentResult } from 'numopt-js';
+
+const result = gradientDescent(initialParams, costFunction, gradientFunction, {
+  maxIterations: 1000,
+  tolerance: 1e-6
+});
+
+// Print formatted result
+printGradientDescentResult(result);
+```
+
+### Available Formatters
+
+- `printOptimizationResult()` - For basic `OptimizationResult`
+- `printGradientDescentResult()` - For `GradientDescentResult` (includes line search info)
+- `printLevenbergMarquardtResult()` - For `LevenbergMarquardtResult` (includes lambda)
+- `printConstrainedGaussNewtonResult()` - For constrained optimization results
+- `printConstrainedLevenbergMarquardtResult()` - For constrained LM results
+- `printAdjointGradientDescentResult()` - For adjoint method results
+- `printResult()` - Type-safe overloaded function that works with any result type
+
+### Customization Options
+
+All formatters accept an optional `ResultFormatterOptions` object:
+
+```typescript
+import { printOptimizationResult } from 'numopt-js';
+
+const startTime = performance.now();
+const result = /* ... optimization ... */;
+const elapsedTime = performance.now() - startTime;
+
+printOptimizationResult(result, {
+  showSectionHeaders: true,      // Show "=== Optimization Results ===" header
+  showExecutionTime: true,        // Include execution time
+  elapsedTimeMs: elapsedTime,    // Execution time in milliseconds
+  maxParametersToShow: 10,        // Max parameters to display before truncating
+  parameterPrecision: 6,         // Decimal places for parameters
+  costPrecision: 8,              // Decimal places for cost/norms
+  constraintPrecision: 10        // Decimal places for constraint violations
+});
+```
+
+### Formatting Strings Instead of Printing
+
+If you need the formatted string instead of printing to console:
+
+```typescript
+import { formatOptimizationResult } from 'numopt-js';
+
+const formattedString = formatOptimizationResult(result);
+// Use formattedString as needed (e.g., save to file, send to API, etc.)
+```
+
+### Automatic Parameter Formatting
+
+The formatters automatically handle parameter arrays:
+- **Small arrays (≤3 elements)**: Displayed individually with labels (`p = 1.0, x = 2.0`)
+- **Medium arrays (4-10 elements)**: Displayed as array (`[1.0, 2.0, 3.0, ...]`)
+- **Large arrays (>10 elements)**: Truncated with "... and N more" (`[1.0, 2.0, ..., ... and 15 more]`)
 
 ## Examples
 

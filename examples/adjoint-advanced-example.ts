@@ -24,7 +24,7 @@
  * Analytical solution: p = 0.5, x = 0.5, f = 0
  */
 
-import { adjointGradientDescent } from '../src/index';
+import { adjointGradientDescent, printAdjointGradientDescentResult } from '../src/index';
 import type { ConstrainedCostFn, ConstraintFn, ConstrainedResidualFn } from '../src/core/types';
 import { vectorNorm } from '../src/utils/matrix';
 
@@ -74,13 +74,12 @@ const result2D = adjointGradientDescent(
   }
 );
 
-console.log('Results:');
-console.log(`  p = [${result2D.parameters[0].toFixed(6)}, ${result2D.parameters[1].toFixed(6)}] (analytical: [1, 2])`);
-console.log(`  x = [${result2D.finalStates[0].toFixed(6)}, ${result2D.finalStates[1].toFixed(6)}] (analytical: [0, 0])`);
-console.log(`  f = ${result2D.finalCost.toFixed(6)} (analytical: 0)`);
 const finalConstraint2D = constraint2D(result2D.parameters, result2D.finalStates);
+printAdjointGradientDescentResult(result2D, {
+  showSectionHeaders: false
+});
 console.log(`  ||c(p, x)|| = ${vectorNorm(finalConstraint2D).toFixed(8)}`);
-console.log(`  Converged: ${result2D.converged}, Iterations: ${result2D.iterations}\n`);
+console.log(`  Analytical: p = [1, 2], x = [0, 0], f = 0\n`);
 
 // ============================================================================
 // Problem 2: Nonlinear Constraint with Complex Objective
@@ -128,13 +127,12 @@ const resultCircle = adjointGradientDescent(
   }
 );
 
-console.log('Results:');
-console.log(`  p = ${resultCircle.parameters[0].toFixed(6)} (analytical: 1.0)`);
-console.log(`  x = ${resultCircle.finalStates[0].toFixed(6)} (analytical: 1.0)`);
-console.log(`  f = ${resultCircle.finalCost.toFixed(6)} (analytical: 0.0)`);
 const finalConstraintCircle = constraintCircle(resultCircle.parameters, resultCircle.finalStates);
+printAdjointGradientDescentResult(resultCircle, {
+  showSectionHeaders: false
+});
 console.log(`  ||c(p, x)|| = ${vectorNorm(finalConstraintCircle).toFixed(8)}`);
-console.log(`  Converged: ${resultCircle.converged}, Iterations: ${resultCircle.iterations}\n`);
+console.log(`  Analytical: p = 1.0, x = 1.0, f = 0.0\n`);
 
 // ============================================================================
 // Problem 3: Residual-based Problem
@@ -180,13 +178,12 @@ const resultResidual = adjointGradientDescent(
   }
 );
 
-console.log('Results:');
-console.log(`  p = ${resultResidual.parameters[0].toFixed(6)} (analytical: 0.5)`);
-console.log(`  x = ${resultResidual.finalStates[0].toFixed(6)} (analytical: 0.5)`);
-console.log(`  f = ${resultResidual.finalCost.toFixed(6)} (analytical: 0.0)`);
 const finalConstraintResidual = constraintResidual(resultResidual.parameters, resultResidual.finalStates);
+printAdjointGradientDescentResult(resultResidual, {
+  showSectionHeaders: false
+});
 console.log(`  ||c(p, x)|| = ${vectorNorm(finalConstraintResidual).toFixed(8)}`);
-console.log(`  Converged: ${resultResidual.converged}, Iterations: ${resultResidual.iterations}\n`);
+console.log(`  Analytical: p = 0.5, x = 0.5, f = 0.0\n`);
 
 // ============================================================================
 // Summary

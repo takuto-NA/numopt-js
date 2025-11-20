@@ -8,7 +8,7 @@
  * Parameters: [A, lambda, B]
  */
 
-import { levenbergMarquardt } from '../src/index';
+import { levenbergMarquardt, printLevenbergMarquardtResult } from '../src/index';
 import type { ResidualFn } from '../src/core/types';
 
 // Generate synthetic data with noise
@@ -77,23 +77,18 @@ const result = levenbergMarquardt(initialParameters, residualFunction, {
   }
 });
 
-console.log('\n=== Optimization Results ===');
-console.log('Fitted parameters:');
-console.log(`  A = ${result.parameters[0].toFixed(6)} (true: ${trueParams.A})`);
-console.log(`  lambda = ${result.parameters[1].toFixed(6)} (true: ${trueParams.lambda})`);
-console.log(`  B = ${result.parameters[2].toFixed(6)} (true: ${trueParams.B})`);
-console.log('\nParameter errors:');
-console.log(`  A error: ${Math.abs(result.parameters[0] - trueParams.A).toFixed(6)}`);
-console.log(`  lambda error: ${Math.abs(result.parameters[1] - trueParams.lambda).toFixed(6)}`);
-console.log(`  B error: ${Math.abs(result.parameters[2] - trueParams.B).toFixed(6)}`);
 const endTime = performance.now();
 const elapsedTime = endTime - startTime;
 
-console.log('\nFinal residual norm:', result.finalResidualNorm.toFixed(8));
-console.log('Converged:', result.converged);
-console.log('Iterations:', result.iterations);
-console.log(`Execution time: ${elapsedTime.toFixed(2)} ms (${(elapsedTime / 1000).toFixed(3)} seconds)`);
-console.log(`Time per iteration: ${(elapsedTime / result.iterations).toFixed(3)} ms`);
+printLevenbergMarquardtResult(result, {
+  showExecutionTime: true,
+  elapsedTimeMs: elapsedTime
+});
+
+console.log('\nParameter comparison:');
+console.log(`  A = ${result.parameters[0].toFixed(6)} (true: ${trueParams.A}), error: ${Math.abs(result.parameters[0] - trueParams.A).toFixed(6)}`);
+console.log(`  lambda = ${result.parameters[1].toFixed(6)} (true: ${trueParams.lambda}), error: ${Math.abs(result.parameters[1] - trueParams.lambda).toFixed(6)}`);
+console.log(`  B = ${result.parameters[2].toFixed(6)} (true: ${trueParams.B}), error: ${Math.abs(result.parameters[2] - trueParams.B).toFixed(6)}`);
 
 // Show predictions vs actual
 console.log('\n=== Predictions vs Actual Data ===');

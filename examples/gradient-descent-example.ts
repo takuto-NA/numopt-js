@@ -7,7 +7,7 @@
  * Minimum is at (0, 0)
  */
 
-import { gradientDescent } from '../src/index';
+import { gradientDescent, printGradientDescentResult } from '../src/index';
 import type { CostFn, GradientFn } from '../src/core/types';
 
 // Define cost function: f(x, y) = x^2 + y^2
@@ -38,10 +38,5 @@ const result = gradientDescent(initialParameters, costFunction, gradientFunction
   }
 });
 
-console.log('\nOptimization complete!');
-console.log('Final parameters:', Array.from(result.parameters));
-console.log('Final cost:', result.finalCost);
-console.log('Converged:', result.converged);
-console.log('Iterations:', result.iterations);
-console.log('Used line search:', result.usedLineSearch);
+printGradientDescentResult(result);
 

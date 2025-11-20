@@ -8,7 +8,7 @@
  * 4. How to use verbose logging for debugging
  */
 
-import { levenbergMarquardt, gaussNewton } from '../src/index';
+import { levenbergMarquardt, gaussNewton, printLevenbergMarquardtResult, printOptimizationResult } from '../src/index';
 import type { ResidualFn } from '../src/core/types';
 
 // Sample data points
@@ -61,11 +61,14 @@ const result = levenbergMarquardt(initialParams, residualFunction, {
 
 if (result.converged) {
   console.log('   Optimization converged successfully!');
-  console.log(`   Final residual norm: ${result.finalResidualNorm.toFixed(6)}`);
+  printLevenbergMarquardtResult(result, {
+    showSectionHeaders: false
+  });
 } else {
   console.log('   Optimization did not converge.');
-  console.log(`   Final residual norm: ${result.finalResidualNorm.toFixed(6)}`);
-  console.log(`   Iterations: ${result.iterations}`);
+  printLevenbergMarquardtResult(result, {
+    showSectionHeaders: false
+  });
   console.log('   Suggestions:');
   console.log('     - Increase maxIterations');
   console.log('     - Relax tolerance values');
@@ -85,9 +88,14 @@ try {
   
   if (gnResult.converged) {
     console.log('   Gauss-Newton converged successfully!');
-    console.log(`   Final residual norm: ${gnResult.finalResidualNorm?.toFixed(6) ?? 'N/A'}`);
+    printOptimizationResult(gnResult, {
+      showSectionHeaders: false
+    });
   } else {
     console.log('   Gauss-Newton did not converge.');
+    printOptimizationResult(gnResult, {
+      showSectionHeaders: false
+    });
     console.log('   Consider using Levenberg-Marquardt instead (handles singular matrices better)');
   }
 } catch (error) {

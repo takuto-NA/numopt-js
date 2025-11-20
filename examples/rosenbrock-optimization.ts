@@ -11,7 +11,7 @@
  * This function has a narrow, curved valley that makes optimization challenging.
  */
 
-import { gradientDescent, finiteDiffGradient } from '../src/index';
+import { gradientDescent, finiteDiffGradient, printGradientDescentResult } from '../src/index';
 import type { CostFn, GradientFn } from '../src/core/types';
 
 // Rosenbrock function parameters
@@ -62,15 +62,13 @@ const result1 = gradientDescent(initialParams1, rosenbrockFunction, rosenbrockGr
 const endTime1 = performance.now();
 const elapsedTime1 = endTime1 - startTime1;
 
-console.log('\nResults:');
-console.log('  Final parameters:', Array.from(result1.parameters).map(x => x.toFixed(6)));
-console.log('  Final cost:', result1.finalCost.toFixed(10));
-console.log('  Converged:', result1.converged);
-console.log('  Iterations:', result1.iterations);
+printGradientDescentResult(result1, {
+  showSectionHeaders: false,
+  showExecutionTime: true,
+  elapsedTimeMs: elapsedTime1
+});
 console.log('  Error from true minimum:', 
   Math.sqrt((result1.parameters[0] - 1)**2 + (result1.parameters[1] - 1)**2).toFixed(10));
-console.log(`  Execution time: ${elapsedTime1.toFixed(2)} ms (${(elapsedTime1 / 1000).toFixed(3)} seconds)`);
-console.log(`  Time per iteration: ${(elapsedTime1 / result1.iterations).toFixed(3)} ms`);
 
 // Test with numerical gradient
 console.log('\n--- Using Numerical Gradient (Finite Differences) ---');
@@ -97,13 +95,11 @@ const result2 = gradientDescent(initialParams2, rosenbrockFunction, numericalGra
 const endTime2 = performance.now();
 const elapsedTime2 = endTime2 - startTime2;
 
-console.log('\nResults:');
-console.log('  Final parameters:', Array.from(result2.parameters).map(x => x.toFixed(6)));
-console.log('  Final cost:', result2.finalCost.toFixed(10));
-console.log('  Converged:', result2.converged);
-console.log('  Iterations:', result2.iterations);
+printGradientDescentResult(result2, {
+  showSectionHeaders: false,
+  showExecutionTime: true,
+  elapsedTimeMs: elapsedTime2
+});
 console.log('  Error from true minimum:', 
   Math.sqrt((result2.parameters[0] - 1)**2 + (result2.parameters[1] - 1)**2).toFixed(10));
-console.log(`  Execution time: ${elapsedTime2.toFixed(2)} ms (${(elapsedTime2 / 1000).toFixed(3)} seconds)`);
-console.log(`  Time per iteration: ${(elapsedTime2 / result2.iterations).toFixed(3)} ms`);
 

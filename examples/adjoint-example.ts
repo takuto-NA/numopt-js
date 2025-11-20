@@ -14,7 +14,7 @@
  * an adjoint variable λ instead of explicitly inverting matrices.
  */
 
-import { adjointGradientDescent } from '../src/index';
+import { adjointGradientDescent, printAdjointGradientDescentResult } from '../src/index';
 import type { ConstrainedCostFn, ConstraintFn } from '../src/core/types';
 import { vectorNorm } from '../src/utils/matrix';
 
@@ -70,27 +70,12 @@ const result = adjointGradientDescent(
 const endTime = performance.now();
 const elapsedTime = endTime - startTime;
 
-console.log('\n=== Optimization Results ===');
-console.log('Optimized parameters:');
-console.log(`  p = ${result.parameters[0].toFixed(6)} (analytical: 0.5)`);
-console.log(`  x = ${result.finalStates[0].toFixed(6)} (analytical: 0.5)`);
-console.log('\nCost:');
-console.log(`  f(p, x) = ${result.finalCost.toFixed(6)} (analytical: 0.5)`);
-console.log('\nConstraint satisfaction:');
 const finalConstraint = constraintFunction(result.parameters, result.finalStates);
-console.log(`  c(p, x) = ${finalConstraint[0].toFixed(8)} (should be ≈ 0)`);
-console.log(`  ||c(p, x)|| = ${result.finalConstraintNorm?.toFixed(8) ?? 'N/A'}`);
-
-console.log('\nConvergence:');
-console.log(`  Converged: ${result.converged}`);
-console.log(`  Iterations: ${result.iterations}`);
-console.log(`  Final gradient norm: ${result.finalGradientNorm?.toFixed(8) ?? 'N/A'}`);
-console.log(`  Used line search: ${result.usedLineSearch}`);
-
-console.log(`\nExecution time: ${elapsedTime.toFixed(2)} ms (${(elapsedTime / 1000).toFixed(3)} seconds)`);
-if (result.iterations > 0) {
-  console.log(`Time per iteration: ${(elapsedTime / result.iterations).toFixed(3)} ms`);
-}
+printAdjointGradientDescentResult(result, {
+  showExecutionTime: true,
+  elapsedTimeMs: elapsedTime
+});
+console.log(`\n  c(p, x) = ${finalConstraint[0].toFixed(8)} (should be ≈ 0)`);
 
 // Verify solution
 console.log('\n=== Verification ===');

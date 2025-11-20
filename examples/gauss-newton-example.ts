@@ -9,7 +9,7 @@
  * Solution: x = ±2
  */
 
-import { gaussNewton } from '../src/index';
+import { gaussNewton, printOptimizationResult } from '../src/index';
 import type { ResidualFn, JacobianFn } from '../src/core/types';
 import { Matrix } from 'ml-matrix';
 
@@ -42,12 +42,7 @@ const result = gaussNewton(initialParameters, residualFunction, {
   }
 });
 
-console.log('\nOptimization complete!');
-console.log('Final parameter:', result.parameters[0]);
-console.log('Expected solution: 2.0');
-console.log('Final cost:', result.finalCost);
-console.log('Converged:', result.converged);
-console.log('Iterations:', result.iterations);
+printOptimizationResult(result);
 
 // Verify solution
 const residual = residualFunction(result.parameters);
