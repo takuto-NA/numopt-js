@@ -26,6 +26,8 @@
     "example:gauss-newton": "tsx examples/gauss-newton-example.ts",
     "example:adjoint": "tsx examples/adjoint-example.ts",
     "example:adjoint-advanced": "tsx examples/adjoint-advanced-example.ts",
+    "example:constrained-gauss-newton": "tsx examples/constrained-gauss-newton-example.ts",
+    "example:constrained-lm": "tsx examples/constrained-levenberg-marquardt-example.ts",
     "docs": "typedoc --out docs src"
   },
   "keywords": [
