@@ -105,6 +105,7 @@ function updateParametersAndStatesForConstrainedGN(
   constraintFunction: ConstraintFn,
   stepSizeP: number,
   stepSizeX: number,
+  logger: Logger,
   dcdp?: (parameters: Float64Array, states: Float64Array) => Matrix,
   dcdx?: (parameters: Float64Array, states: Float64Array) => Matrix
 ): { newParameters: Float64Array; newStates: Float64Array } {
@@ -120,7 +121,7 @@ function updateParametersAndStatesForConstrainedGN(
     ? dcdp(currentParameters, currentStates)
     : finiteDiffConstraintPartialP(currentParameters, currentStates, constraintFunction, { stepSize: stepSizeP });
 
-  const newStates = updateStates(currentStates, constraintJacobianX, constraintJacobianP, step) as Float64Array;
+  const newStates = updateStates(currentStates, constraintJacobianX, constraintJacobianP, step, logger, 'constrainedGaussNewton') as Float64Array;
   return { newParameters, newStates };
 }
 
@@ -224,6 +225,7 @@ function performConstrainedGaussNewtonIteration(
     constraintFunction,
     stepSizeP,
     stepSizeX,
+    logger,
     dcdp,
     dcdx
   );

@@ -23,7 +23,7 @@
  * - Note the reuse of C_x decomposition for performance
  */
 
-import { Matrix, solve, CholeskyDecomposition } from 'ml-matrix';
+import { Matrix } from 'ml-matrix';
 import type {
   ConstrainedResidualFn,
   ConstraintFn
@@ -35,7 +35,8 @@ import {
   finiteDiffConstraintPartialX
 } from './finiteDiff.js';
 import { Logger } from './logger.js';
-import { float64ArrayToMatrix, matrixToFloat64Array } from '../utils/matrix.js';
+import { float64ArrayToMatrix } from '../utils/matrix.js';
+import { solveLeastSquares } from './constrainedUtils.js';
 
 const DEFAULT_STEP_SIZE_P = 1e-6;
 const DEFAULT_STEP_SIZE_X = 1e-6;
@@ -141,13 +142,9 @@ export function computeEffectiveJacobian(
   const parameterCount = r_p.columns;
   const stateCount = c_x.columns;
 
-  // Validate dimensions
-  if (c_x.rows !== stateCount) {
-    const errorMsg = `Constraint Jacobian ∂c/∂x must be square (constraintCount == stateCount) for adjoint method. ` +
-      `Got ${c_x.rows} × ${stateCount} matrix. Algorithm: ${algorithmName}`;
-    logger.warn(algorithmName, undefined, errorMsg);
-    throw new Error(errorMsg);
-  }
+  // Note: Constraint Jacobian ∂c/∂x can be non-square.
+  // The adjoint method now supports both square and non-square constraint Jacobians.
+  // Dimension validation removed to allow non-square matrices.
 
   if (r_x.columns !== stateCount) {
     const errorMsg = `Residual Jacobian ∂r/∂x must have stateCount columns. ` +
@@ -178,7 +175,9 @@ export function computeEffectiveJacobian(
       r_p,
       r_x,
       stateCount,
-      residualCount
+      residualCount,
+      logger,
+      algorithmName
     );
     for (let i = 0; i < residualCount; i++) {
       effectiveJacobianData[i][paramIndex] = column[i];
@@ -199,29 +198,26 @@ function computeEffectiveJacobianColumn(
   residualJacobianP: Matrix,
   residualJacobianX: Matrix,
   stateCount: number,
-  residualCount: number
+  residualCount: number,
+  logger: Logger,
+  algorithmName: string
 ): Float64Array {
   // Extract j-th column of C_p: (C_p)_j
-  const constraintJacobianPColumn = new Float64Array(stateCount);
-  for (let k = 0; k < stateCount; k++) {
+  const constraintCount = constraintJacobianP.rows;
+  const constraintJacobianPColumn = new Float64Array(constraintCount);
+  for (let k = 0; k < constraintCount; k++) {
     constraintJacobianPColumn[k] = constraintJacobianP.get(k, paramIndex);
   }
 
-  // Solve: C_x dx = (C_p)_j to get dx = C_x^-1 (C_p)_j
+  // Solve: C_x dx = (C_p)_j to get dx = C_x^+ (C_p)_j
+  // Uses hierarchical solver that handles both square and non-square matrices
   const constraintJacobianPColumnMatrix = float64ArrayToMatrix(constraintJacobianPColumn);
-  let stateSensitivityMatrix: Matrix;
-  try {
-    const cholesky = new CholeskyDecomposition(constraintJacobianX);
-    if (cholesky.isPositiveDefinite()) {
-      stateSensitivityMatrix = cholesky.solve(constraintJacobianPColumnMatrix);
-    } else {
-      stateSensitivityMatrix = solve(constraintJacobianX, constraintJacobianPColumnMatrix);
-    }
-  } catch (error) {
-    stateSensitivityMatrix = solve(constraintJacobianX, constraintJacobianPColumnMatrix);
-  }
-
-  const stateSensitivity = matrixToFloat64Array(stateSensitivityMatrix);
+  const stateSensitivity = solveLeastSquares(
+    constraintJacobianX,
+    constraintJacobianPColumnMatrix,
+    logger,
+    algorithmName
+  );
 
   // Compute: (J_eff)_j = (r_p)_j - r_x dx
   const effectiveJacobianColumn = new Float64Array(residualCount);

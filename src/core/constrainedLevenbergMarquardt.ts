@@ -131,9 +131,9 @@ function tryConstrainedLevenbergMarquardtStep(
   iteration: number,
   stepSizeP: number,
   stepSizeX: number,
+  logger: Logger,
   dcdp?: (parameters: Float64Array, states: Float64Array) => Matrix,
-  dcdx?: (parameters: Float64Array, states: Float64Array) => Matrix,
-  logger?: Logger
+  dcdx?: (parameters: Float64Array, states: Float64Array) => Matrix
 ): {
   stepAccepted: boolean;
   newParameters?: Float64Array;
@@ -144,12 +144,10 @@ function tryConstrainedLevenbergMarquardtStep(
 } {
   // Early return: lambda too large
   if (currentLambda >= MAXIMUM_LAMBDA_THRESHOLD) {
-    if (logger) {
-      logger.warn('constrainedLevenbergMarquardt', iteration, 'Lambda too large, stopping optimization', [
-        { key: 'Lambda:', value: currentLambda },
-        { key: 'Cost:', value: currentCost }
-      ]);
-    }
+    logger.warn('constrainedLevenbergMarquardt', iteration, 'Lambda too large, stopping optimization', [
+      { key: 'Lambda:', value: currentLambda },
+      { key: 'Cost:', value: currentCost }
+    ]);
     return { stepAccepted: false, newLambda: currentLambda, shouldStop: true };
   }
 
@@ -195,7 +193,7 @@ function tryConstrainedLevenbergMarquardtStep(
       ? dcdp(currentParameters, currentStates)
       : finiteDiffConstraintPartialP(currentParameters, currentStates, constraintFunction, { stepSize: stepSizeP });
 
-    const newStates = updateStates(currentStates, c_x, c_p, step) as Float64Array;
+    const newStates = updateStates(currentStates, c_x, c_p, step, logger, 'constrainedLevenbergMarquardt') as Float64Array;
 
     const newResidual = residualFunction(newParameters, newStates);
     const newResidualNorm = vectorNorm(newResidual);
@@ -346,9 +344,9 @@ function performConstrainedLevenbergMarquardtIteration(
       iteration,
       stepSizeP,
       stepSizeX,
+      logger,
       dcdp,
-      dcdx,
-      logger
+      dcdx
     );
 
     if (stepResult.shouldStop) {
