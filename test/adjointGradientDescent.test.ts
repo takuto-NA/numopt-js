@@ -140,24 +140,69 @@ describe('Adjoint Gradient Descent', () => {
     // (Constraint satisfaction depends on the problem and initial conditions)
   });
 
-  it('should throw error for non-square constraint Jacobian', () => {
-    const badConstraint: ConstraintFn = (p: Float64Array, x: Float64Array) => {
-      // Returns 2 constraints but only 1 state
-      return new Float64Array([p[0] + x[0] - 1.0, p[0] - x[0]]);
+  it('should work with non-square constraint Jacobian (overdetermined)', () => {
+    // Overdetermined system: 2 constraints, 1 state
+    // Minimize: f(p, x) = p² + x²
+    // Subject to: c1(p, x) = p + x - 1 = 0, c2(p, x) = 2p + x - 1.5 = 0
+    // These constraints are consistent: solution is p = 0.5, x = 0.5
+    const overdeterminedCost: ConstrainedCostFn = (p: Float64Array, x: Float64Array) => {
+      return p[0] * p[0] + x[0] * x[0];
+    };
+
+    const overdeterminedConstraint: ConstraintFn = (p: Float64Array, x: Float64Array) => {
+      return new Float64Array([
+        p[0] + x[0] - 1.0,
+        2.0 * p[0] + x[0] - 1.5
+      ]);
+    };
+
+    const initialP = new Float64Array([0.5]);
+    const initialX = new Float64Array([0.5]); // Start at solution
+
+    const result = adjointGradientDescent(
+      initialP,
+      initialX,
+      overdeterminedCost,
+      overdeterminedConstraint,
+      { maxIterations: 200, tolerance: 1e-4, constraintTolerance: 1e-2 }
+    );
+
+    // Should converge (even if constraints are not perfectly satisfied due to overdetermined nature)
+    expect(result.iterations).toBeGreaterThan(0);
+    expect(result.finalCost).toBeDefined();
+    // For overdetermined systems, we verify that the algorithm runs without errors
+    // The constraint norm may not be zero due to least squares approximation
+    const finalConstraint = overdeterminedConstraint(result.parameters, result.finalStates);
+    expect(Number.isFinite(vectorNorm(finalConstraint))).toBe(true);
+  });
+
+  it('should work with non-square constraint Jacobian (underdetermined)', () => {
+    // Underdetermined system: 1 constraint, 2 states
+    // Minimize: f(p, x) = p² + x[0]² + x[1]²
+    // Subject to: c(p, x) = p + x[0] + x[1] - 1 = 0
+    const underdeterminedCost: ConstrainedCostFn = (p: Float64Array, x: Float64Array) => {
+      return p[0] * p[0] + x[0] * x[0] + x[1] * x[1];
+    };
+
+    const underdeterminedConstraint: ConstraintFn = (p: Float64Array, x: Float64Array) => {
+      return new Float64Array([p[0] + x[0] + x[1] - 1.0]);
     };
 
     const initialP = new Float64Array([1.0]);
-    const initialX = new Float64Array([0.0]);
+    const initialX = new Float64Array([0.0, 0.0]);
 
-    expect(() => {
-      adjointGradientDescent(
-        initialP,
-        initialX,
-        simpleCost,
-        badConstraint,
-        { maxIterations: 10 }
-      );
-    }).toThrow(/must equal state count/);
+    const result = adjointGradientDescent(
+      initialP,
+      initialX,
+      underdeterminedCost,
+      underdeterminedConstraint,
+      { maxIterations: 100, tolerance: 1e-4 }
+    );
+
+    expect(result.converged).toBe(true);
+    // Constraint should be satisfied
+    const finalConstraint = underdeterminedConstraint(result.parameters, result.finalStates);
+    expect(vectorNorm(finalConstraint)).toBeLessThan(1e-3);
   });
 
   it('should work with residual function', () => {

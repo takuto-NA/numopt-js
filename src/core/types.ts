@@ -53,7 +53,8 @@ export type GradientFn = (parameters: Float64Array) => Float64Array;
  * Takes parameter vector and state vector, returns constraint vector.
  * The constraint c(p, x) = 0 must be satisfied.
  * 
- * Note: The constraint vector length must equal the state vector length for the adjoint method.
+ * Note: The constraint vector length and state vector length can differ.
+ * The adjoint method supports both square and non-square constraint Jacobians.
  */
 export type ConstraintFn = (parameters: Float64Array, states: Float64Array) => Float64Array;
 
@@ -400,7 +401,8 @@ export interface ConstrainedGaussNewtonOptions extends CommonOptimizationOptions
    * Analytical partial derivative of constraint function with respect to states.
    * If provided, this will be used instead of numerical differentiation.
    * Returns a Matrix of size (constraintCount × stateCount).
-   * Must be square (constraintCount == stateCount) for the adjoint method.
+   * Supports both square (constraintCount == stateCount) and non-square matrices.
+   * For non-square matrices, the adjoint method uses QR decomposition or pseudoInverse.
    */
   dcdx?: (parameters: Float64Array, states: Float64Array) => Matrix;
 

@@ -34,11 +34,21 @@ declare module 'ml-matrix' {
 
   export function solve(A: Matrix, b: Matrix): Matrix;
 
+  export function pseudoInverse(matrix: Matrix | number[][] | number[], threshold?: number): Matrix;
+
   export class CholeskyDecomposition {
     constructor(value: Matrix | number[][] | number[]);
     isPositiveDefinite(): boolean;
     solve(value: Matrix): Matrix;
     readonly lowerTriangularMatrix: Matrix;
+  }
+
+  export class QR {
+    constructor(value: Matrix | number[][] | number[]);
+    isFullRank(): boolean;
+    solve(value: Matrix): Matrix;
+    readonly orthogonalMatrix: Matrix;
+    readonly upperTriangularMatrix: Matrix;
   }
 }
 
