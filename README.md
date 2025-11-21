@@ -525,7 +525,7 @@ Extends `ConstrainedGaussNewtonOptions` with:
 - `tolStep?: number` - Tolerance for step size convergence (default: 1e-6)
 - `tolResidual?: number` - Tolerance for residual norm convergence (default: 1e-6)
 
-**Note**: The constraint function `c(p, x)` must return a vector with the same length as the state vector `x` (i.e., `constraintCount == stateCount`) for the adjoint method to work. The constraint Jacobian `∂c/∂x` must be square and invertible.
+**Note**: The constraint function `c(p, x)` does not need to return a vector with the same length as the state vector `x`. The adjoint method supports both square and non-square constraint Jacobians (overdetermined and underdetermined systems). For non-square matrices, the method uses QR decomposition or pseudo-inverse to solve the adjoint equation.
 
 #### Numerical Differentiation Options
 
@@ -750,8 +750,7 @@ const matrix = new Matrix([[1, 2], [3, 4]]);
 **Problem**: The constraint Jacobian `∂c/∂x` is singular or ill-conditioned, making the adjoint equation unsolvable.
 
 **Solutions**:
-1. Ensure the constraint function `c(p, x)` returns a vector with the same length as the state vector `x`
-2. Check that `∂c/∂x` is square and invertible
+1. Check that `∂c/∂x` is well-conditioned (if square) or has full rank (if non-square)
 3. Verify initial states satisfy the constraint approximately (`c(p₀, x₀) ≈ 0`)
 4. Try different initial values that don't make `∂c/∂x` singular
 5. For nonlinear constraints, ensure initial values are on the constraint manifold
