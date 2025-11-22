@@ -534,11 +534,12 @@ function checkGradientConvergenceAndReturn(
   currentCost: number,
   gradientNorm: number,
   constraintNorm: number,
+  constraintTolerance: number,
   tolerance: number,
   usedLineSearchFlag: boolean,
   logger: Logger
 ): { converged: boolean; result?: AdjointGradientDescentResult } {
-  if (checkGradientConvergence(gradientNorm, tolerance, iteration)) {
+  if (constraintNorm <= constraintTolerance && checkGradientConvergence(gradientNorm, tolerance, iteration)) {
     logger.info('adjointGradientDescent', iteration, 'Converged', [
       { key: 'Cost:', value: currentCost },
       { key: 'Gradient norm:', value: gradientNorm },
@@ -622,11 +623,12 @@ function checkStepSizeConvergenceAndReturn(
   gradientNorm: number,
   stepNorm: number,
   constraintNorm: number,
+  constraintTolerance: number,
   tolerance: number,
   newUsedLineSearch: boolean,
   logger: Logger
 ): { converged: boolean; result?: AdjointGradientDescentResult } {
-  if (checkStepSizeConvergence(stepNorm, tolerance, iteration)) {
+  if (constraintNorm <= constraintTolerance && checkStepSizeConvergence(stepNorm, tolerance, iteration)) {
     logger.info('adjointGradientDescent', iteration, 'Converged', [
       { key: 'Cost:', value: currentCost },
       { key: 'Gradient norm:', value: gradientNorm },
@@ -694,6 +696,7 @@ function checkConvergenceAndHandleCallback(
   currentCost: number,
   gradientNorm: number,
   constraintNorm: number,
+  constraintTolerance: number,
   tolerance: number,
   usedLineSearchFlag: boolean,
   onIteration: ((iteration: number, cost: number, parameters: Float64Array) => void) | undefined,
@@ -713,6 +716,7 @@ function checkConvergenceAndHandleCallback(
     currentCost,
     gradientNorm,
     constraintNorm,
+    constraintTolerance,
     tolerance,
     usedLineSearchFlag,
     logger
@@ -735,6 +739,7 @@ function handleStepSizeAndUpdate(
   gradientNorm: number,
   constraintNorm: number,
   iteration: number,
+  constraintTolerance: number,
   tolerance: number,
   costFunction: ConstrainedCostFn | ConstrainedResidualFn,
   constraintFunction: ConstraintFn,
@@ -799,13 +804,14 @@ function handleStepSizeAndUpdate(
       currentCost,
       gradientNorm,
       stepSizeResult.stepSize,
-      constraintNorm,
-      iteration,
-      tolerance,
-      newUsedLineSearch,
-      newParameters,
-      logger
-    );
+    constraintNorm,
+    iteration,
+    constraintTolerance,
+    tolerance,
+    newUsedLineSearch,
+    newParameters,
+    logger
+  );
     if (stepSizeConvergenceResult.converged && stepSizeConvergenceResult.result) {
       return stepSizeConvergenceResult;
     }
@@ -832,6 +838,7 @@ function checkStepSizeConvergenceAndLog(
   stepSize: number,
   constraintNorm: number,
   iteration: number,
+  constraintTolerance: number,
   tolerance: number,
   newUsedLineSearch: boolean,
   newParameters: Float64Array,
@@ -848,6 +855,7 @@ function checkStepSizeConvergenceAndLog(
     gradientNorm,
     stepNorm,
     constraintNorm,
+    constraintTolerance,
     tolerance,
     newUsedLineSearch,
     logger
@@ -925,6 +933,7 @@ function performAdjointGradientDescentIteration(
     currentCost,
     gradientNorm,
     constraintNorm,
+    constraintTolerance,
     tolerance,
     usedLineSearchFlag,
     onIteration,
@@ -944,6 +953,7 @@ function performAdjointGradientDescentIteration(
     gradientNorm,
     constraintNorm,
     iteration,
+    constraintTolerance,
     tolerance,
     costFunction,
     constraintFunction,

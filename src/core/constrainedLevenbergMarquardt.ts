@@ -29,7 +29,7 @@ import type {
 import { float64ArrayToMatrix, matrixToFloat64Array, vectorNorm, computeSumOfSquaredResiduals } from '../utils/matrix.js';
 import { checkGradientConvergence, checkStepSizeConvergence, checkResidualConvergence } from './convergence.js';
 import { computeEffectiveJacobian, type EffectiveJacobianOptions } from './effectiveJacobian.js';
-import { updateStates, validateInitialConditions } from './constrainedUtils.js';
+import { updateStates, validateInitialConditions, projectStatesToConstraints } from './constrainedUtils.js';
 import { Logger } from './logger.js';
 import {
   finiteDiffConstraintPartialP,
@@ -131,6 +131,7 @@ function tryConstrainedLevenbergMarquardtStep(
   iteration: number,
   stepSizeP: number,
   stepSizeX: number,
+  constraintTolerance: number,
   logger: Logger,
   dcdp?: (parameters: Float64Array, states: Float64Array) => Matrix,
   dcdx?: (parameters: Float64Array, states: Float64Array) => Matrix
@@ -176,7 +177,8 @@ function tryConstrainedLevenbergMarquardtStep(
 
     // Check step size convergence
     if (checkStepSizeConvergence(stepNorm, tolStep, iteration)) {
-      return { stepAccepted: false, newLambda: currentLambda, stepNorm };
+      const newLambda = currentLambda * lambdaFactor;
+      return { stepAccepted: false, newLambda, stepNorm };
     }
 
     // Try the step: p_new = p_old + δ
@@ -195,7 +197,17 @@ function tryConstrainedLevenbergMarquardtStep(
 
     const newStates = updateStates(currentStates, c_x, c_p, step, logger, 'constrainedLevenbergMarquardt') as Float64Array;
 
-    const newResidual = residualFunction(newParameters, newStates);
+    const projectedStates = projectStatesToConstraints(
+      newParameters,
+      newStates,
+      constraintFunction,
+      stepSizeX,
+      constraintTolerance,
+      logger,
+      'constrainedLevenbergMarquardt'
+    );
+
+    const newResidual = residualFunction(newParameters, projectedStates);
     const newResidualNorm = vectorNorm(newResidual);
     const newCost = computeSumOfSquaredResiduals(newResidualNorm);
 
@@ -210,7 +222,7 @@ function tryConstrainedLevenbergMarquardtStep(
           { key: 'Lambda:', value: newLambda }
         ]);
       }
-      return { stepAccepted: true, newParameters, newStates, newLambda };
+      return { stepAccepted: true, newParameters, newStates: projectedStates, newLambda };
     }
 
     // Step failed: reject it and increase lambda
@@ -268,6 +280,7 @@ function performConstrainedLevenbergMarquardtIteration(
   bestCost?: number;
   bestParameters?: Float64Array;
   bestStates?: Float64Array;
+  shouldStop?: boolean;
 } {
   const { constraintNorm } = checkConstraintViolation(
     currentParameters,
@@ -299,8 +312,9 @@ function performConstrainedLevenbergMarquardtIteration(
   const { jtj, jtr } = computeNormalEquationsMatrices(effectiveJacobian, residual);
   const gradientVector = matrixToFloat64Array(jtr);
   const gradientNorm = vectorNorm(gradientVector);
+  const constraintSatisfied = constraintNorm <= constraintTolerance;
 
-  if (checkGradientConvergence(gradientNorm, tolGradient, iteration)) {
+  if (constraintSatisfied && checkGradientConvergence(gradientNorm, tolGradient, iteration)) {
     logger.info('constrainedLevenbergMarquardt', iteration, 'Converged', [
       { key: 'Cost:', value: cost },
       { key: 'Gradient norm:', value: gradientNorm },
@@ -344,16 +358,21 @@ function performConstrainedLevenbergMarquardtIteration(
       iteration,
       stepSizeP,
       stepSizeX,
+      constraintTolerance,
       logger,
       dcdp,
       dcdx
     );
 
     if (stepResult.shouldStop) {
-      return { converged: false };
+      return { converged: false, shouldStop: true };
     }
 
-    if (stepResult.stepNorm !== undefined && checkStepSizeConvergence(stepResult.stepNorm, tolStep, iteration)) {
+    if (
+      stepResult.stepNorm !== undefined &&
+      constraintSatisfied &&
+      checkStepSizeConvergence(stepResult.stepNorm, tolStep, iteration)
+    ) {
       logger.info('constrainedLevenbergMarquardt', iteration, 'Converged', [
         { key: 'Cost:', value: cost },
         { key: 'Gradient norm:', value: gradientNorm },
@@ -392,7 +411,7 @@ function performConstrainedLevenbergMarquardtIteration(
       { key: 'Lambda:', value: updatedLambda },
       { key: 'Cost:', value: cost }
     ]);
-    return { converged: false };
+    return { converged: false, shouldStop: true };
   }
 
   if (updatedParameters && updatedStates) {
@@ -402,7 +421,7 @@ function performConstrainedLevenbergMarquardtIteration(
     const currentConstraint = constraintFunction(updatedParameters, updatedStates);
     const currentConstraintNorm = vectorNorm(currentConstraint);
 
-    if (checkResidualConvergence(currentResidualNorm, tolResidual, iteration)) {
+    if (currentConstraintNorm <= constraintTolerance && checkResidualConvergence(currentResidualNorm, tolResidual, iteration)) {
       logger.info('constrainedLevenbergMarquardt', iteration, 'Converged', [
         { key: 'Cost:', value: currentCost },
         { key: 'Gradient norm:', value: gradientNorm },
@@ -431,9 +450,9 @@ function performConstrainedLevenbergMarquardtIteration(
       newParameters: updatedParameters,
       newStates: updatedStates,
       newLambda: updatedLambda,
-      bestCost: cost,
-      bestParameters: currentParameters,
-      bestStates: currentStates
+      bestCost: currentCost, // FIX: Return updated cost, not current cost
+      bestParameters: updatedParameters, // FIX: Return updated parameters as best
+      bestStates: updatedStates // FIX: Return updated states as best
     };
   }
 
@@ -505,9 +524,14 @@ export function constrainedLevenbergMarquardt(
   let currentLambda = lambdaInitial;
   let bestParameters: Float64Array = new Float64Array(initialParameters);
   let bestStates: Float64Array = new Float64Array(initialStates);
-  let bestCost = Infinity;
+  // Initialize bestCost with initial cost
+  const initialResidual = residualFunction(initialParameters, initialStates);
+  const initialResidualNorm = vectorNorm(initialResidual);
+  let bestCost = computeSumOfSquaredResiduals(initialResidualNorm);
 
+  let actualIterations = 0;
   for (let iteration = 0; iteration < maxIterations; iteration++) {
+    actualIterations = iteration + 1;
     const iterationResult = performConstrainedLevenbergMarquardtIteration(
       currentParameters,
       currentStates,
@@ -533,36 +557,22 @@ export function constrainedLevenbergMarquardt(
       return iterationResult.result;
     }
 
-    if (iterationResult.bestCost !== undefined && iterationResult.bestCost < bestCost) {
-      bestCost = iterationResult.bestCost;
-      if (iterationResult.bestParameters && iterationResult.bestStates) {
-        bestParameters = new Float64Array(iterationResult.bestParameters);
-        bestStates = new Float64Array(iterationResult.bestStates);
-      }
-    }
+    // If shouldStop is true, return early with appropriate message
+    if (iterationResult.shouldStop) {
+      const finalResidual = residualFunction(bestParameters, bestStates);
+      const finalResidualNorm = vectorNorm(finalResidual);
+      const finalConstraint = constraintFunction(bestParameters, bestStates);
+      const finalConstraintNorm = vectorNorm(finalConstraint);
 
-    if (iterationResult.newParameters && iterationResult.newStates) {
-      currentParameters = iterationResult.newParameters as Float64Array;
-      currentStates = iterationResult.newStates as Float64Array;
-      if (iterationResult.newLambda !== undefined) {
-        currentLambda = iterationResult.newLambda;
-      }
-    } else {
-      break;
-    }
-  }
+      logger.warn('constrainedLevenbergMarquardt', undefined, 'Stopped due to maximum lambda threshold', [
+        { key: 'Iterations:', value: actualIterations },
+        { key: 'Final cost:', value: bestCost },
+        { key: 'Final residual norm:', value: finalResidualNorm },
+        { key: 'Final constraint norm:', value: finalConstraintNorm },
+        { key: 'Final lambda:', value: currentLambda }
+      ]);
 
-  // Maximum iterations reached - return best solution found
-  const finalResidual = residualFunction(bestParameters, bestStates);
-  const finalResidualNorm = vectorNorm(finalResidual);
-  const finalConstraint = constraintFunction(bestParameters, bestStates);
-  const finalConstraintNorm = vectorNorm(finalConstraint);
-
-  logger.warn('constrainedLevenbergMarquardt', undefined, 'Maximum iterations reached', [
-    { key: 'Iterations:', value: maxIterations },
-    { key: 'Final cost:', value: bestCost },
-    { key: 'Final gradient norm:', value: vectorNorm(matrixToFloat64Array(computeNormalEquationsMatrices(
-      computeEffectiveJacobian(
+      const finalEffectiveJacobian = computeEffectiveJacobian(
         bestParameters,
         bestStates,
         residualFunction,
@@ -577,9 +587,76 @@ export function constrainedLevenbergMarquardt(
         },
         logger,
         'constrainedLevenbergMarquardt'
-      ),
-      finalResidual
-    ).jtr)) },
+      );
+      const { jtr: finalJtr } = computeNormalEquationsMatrices(finalEffectiveJacobian, finalResidual);
+      const finalGradientNorm = vectorNorm(matrixToFloat64Array(finalJtr));
+
+      return createConvergenceResultForLM(
+        bestParameters,
+        bestStates,
+        actualIterations - 1,
+        false,
+        bestCost,
+        finalGradientNorm,
+        finalResidualNorm,
+        finalConstraintNorm,
+        currentLambda
+      );
+    }
+
+    if (iterationResult.bestCost !== undefined && iterationResult.bestCost < bestCost) {
+      bestCost = iterationResult.bestCost;
+      if (iterationResult.bestParameters && iterationResult.bestStates) {
+        bestParameters = new Float64Array(iterationResult.bestParameters);
+        bestStates = new Float64Array(iterationResult.bestStates);
+      }
+    }
+
+    // Update lambda even if step was not accepted (allows retry with different lambda)
+    if (iterationResult.newLambda !== undefined) {
+      currentLambda = iterationResult.newLambda;
+    }
+
+    if (iterationResult.newParameters && iterationResult.newStates) {
+      currentParameters = iterationResult.newParameters as Float64Array;
+      currentStates = iterationResult.newStates as Float64Array;
+    } else {
+      // Step was not accepted, but continue with updated lambda
+      // This allows the algorithm to retry with different lambda values
+      continue;
+    }
+  }
+
+  // Maximum iterations reached - return best solution found
+  const finalResidual = residualFunction(bestParameters, bestStates);
+  const finalResidualNorm = vectorNorm(finalResidual);
+  const finalConstraint = constraintFunction(bestParameters, bestStates);
+  const finalConstraintNorm = vectorNorm(finalConstraint);
+
+  logger.warn('constrainedLevenbergMarquardt', undefined, 'Maximum iterations reached', [
+    { key: 'Iterations:', value: actualIterations },
+    { key: 'Final cost:', value: bestCost },
+    {
+      key: 'Final gradient norm:', value: vectorNorm(matrixToFloat64Array(computeNormalEquationsMatrices(
+        computeEffectiveJacobian(
+          bestParameters,
+          bestStates,
+          residualFunction,
+          constraintFunction,
+          {
+            drdp: options.drdp,
+            drdx: options.drdx,
+            dcdp: options.dcdp,
+            dcdx: options.dcdx,
+            stepSizeP,
+            stepSizeX
+          },
+          logger,
+          'constrainedLevenbergMarquardt'
+        ),
+        finalResidual
+      ).jtr))
+    },
     { key: 'Final residual norm:', value: finalResidualNorm },
     { key: 'Final constraint norm:', value: finalConstraintNorm },
     { key: 'Final lambda:', value: currentLambda }
@@ -608,7 +685,7 @@ export function constrainedLevenbergMarquardt(
   return createConvergenceResultForLM(
     bestParameters,
     bestStates,
-    maxIterations - 1,
+    actualIterations - 1,
     false,
     bestCost,
     finalGradientNorm,
@@ -617,4 +694,3 @@ export function constrainedLevenbergMarquardt(
     currentLambda
   );
 }
-

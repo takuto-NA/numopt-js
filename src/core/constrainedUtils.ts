@@ -21,6 +21,7 @@ import type { ConstraintFn } from './types.js';
 import { vectorNorm, scaleVector, addVectors } from '../utils/matrix.js';
 import { float64ArrayToMatrix, matrixToFloat64Array } from '../utils/matrix.js';
 import { Logger } from './logger.js';
+import { finiteDiffConstraintPartialX } from './finiteDiff.js';
 
 const NEGATIVE_COEFFICIENT = -1.0; // Coefficient for negating vectors
 
@@ -200,6 +201,47 @@ export function updateStates(
 
   // x_new = x_old + dx
   return addVectors(currentStates, dx);
+}
+
+/**
+ * Projects states onto the constraint manifold for fixed parameters using
+ * a few Newton correction steps: (∂c/∂x) Δx = -c(p, x).
+ * This is a standard feasibility-restoration step consistent with the
+ * implicit function theorem (solving c(p, x) = 0 locally).
+ */
+export function projectStatesToConstraints(
+  parameters: Float64Array,
+  states: Float64Array,
+  constraintFunction: ConstraintFn,
+  stepSizeX: number,
+  constraintTolerance: number,
+  logger: Logger,
+  algorithmName: string = 'constrainedOptimization',
+  maxIterations: number = 3
+): Float64Array {
+  let projectedStates = new Float64Array(states);
+
+  for (let i = 0; i < maxIterations; i++) {
+    const constraint = constraintFunction(parameters, projectedStates);
+    const constraintNorm = vectorNorm(constraint);
+    if (constraintNorm <= constraintTolerance) {
+      break;
+    }
+
+    const dcdx = finiteDiffConstraintPartialX(parameters, projectedStates, constraintFunction, { stepSize: stepSizeX });
+    const negativeConstraint = scaleVector(constraint, NEGATIVE_COEFFICIENT);
+    const negativeConstraintMatrix = float64ArrayToMatrix(negativeConstraint);
+
+    try {
+      const deltaX = solveLeastSquares(dcdx, negativeConstraintMatrix, logger, algorithmName);
+      projectedStates = addVectors(projectedStates, deltaX);
+    } catch (error) {
+      logger.warn(algorithmName, undefined, `Failed to project onto constraints: ${error}`);
+      break;
+    }
+  }
+
+  return projectedStates;
 }
 
 /**
