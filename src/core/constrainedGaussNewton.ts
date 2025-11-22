@@ -29,7 +29,7 @@ import type {
 import { float64ArrayToMatrix, matrixToFloat64Array, vectorNorm, computeSumOfSquaredResiduals } from '../utils/matrix.js';
 import { checkStepSizeConvergence, checkResidualConvergence, createConvergenceResult } from './convergence.js';
 import { computeEffectiveJacobian, type EffectiveJacobianOptions } from './effectiveJacobian.js';
-import { updateStates, validateInitialConditions } from './constrainedUtils.js';
+import { updateStates, validateInitialConditions, projectStatesToConstraints } from './constrainedUtils.js';
 import { Logger } from './logger.js';
 import {
   finiteDiffConstraintPartialP,
@@ -105,6 +105,7 @@ function updateParametersAndStatesForConstrainedGN(
   constraintFunction: ConstraintFn,
   stepSizeP: number,
   stepSizeX: number,
+  constraintTolerance: number,
   logger: Logger,
   dcdp?: (parameters: Float64Array, states: Float64Array) => Matrix,
   dcdx?: (parameters: Float64Array, states: Float64Array) => Matrix
@@ -122,7 +123,16 @@ function updateParametersAndStatesForConstrainedGN(
     : finiteDiffConstraintPartialP(currentParameters, currentStates, constraintFunction, { stepSize: stepSizeP });
 
   const newStates = updateStates(currentStates, constraintJacobianX, constraintJacobianP, step, logger, 'constrainedGaussNewton') as Float64Array;
-  return { newParameters, newStates };
+  const projectedStates = projectStatesToConstraints(
+    newParameters,
+    newStates,
+    constraintFunction,
+    stepSizeX,
+    constraintTolerance,
+    logger,
+    'constrainedGaussNewton'
+  );
+  return { newParameters, newStates: projectedStates };
 }
 
 /**
@@ -162,6 +172,7 @@ function performConstrainedGaussNewtonIteration(
   const residual = residualFunction(currentParameters, currentStates);
   const residualNorm = vectorNorm(residual);
   const cost = computeSumOfSquaredResiduals(residualNorm);
+  const constraintSatisfied = constraintNorm <= constraintTolerance;
 
   if (onIteration) {
     onIteration(iteration, cost, currentParameters);
@@ -199,7 +210,7 @@ function performConstrainedGaussNewtonIteration(
   }
 
   const stepNorm = vectorNorm(step);
-  if (checkStepSizeConvergence(stepNorm, tolerance, iteration)) {
+  if (constraintSatisfied && checkStepSizeConvergence(stepNorm, tolerance, iteration)) {
     logger.info('constrainedGaussNewton', iteration, 'Converged', [
       { key: 'Cost:', value: cost },
       { key: 'Residual norm:', value: residualNorm },
@@ -222,13 +233,14 @@ function performConstrainedGaussNewtonIteration(
     currentParameters,
     currentStates,
     step,
-    constraintFunction,
-    stepSizeP,
-    stepSizeX,
-    logger,
-    dcdp,
-    dcdx
-  );
+  constraintFunction,
+  stepSizeP,
+  stepSizeX,
+  constraintTolerance,
+  logger,
+  dcdp,
+  dcdx
+);
 
   const newResidual = residualFunction(newParameters, newStates);
   const newResidualNorm = vectorNorm(newResidual);
@@ -242,16 +254,18 @@ function performConstrainedGaussNewtonIteration(
     ]);
     const finalConstraint = constraintFunction(newParameters, newStates);
     const finalConstraintNorm = vectorNorm(finalConstraint);
-    const result = createConvergenceResult(newParameters, iteration, true, newCost, undefined);
-    return {
-      converged: true,
-      result: {
-        ...result,
-        finalResidualNorm: newResidualNorm,
-        finalStates: newStates,
-        finalConstraintNorm: finalConstraintNorm
-      }
-    };
+    if (finalConstraintNorm <= constraintTolerance) {
+      const result = createConvergenceResult(newParameters, iteration, true, newCost, undefined);
+      return {
+        converged: true,
+        result: {
+          ...result,
+          finalResidualNorm: newResidualNorm,
+          finalStates: newStates,
+          finalConstraintNorm: finalConstraintNorm
+        }
+      };
+    }
   }
 
   logger.debug('constrainedGaussNewton', iteration, 'Progress', [
