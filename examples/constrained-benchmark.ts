@@ -2,9 +2,11 @@ import { performance } from 'node:perf_hooks';
 import {
   adjointGradientDescent,
   constrainedGaussNewton,
-  constrainedLevenbergMarquardt
+  constrainedLevenbergMarquardt,
+  levenbergMarquardt,
+  gaussNewton
 } from '../src/index';
-import type { ConstrainedResidualFn, ConstraintFn } from '../src/core/types';
+import type { ConstrainedResidualFn, ConstraintFn, ResidualFn } from '../src/core/types';
 import { vectorNorm } from '../src/utils/matrix';
 
 type Problem = {
@@ -12,10 +14,13 @@ type Problem = {
   residual: ConstrainedResidualFn;
   constraint: ConstraintFn;
   buildInitial: () => { p: Float64Array; x: Float64Array };
+  penaltyWeight: number;
   options: {
     adjoint: Record<string, unknown>;
     gaussNewton: Record<string, unknown>;
     levenbergMarquardt: Record<string, unknown>;
+    penaltyGaussNewton: Record<string, unknown>;
+    penaltyLevenbergMarquardt: Record<string, unknown>;
   };
 };
 
@@ -65,37 +70,44 @@ const problems: Problem[] = [
     residual: rosenbrockResidual,
     constraint: circleConstraint,
     buildInitial: () => {
-      const p = new Float64Array([0.5]);
-      const x = new Float64Array([Math.sqrt(2 - p[0] * p[0])]);
+      // Start far off the constraint manifold to require many feasibility corrections
+      const p = new Float64Array([1.5]);
+      const x = new Float64Array([-1.0]);
       return { p, x };
     },
+    penaltyWeight: 1e4,
     options: {
-      adjoint: { maxIterations: 500, tolerance: 1e-4, constraintTolerance: 1e-5, useLineSearch: true },
-      gaussNewton: { maxIterations: 300, tolerance: 1e-5, constraintTolerance: 1e-5 },
+      adjoint: { maxIterations: 100, tolerance: 1e-8, constraintTolerance: 1e-8, useLineSearch: true, logLevel: 'WARN' },
+      gaussNewton: { maxIterations: 100, tolerance: 1e-8, constraintTolerance: 1e-8 },
       levenbergMarquardt: {
-        maxIterations: 300,
-        tolGradient: 1e-6,
-        tolStep: 1e-8,
-        constraintTolerance: 1e-5,
-        lambdaInitial: 1e-2
-      }
+        maxIterations: 100,
+        tolGradient: 1e-8,
+        tolStep: 1e-10,
+        constraintTolerance: 1e-8,
+        lambdaInitial: 1e-3
+      },
+      penaltyGaussNewton: { maxIterations: 100, tolerance: 1e-10 },
+      penaltyLevenbergMarquardt: { maxIterations: 100, tolGradient: 1e-10, tolStep: 1e-12, lambdaInitial: 1e-3 }
     }
   },
   {
     name: 'Ill-conditioned single variable',
     residual: illConditionedResidual,
     constraint: simpleConstraint,
-    buildInitial: () => ({ p: new Float64Array([2000.0]), x: new Float64Array([-1999.0]) }),
+    buildInitial: () => ({ p: new Float64Array([5000.0]), x: new Float64Array([-4999.0]) }),
+    penaltyWeight: 1e8,
     options: {
-      adjoint: { maxIterations: 500, tolerance: 1e-3, constraintTolerance: 1e-5, useLineSearch: true },
-      gaussNewton: { maxIterations: 300, tolerance: 1e-3, constraintTolerance: 1e-5 },
+      adjoint: { maxIterations: 100, tolerance: 1e-6, constraintTolerance: 1e-8, useLineSearch: true, logLevel: 'WARN' },
+      gaussNewton: { maxIterations: 100, tolerance: 1e-6, constraintTolerance: 1e-8 },
       levenbergMarquardt: {
-        maxIterations: 300,
-        tolGradient: 1e-3,
-        tolStep: 1e-6,
-        constraintTolerance: 1e-5,
-        lambdaInitial: 5e-2
-      }
+        maxIterations: 100,
+        tolGradient: 1e-6,
+        tolStep: 1e-8,
+        constraintTolerance: 1e-8,
+        lambdaInitial: 1e-2
+      },
+      penaltyGaussNewton: { maxIterations: 100, tolerance: 1e-10 },
+      penaltyLevenbergMarquardt: { maxIterations: 100, tolGradient: 1e-10, tolStep: 1e-12, lambdaInitial: 1e-2 }
     }
   },
   {
@@ -103,21 +115,64 @@ const problems: Problem[] = [
     residual: highDimResidual,
     constraint: highDimConstraint,
     buildInitial: () => {
-      const n = 10;
-      const p = new Float64Array(n).fill(5.0);
-      const x = new Float64Array(n).map((_, i) => 2 * (i + 1) - 5.0);
+      const n = 30;
+      const p = new Float64Array(n).fill(10.0);
+      const x = new Float64Array(n).map((_, i) => 2 * (i + 1) - 10.0);
       return { p, x };
     },
+    penaltyWeight: 1e5,
     options: {
-      adjoint: { maxIterations: 400, tolerance: 1e-3, constraintTolerance: 1e-4, useLineSearch: true },
-      gaussNewton: { maxIterations: 250, tolerance: 1e-3, constraintTolerance: 1e-4 },
+      adjoint: { maxIterations: 100, tolerance: 1e-4, constraintTolerance: 1e-8, useLineSearch: true, logLevel: 'WARN' },
+      gaussNewton: { maxIterations: 100, tolerance: 1e-4, constraintTolerance: 1e-8 },
       levenbergMarquardt: {
-        maxIterations: 250,
-        tolGradient: 1e-3,
-        tolStep: 1e-6,
-        constraintTolerance: 1e-4,
-        lambdaInitial: 1e-2
+        maxIterations: 100,
+        tolGradient: 1e-4,
+        tolStep: 1e-8,
+        constraintTolerance: 1e-8,
+        lambdaInitial: 1e-3
+      },
+      penaltyGaussNewton: { maxIterations: 100, tolerance: 1e-10 },
+      penaltyLevenbergMarquardt: { maxIterations: 100, tolGradient: 1e-10, tolStep: 1e-12, lambdaInitial: 1e-3 }
+    }
+  },
+  {
+    name: 'State-heavy linear trajectory fit (p ≪ x)',
+    residual: (p: Float64Array, x: Float64Array) => {
+      const n = x.length;
+      const r = new Float64Array(n);
+      for (let i = 0; i < n; i++) {
+        const target =
+          Math.sin((2 * Math.PI * i) / n) +
+          0.1 * Math.sin((6 * Math.PI * i) / n);
+        r[i] = x[i] - target;
       }
+      return r;
+    },
+    constraint: (p: Float64Array, x: Float64Array) => {
+      const n = x.length;
+      const c = new Float64Array(n);
+      for (let i = 0; i < n; i++) {
+        c[i] = x[i] - (p[0] + p[1] * i + p[2] * Math.sin((2 * Math.PI * i) / n));
+      }
+      return c;
+    },
+    buildInitial: () => {
+      const n = 200; // many states, few parameters
+      return { p: new Float64Array([0.1, 0.01, 0.0]), x: new Float64Array(n).fill(0) };
+    },
+    penaltyWeight: 1e5,
+    options: {
+      adjoint: { maxIterations: 100, tolerance: 1e-5, constraintTolerance: 1e-8, useLineSearch: true, logLevel: 'WARN' },
+      gaussNewton: { maxIterations: 100, tolerance: 1e-5, constraintTolerance: 1e-8 },
+      levenbergMarquardt: {
+        maxIterations: 100,
+        tolGradient: 1e-6,
+        tolStep: 1e-8,
+        constraintTolerance: 1e-8,
+        lambdaInitial: 1e-3
+      },
+      penaltyGaussNewton: { maxIterations: 100, tolerance: 1e-10 },
+      penaltyLevenbergMarquardt: { maxIterations: 100, tolGradient: 1e-10, tolStep: 1e-12, lambdaInitial: 1e-3 }
     }
   }
 ];
@@ -154,8 +209,68 @@ const solvers: Solver[] = [
         problem.constraint,
         problem.options.levenbergMarquardt
       )
+  },
+  {
+    name: 'Penalty GN',
+    run: (initial, problem) => {
+      const theta0 = concatState(initial);
+      const residual: ResidualFn = buildPenaltyResidual(problem, problem.penaltyWeight);
+      const result = gaussNewton(theta0, residual, problem.options.penaltyGaussNewton);
+      const { p, x } = splitState(result.parameters, initial.p.length);
+      return {
+        parameters: p,
+        finalStates: x,
+        iterations: result.iterations,
+        converged: result.converged,
+        finalCost: result.finalCost ?? 0
+      };
+    }
+  },
+  {
+    name: 'Penalty LM',
+    run: (initial, problem) => {
+      const theta0 = concatState(initial);
+      const residual: ResidualFn = buildPenaltyResidual(problem, problem.penaltyWeight);
+      const result = levenbergMarquardt(theta0, residual, problem.options.penaltyLevenbergMarquardt);
+      const { p, x } = splitState(result.parameters, initial.p.length);
+      return {
+        parameters: p,
+        finalStates: x,
+        iterations: result.iterations,
+        converged: result.converged,
+        finalCost: result.finalCost
+      };
+    }
   }
 ];
+
+function concatState(initial: { p: Float64Array; x: Float64Array }): Float64Array {
+  const theta = new Float64Array(initial.p.length + initial.x.length);
+  theta.set(initial.p, 0);
+  theta.set(initial.x, initial.p.length);
+  return theta;
+}
+
+function splitState(theta: Float64Array, pLen: number): { p: Float64Array; x: Float64Array } {
+  const p = theta.slice(0, pLen);
+  const x = theta.slice(pLen);
+  return { p, x };
+}
+
+function buildPenaltyResidual(problem: Problem, penaltyWeight: number): ResidualFn {
+  const sqrtMu = Math.sqrt(penaltyWeight);
+  return (theta: Float64Array): Float64Array => {
+    const { p, x } = splitState(theta, problem.buildInitial().p.length);
+    const baseR = problem.residual(p, x);
+    const c = problem.constraint(p, x);
+    const out = new Float64Array(baseR.length + c.length);
+    out.set(baseR, 0);
+    for (let i = 0; i < c.length; i++) {
+      out[baseR.length + i] = sqrtMu * c[i];
+    }
+    return out;
+  };
+}
 
 function runSolver(solver: Solver, problem: Problem) {
   const initial = problem.buildInitial();

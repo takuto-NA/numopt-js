@@ -36,7 +36,9 @@
  * - Check how states x are updated using linear approximation
  */
 
-import { Matrix, solve, CholeskyDecomposition, QR, pseudoInverse } from 'ml-matrix';
+import { Matrix } from 'ml-matrix';
+// @ts-ignore - SingularValueDecomposition exists in ml-matrix but may not be in type definitions
+import { SingularValueDecomposition } from 'ml-matrix';
 import type {
   ConstrainedCostFn,
   ConstrainedResidualFn,
@@ -57,6 +59,7 @@ import { vectorNorm, scaleVector, addVectors, subtractVectors } from '../utils/m
 import { checkGradientConvergence, checkStepSizeConvergence, createConvergenceResult } from './convergence.js';
 import { Logger } from './logger.js';
 import { float64ArrayToMatrix, matrixToFloat64Array } from '../utils/matrix.js';
+import { solveAdjointEquation as solveAdjointEquationShared, solveLeastSquares as solveLeastSquaresShared } from './constrainedUtils.js';
 
 const DEFAULT_MAX_ITERATIONS = 1000;
 const DEFAULT_TOLERANCE = 1e-6;
@@ -70,6 +73,16 @@ const NEGATIVE_GRADIENT_DIRECTION = -1.0;
 const RESIDUAL_COST_COEFFICIENT = 0.5; // Coefficient for residual cost: f = 1/2 r^T r
 const NEGATIVE_COEFFICIENT = -1.0; // Coefficient for negating vectors
 const MAX_DIMENSION_FOR_DETAILED_LOGGING = 3; // Maximum dimension for detailed parameter/state logging
+const DEFAULT_REGULARIZATION = 0.0; // Optional Tikhonov regularization for adjoint solve
+const MAX_SVD_DIAGNOSTIC_DIMENSION = 50; // Limit for expensive SVD diagnostics in logs
+const CONDITION_WARNING_THRESHOLD = 1e10; // Threshold to warn about ill-conditioning
+const AUTO_REGULARIZATION = 1e-8; // Floor regularization injected when Jacobian is singular/ill-conditioned
+const MAX_REGULARIZATION_RETRY_ATTEMPTS = 20; // Maximum number of retry attempts with increasing regularization
+const REGULARIZATION_MULTIPLIER = 10; // Multiplier for increasing regularization on each retry
+const FALLBACK_REGULARIZATION = 1e-6; // Fallback regularization value when current regularization is zero
+const MAX_MATRIX_DIMENSION_FOR_SVD_DIAGNOSTICS = 300; // Maximum matrix dimension for expensive SVD diagnostics
+const FLOATING_POINT_EQUALITY_TOLERANCE = 1e-15; // Tolerance for floating point equality comparisons
+const INITIAL_ATTEMPT_NUMBER = 1; // Initial attempt number for logging
 
 /**
  * Checks if a function is a residual function by calling it and checking return type.
@@ -102,6 +115,19 @@ function computeCost(
 }
 
 /**
+ * Computes gradient from residual function: df/dp = r^T ∂r/∂p
+ * This formula comes from the chain rule applied to the residual cost function f = 1/2 r^T r.
+ */
+function computeGradientFromResidual(
+  residual: Float64Array,
+  derivativeMatrix: Matrix
+): Float64Array {
+  const residualMatrix = float64ArrayToMatrix(residual);
+  const gradientMatrix = residualMatrix.transpose().mmul(derivativeMatrix);
+  return rowVectorToFloat64Array(gradientMatrix);
+}
+
+/**
  * Computes ∂f/∂p or ∂r/∂p using analytical functions or finite differences.
  */
 function computeDfdp(
@@ -118,12 +144,9 @@ function computeDfdp(
   
   const isResidual = isResidualFunction(costFunction, parameters, states);
   if (isResidual) {
-    const drdp = finiteDiffResidualPartialP(parameters, states, costFunction, { stepSize: stepSizeP });
+    const derivativeResidualPartialP = finiteDiffResidualPartialP(parameters, states, costFunction, { stepSize: stepSizeP });
     const residual = costFunction(parameters, states);
-    // df/dp = r^T ∂r/∂p
-    const residualMatrix = float64ArrayToMatrix(residual);
-    const dfdpMatrix = residualMatrix.transpose().mmul(drdp);
-    return matrixToFloat64Array(dfdpMatrix);
+    return computeGradientFromResidual(residual, derivativeResidualPartialP);
   }
   
   return finiteDiffPartialP(parameters, states, costFunction, { stepSize: stepSizeP });
@@ -146,12 +169,9 @@ function computeDfdx(
   
   const isResidual = isResidualFunction(costFunction, parameters, states);
   if (isResidual) {
-    const drdx = finiteDiffResidualPartialX(parameters, states, costFunction, { stepSize: stepSizeX });
+    const derivativeResidualPartialX = finiteDiffResidualPartialX(parameters, states, costFunction, { stepSize: stepSizeX });
     const residual = costFunction(parameters, states);
-    // df/dx = r^T ∂r/∂x
-    const residualMatrix = float64ArrayToMatrix(residual);
-    const dfdxMatrix = residualMatrix.transpose().mmul(drdx);
-    return matrixToFloat64Array(dfdxMatrix);
+    return computeGradientFromResidual(residual, derivativeResidualPartialX);
   }
   
   return finiteDiffPartialX(parameters, states, costFunction, { stepSize: stepSizeX });
@@ -178,12 +198,12 @@ function computePartialDerivatives(
   const dfdp = computeDfdp(parameters, states, costFunction, options);
   const dfdx = computeDfdx(parameters, states, costFunction, options);
 
-  // Compute ∂c/∂p
+  // Compute ∂c/∂p: needed for adjoint gradient computation (df/dp = ∂f/∂p - λ^T ∂c/∂p)
   const dcdp = options.dcdp
     ? options.dcdp(parameters, states)
     : finiteDiffConstraintPartialP(parameters, states, constraintFunction, { stepSize: stepSizeP });
 
-  // Compute ∂c/∂x
+  // Compute ∂c/∂x: needed to solve adjoint equation (∂c/∂x)^T λ = (∂f/∂x)^T
   const dcdx = options.dcdx
     ? options.dcdx(parameters, states)
     : finiteDiffConstraintPartialX(parameters, states, constraintFunction, { stepSize: stepSizeX });
@@ -191,129 +211,245 @@ function computePartialDerivatives(
   return { dfdp, dfdx, dcdp, dcdx };
 }
 
+
+function computeMatrixDiagnostics(matrix: Matrix): { frobenius: number; maxAbs: number; minAbs: number } {
+  let sumSquares = 0;
+  let maxAbs = 0;
+  let minAbs = Number.POSITIVE_INFINITY;
+  for (let r = 0; r < matrix.rows; r++) {
+    for (let c = 0; c < matrix.columns; c++) {
+      const value = matrix.get(r, c);
+      const abs = Math.abs(value);
+      sumSquares += value * value;
+      maxAbs = Math.max(maxAbs, abs);
+      minAbs = Math.min(minAbs, abs);
+    }
+  }
+  return {
+    frobenius: Math.sqrt(sumSquares),
+    maxAbs,
+    minAbs: minAbs === Number.POSITIVE_INFINITY ? 0 : minAbs
+  };
+}
+
+function rowVectorToFloat64Array(matrix: Matrix): Float64Array {
+  if (matrix.rows !== 1) {
+    throw new Error('Expected row vector (1 x n)');
+  }
+  const result = new Float64Array(matrix.columns);
+  for (let c = 0; c < matrix.columns; c++) {
+    result[c] = matrix.get(0, c);
+  }
+  return result;
+}
+
+function computeVectorDiagnostics(vector: Float64Array): { norm: number; maxAbs: number } {
+  let sumSquares = 0;
+  let maxAbs = 0;
+  for (let i = 0; i < vector.length; i++) {
+    const value = vector[i];
+    const abs = Math.abs(value);
+    sumSquares += value * value;
+    maxAbs = Math.max(maxAbs, abs);
+  }
+  return { norm: Math.sqrt(sumSquares), maxAbs };
+}
+
 /**
- * Solves a least squares problem Ax = b using hierarchical approach.
- * For square matrices, uses existing Cholesky/LU decomposition (backward compatibility).
- * For non-square matrices:
- * - Overdetermined (rows > columns): QR decomposition → normal equations → pseudoInverse
- * - Underdetermined (rows < columns): pseudoInverse directly (QR fails with rank deficient error)
- * 
- * @param A - Coefficient matrix
- * @param b - Right-hand side vector (as Matrix column vector)
- * @param logger - Logger for error messages
- * @returns Solution vector x as Float64Array
+ * Updates regularization value by multiplying with the multiplier, or sets to fallback if current is zero.
+ * This exponential backoff strategy helps stabilize ill-conditioned linear systems.
  */
+function updateRegularizationWithMultiplier(currentRegularization: number): number {
+  return currentRegularization > 0 ? currentRegularization * REGULARIZATION_MULTIPLIER : FALLBACK_REGULARIZATION;
+}
+
+function computeSvdDiagnostics(
+  matrix: Matrix
+): { sigmaMax: number; sigmaMin: number; condEst: number; rankEst: number } | undefined {
+  if (matrix.rows > MAX_SVD_DIAGNOSTIC_DIMENSION || matrix.columns > MAX_SVD_DIAGNOSTIC_DIMENSION) {
+    return undefined;
+  }
+  try {
+    const svd = new SingularValueDecomposition(matrix);
+    const singularValues = svd.diagonal;
+    const sigmaMax = Math.max(...singularValues);
+    const sigmaMin = Math.min(...singularValues);
+    const condEst = sigmaMin > 0 ? sigmaMax / sigmaMin : Infinity;
+    const threshold = sigmaMax * Number.EPSILON * Math.max(matrix.rows, matrix.columns);
+    const rankEst = singularValues.filter((s: number) => s > threshold).length;
+    return { sigmaMax, sigmaMin, condEst, rankEst };
+  } catch {
+    return undefined;
+  }
+}
+
+function logAdjointDiagnostics(
+  dcdx: Matrix,
+  rightHandSide: Float64Array,
+  logger: Logger,
+  message: string,
+  level: 'debug' | 'warn',
+  attempt: number,
+  regularization: number,
+  error?: unknown,
+  svdDiagnostics?: { sigmaMax: number; sigmaMin: number; condEst: number; rankEst: number }
+): void {
+  const matrixStats = computeMatrixDiagnostics(dcdx);
+  const rightHandSideStats = computeVectorDiagnostics(rightHandSide);
+  const details: Array<{ key: string; value: number | string }> = [
+    { key: 'attempt', value: attempt },
+    { key: 'reg', value: regularization },
+    { key: 'rows', value: dcdx.rows },
+    { key: 'columns', value: dcdx.columns },
+    { key: 'frobenius', value: matrixStats.frobenius },
+    { key: 'max_abs', value: matrixStats.maxAbs },
+    { key: 'min_abs', value: matrixStats.minAbs },
+    { key: 'rhs_norm', value: rightHandSideStats.norm },
+    { key: 'rhs_max_abs', value: rightHandSideStats.maxAbs }
+  ];
+
+  const svd = svdDiagnostics ?? computeSvdDiagnostics(dcdx);
+  if (svd) {
+    details.push(
+      { key: 'sigma_max', value: svd.sigmaMax },
+      { key: 'sigma_min', value: svd.sigmaMin },
+      { key: 'cond_est', value: svd.condEst },
+      { key: 'rank_est', value: svd.rankEst }
+    );
+  }
+
+   // For tiny systems, include raw entries to quickly spot zero/duplicate rows/cols.
+   if (dcdx.rows <= MAX_DIMENSION_FOR_DETAILED_LOGGING && dcdx.columns <= MAX_DIMENSION_FOR_DETAILED_LOGGING) {
+     for (let r = 0; r < dcdx.rows; r++) {
+       for (let c = 0; c < dcdx.columns; c++) {
+         details.push({ key: `A[${r},${c}]`, value: dcdx.get(r, c) });
+       }
+     }
+   }
+
+  if (error !== undefined) {
+    details.push({ key: 'error', value: String(error) });
+  }
+
+  // Filter out string values for logger (logger only accepts numbers)
+  const numericDetails = details.filter(d => typeof d.value === 'number') as Array<{ key: string; value: number }>;
+  if (level === 'warn') {
+    logger.warn('adjointGradientDescent', undefined, message, numericDetails);
+  } else {
+    logger.debug('adjointGradientDescent', undefined, message, numericDetails);
+  }
+}
+
+
+/**
+ * Logs SVD diagnostics for small matrices to help diagnose numerical issues.
+ * Only computed for small matrices to avoid performance overhead.
+ */
+function logSvdDiagnosticsForSmallMatrix(matrix: Matrix, logger: Logger): void {
+  if (matrix.rows > MAX_MATRIX_DIMENSION_FOR_SVD_DIAGNOSTICS || matrix.columns > MAX_MATRIX_DIMENSION_FOR_SVD_DIAGNOSTICS) {
+    return;
+  }
+  try {
+    const svd = new SingularValueDecomposition(matrix);
+    const singularValues = svd.diagonal;
+    const maxSingularValue = Math.max(...singularValues);
+    const minSingularValue = Math.min(...singularValues);
+    logger.debug('adjointGradientDescent', undefined, 'SVD diagnostics', [
+      { key: 'sigma_max', value: maxSingularValue },
+      { key: 'sigma_min', value: minSingularValue },
+      { key: 'cond_est', value: minSingularValue > 0 ? maxSingularValue / minSingularValue : Infinity }
+    ]);
+  } catch (svdError) {
+    // Error message is string, so we log it separately without details
+    logger.debug('adjointGradientDescent', undefined, `SVD diagnostics failed: ${String(svdError)}`);
+  }
+}
+
+// Override shared solver to add retry logic with exponentially increasing regularization.
+// This handles ill-conditioned matrices that fail on first attempt but succeed with regularization.
 function solveLeastSquares(
   A: Matrix,
   b: Matrix,
   logger: Logger
 ): Float64Array {
-  // Square matrix: use existing fast methods (backward compatibility)
-  if (A.rows === A.columns) {
+  const baseRegularization = (globalThis as any).__ADJOINT_REGULARIZATION__ ?? DEFAULT_REGULARIZATION;
+  let regularization = baseRegularization;
+  let lastError: unknown;
+  for (let attempt = 0; attempt < MAX_REGULARIZATION_RETRY_ATTEMPTS; attempt++) {
     try {
-      // Try Cholesky decomposition first for efficiency
-      const cholesky = new CholeskyDecomposition(A);
-      if (cholesky.isPositiveDefinite()) {
-        return matrixToFloat64Array(cholesky.solve(b));
-      } else {
-        // Fallback to LU decomposition
-        return matrixToFloat64Array(solve(A, b));
-      }
+      return solveLeastSquaresShared(A, b, logger, 'adjointGradientDescent', regularization);
     } catch (error) {
-      // Fallback to LU decomposition if Cholesky fails
-      try {
-        return matrixToFloat64Array(solve(A, b));
-      } catch (solveError) {
-        logger.warn('adjointGradientDescent', undefined, `Failed to solve square system: ${solveError}`);
-        throw new Error(
-          `Failed to solve square system Ax = b. ` +
-          `The matrix A may be singular or ill-conditioned. ` +
-          `Original error: ${solveError}`
-        );
+      lastError = error;
+      regularization = updateRegularizationWithMultiplier(regularization);
+      if (!logger) {
+        continue;
       }
+      logger.warn('adjointGradientDescent', undefined, 'solveLeastSquares failed, retrying with higher regularization', [
+        { key: 'attempt', value: attempt + 1 },
+        { key: 'rows', value: A.rows },
+        { key: 'columns', value: A.columns },
+        { key: 'reg', value: regularization },
+        { key: 'error', value: String(error) }
+      ]);
+      logSvdDiagnosticsForSmallMatrix(A, logger);
     }
   }
-
-  // Non-square matrix: hierarchical approach
-  const isOverdetermined = A.rows > A.columns;
-  
-  if (isOverdetermined) {
-    // Overdetermined system (rows > columns)
-    // Strategy: QR decomposition (most stable) → normal equations → pseudoInverse
-    
-    // Try QR decomposition first (most numerically stable)
-    try {
-      const qr = new QR(A);
-      return matrixToFloat64Array(qr.solve(b));
-    } catch (qrError) {
-      // QR failed, try normal equations
-      try {
-        const AT = A.transpose();
-        const ATA = AT.mmul(A);
-        const ATb = AT.mmul(b);
-        return matrixToFloat64Array(solve(ATA, ATb));
-      } catch (normalError) {
-        // Normal equations failed, use pseudoInverse as last resort
-        try {
-          const pinv = pseudoInverse(A);
-          return matrixToFloat64Array(pinv.mmul(b));
-        } catch (pinvError) {
-          logger.warn('adjointGradientDescent', undefined, `All methods failed for overdetermined system: QR=${qrError}, Normal=${normalError}, PseudoInv=${pinvError}`);
-          throw new Error(
-            `Failed to solve overdetermined system Ax = b. ` +
-            `All methods (QR, normal equations, pseudoInverse) failed. ` +
-            `The matrix A may be rank deficient or ill-conditioned.`
-          );
-        }
-      }
-    }
-  } else {
-    // Underdetermined system (rows < columns)
-    // Strategy: pseudoInverse directly (QR fails with rank deficient error)
-    try {
-      const pinv = pseudoInverse(A);
-      return matrixToFloat64Array(pinv.mmul(b));
-    } catch (pinvError) {
-      logger.warn('adjointGradientDescent', undefined, `Failed to solve underdetermined system with pseudoInverse: ${pinvError}`);
-      throw new Error(
-        `Failed to solve underdetermined system Ax = b. ` +
-        `PseudoInverse computation failed. ` +
-        `The matrix A may be ill-conditioned. ` +
-        `Original error: ${pinvError}`
-      );
-    }
-  }
+  throw lastError instanceof Error ? lastError : new Error(String(lastError));
 }
 
-/**
- * Solves the adjoint equation: (∂c/∂x)^T λ = (∂f/∂x)^T
- * Returns the adjoint variable λ.
- * Supports both square and non-square constraint Jacobians.
- */
 function solveAdjointEquation(
   dcdx: Matrix,
   dfdx: Float64Array,
   logger: Logger
 ): Float64Array {
-  // Transpose dcdx: (∂c/∂x)^T
-  const dcdxTranspose = dcdx.transpose();
+  const baseRegularization = (globalThis as any).__ADJOINT_REGULARIZATION__ ?? DEFAULT_REGULARIZATION;
+  let regularization = baseRegularization;
+  let lastError: unknown;
+  const svdDiagnostics = computeSvdDiagnostics(dcdx);
+  const warnAboutCondition =
+    dcdx.rows === dcdx.columns &&
+    svdDiagnostics !== undefined &&
+    svdDiagnostics.condEst > CONDITION_WARNING_THRESHOLD;
 
-  // Right-hand side: (∂f/∂x)^T (as column vector)
-  const dfdxMatrix = float64ArrayToMatrix(dfdx);
-
-  // Solve: (∂c/∂x)^T λ = (∂f/∂x)^T
-  // Uses hierarchical solver that handles both square and non-square matrices
-  try {
-    return solveLeastSquares(dcdxTranspose, dfdxMatrix, logger);
-  } catch (error) {
-    logger.warn('adjointGradientDescent', undefined, `Failed to solve adjoint equation: ${error}`);
-    throw new Error(
-      `Failed to solve adjoint equation (∂c/∂x)^T λ = (∂f/∂x)^T. ` +
-      `The constraint Jacobian ∂c/∂x may be singular or ill-conditioned. ` +
-      `Matrix size: ${dcdx.rows} × ${dcdx.columns}. ` +
-      `Original error: ${error}`
-    );
+  // If Jacobian is numerically singular, seed a tiny regularization up front.
+  if (svdDiagnostics && (!isFinite(svdDiagnostics.condEst) || svdDiagnostics.rankEst === 0 || svdDiagnostics.sigmaMin === 0)) {
+    regularization = Math.max(regularization, AUTO_REGULARIZATION);
   }
+
+  logAdjointDiagnostics(
+    dcdx,
+    dfdx,
+    logger,
+    warnAboutCondition
+      ? 'Adjoint Jacobian appears ill-conditioned before solve'
+      : 'Adjoint Jacobian diagnostics before solve',
+    warnAboutCondition ? 'warn' : 'debug',
+    INITIAL_ATTEMPT_NUMBER,
+    regularization,
+    undefined,
+    svdDiagnostics
+  );
+
+  for (let attempt = 0; attempt < MAX_REGULARIZATION_RETRY_ATTEMPTS; attempt++) {
+    try {
+      return solveAdjointEquationShared(dcdx, dfdx, logger, 'adjointGradientDescent', regularization);
+    } catch (error) {
+      lastError = error;
+      regularization = updateRegularizationWithMultiplier(regularization);
+      logAdjointDiagnostics(
+        dcdx,
+        dfdx,
+        logger,
+        'solveAdjointEquation failed, retrying with higher regularization',
+        'warn',
+        attempt + 1,
+        regularization,
+        error,
+        svdDiagnostics
+      );
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error(String(lastError));
 }
 
 /**
@@ -324,16 +460,15 @@ function computeAdjointGradient(
   lambda: Float64Array,
   dcdp: Matrix
 ): Float64Array {
-  // λ^T ∂c/∂p
-  // λ is constraintCount × 1, λ^T is 1 × constraintCount
-  // ∂c/∂p is constraintCount × parameterCount
-  // λ^T ∂c/∂p is 1 × parameterCount (row vector)
+  // Compute λ^T ∂c/∂p: this term represents how constraint violations affect the gradient.
+  // Matrix dimensions: λ is constraintCount × 1, λ^T is 1 × constraintCount,
+  // ∂c/∂p is constraintCount × parameterCount, so λ^T ∂c/∂p is 1 × parameterCount (row vector).
   const lambdaMatrix = float64ArrayToMatrix(lambda);
   const lambdaTranspose = lambdaMatrix.transpose();
   const lambdaTdcdp = lambdaTranspose.mmul(dcdp);
   
-  // Convert row vector (1 × parameterCount) to Float64Array
-  // lambdaTdcdp is 1 × parameterCount, so we read the first (and only) row
+  // Convert row vector to Float64Array for vector subtraction.
+  // The matrix multiplication produces a 1 × parameterCount matrix, so we extract the first (and only) row.
   const parameterCount = dfdp.length;
   const lambdaTdcdpVector = new Float64Array(parameterCount);
   for (let i = 0; i < parameterCount; i++) {
@@ -356,24 +491,27 @@ function updateStates(
   deltaP: Float64Array,
   logger: Logger
 ): Float64Array {
-  // Compute ∂c/∂p · Δp
+  // Compute ∂c/∂p · Δp: this represents how parameter changes affect constraint values.
   const deltaPMatrix = float64ArrayToMatrix(deltaP);
   const dcdpDeltaP = dcdp.mmul(deltaPMatrix);
   const dcdpDeltaPVector = matrixToFloat64Array(dcdpDeltaP);
 
-  // Solve: (∂c/∂x) dx = -∂c/∂p · Δp
+  // Solve: (∂c/∂x) dx = -∂c/∂p · Δp to find state update that maintains constraint satisfaction.
+  // The negative sign ensures states adjust to compensate for constraint changes from parameter updates.
   const negativeDcdpDeltaP = scaleVector(dcdpDeltaPVector, NEGATIVE_COEFFICIENT);
   const negativeDcdpDeltaPMatrix = float64ArrayToMatrix(negativeDcdpDeltaP);
   
   // Use hierarchical solver that handles both square and non-square matrices
   const dx = solveLeastSquares(dcdx, negativeDcdpDeltaPMatrix, logger);
 
-  // x_new = x_old + dx
+  // Update states using linear approximation to maintain constraint satisfaction.
+  // This is more efficient than solving the full nonlinear constraint system each iteration.
   return addVectors(currentStates, dx);
 }
 
 /**
  * Creates a cost function wrapper for line search that updates states using linear approximation.
+ * Partial derivatives are pre-computed and cached to avoid recomputation during line search.
  */
 function createCostFunctionWrapper(
   currentParameters: Float64Array,
@@ -381,49 +519,95 @@ function createCostFunctionWrapper(
   costFunction: ConstrainedCostFn | ConstrainedResidualFn,
   constraintFunction: ConstraintFn,
   options: AdjointGradientDescentOptions,
-  logger: Logger
+  logger: Logger,
+  cachedPartials?: { dcdx: Matrix; dcdp: Matrix }
 ): (params: Float64Array) => number {
-  return (params: Float64Array): number => {
-    // For line search, we need to update states as well
-    // Use linear approximation: x_new = x_old + dx where dx solves (∂c/∂x) dx = -∂c/∂p · Δp
-    const deltaP = subtractVectors(params, currentParameters);
-    
-    // Compute partial derivatives for state update
-    const { dcdx, dcdp } = computePartialDerivatives(
-      currentParameters,
-      currentStates,
-      costFunction,
-      constraintFunction,
-      options
-    );
+  // Pre-compute partial derivatives once if not provided
+  const partials = cachedPartials ?? computePartialDerivatives(
+    currentParameters,
+    currentStates,
+    costFunction,
+    constraintFunction,
+    options
+  );
+  const { dcdx, dcdp } = partials;
 
+  return (params: Float64Array): number => {
+    // Update states during line search to maintain constraint satisfaction.
+    // We use linear approximation (x_new = x_old + dx) where dx solves (∂c/∂x) dx = -∂c/∂p · Δp
+    // because solving the full nonlinear constraint system for each line search step would be too expensive.
+    const deltaP = subtractVectors(params, currentParameters);
     const newStates = updateStates(currentStates, dcdx, dcdp, deltaP, logger);
     return computeCost(costFunction, params, newStates);
   };
 }
 
 /**
+ * Checks if two parameter arrays are equal within floating point tolerance.
+ * Used to avoid redundant gradient computation when line search evaluates at the starting point.
+ */
+function areParametersEqual(
+  parameters1: Float64Array,
+  parameters2: Float64Array
+): boolean {
+  if (parameters1.length !== parameters2.length) {
+    return false;
+  }
+  for (let i = 0; i < parameters1.length; i++) {
+    if (Math.abs(parameters1[i] - parameters2[i]) > FLOATING_POINT_EQUALITY_TOLERANCE) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
  * Creates a gradient function wrapper for line search.
+ * For each trial parameter, updates states and computes gradient at that point.
+ * Uses pre-computed currentGradient for current point to ensure consistency.
  */
 function createGradientFunctionWrapper(
   currentParameters: Float64Array,
   currentStates: Float64Array,
+  currentGradient: Float64Array,
   costFunction: ConstrainedCostFn | ConstrainedResidualFn,
   constraintFunction: ConstraintFn,
   options: AdjointGradientDescentOptions,
-  logger: Logger
+  logger: Logger,
+  cachedPartials?: { dfdp: Float64Array; dfdx: Float64Array; dcdp: Matrix; dcdx: Matrix }
 ): (_params: Float64Array) => Float64Array {
-  return (_params: Float64Array): Float64Array => {
-    const partials = computePartialDerivatives(
-      currentParameters,
-      currentStates,
+  // Pre-compute partial derivatives once for state updates
+  const currentPartials = cachedPartials ?? computePartialDerivatives(
+    currentParameters,
+    currentStates,
+    costFunction,
+    constraintFunction,
+    options
+  );
+  const { dcdx: currentDcdx, dcdp: currentDcdp } = currentPartials;
+
+  return (trialParams: Float64Array): Float64Array => {
+    // Return pre-computed gradient if parameters haven't changed to avoid redundant computation.
+    // Line search evaluates gradient at the starting point for direction derivative calculation.
+    if (areParametersEqual(trialParams, currentParameters)) {
+      return new Float64Array(currentGradient);
+    }
+    
+    // For different trial parameters, update states to maintain constraints and compute gradient.
+    // We use linear approximation for efficiency: solving full nonlinear constraints for each trial would be too slow.
+    const deltaP = subtractVectors(trialParams, currentParameters);
+    const trialStates = updateStates(currentStates, currentDcdx, currentDcdp, deltaP, logger);
+    
+    // Compute gradient at trial point to evaluate search direction quality in line search.
+    const trialPartials = computePartialDerivatives(
+      trialParams,
+      trialStates,
       costFunction,
       constraintFunction,
       options
     );
-
-    const lambda = solveAdjointEquation(partials.dcdx, partials.dfdx, logger);
-    return computeAdjointGradient(partials.dfdp, lambda, partials.dcdp);
+    const lambda = solveAdjointEquation(trialPartials.dcdx, trialPartials.dfdx, logger);
+    return computeAdjointGradient(trialPartials.dfdp, lambda, trialPartials.dcdp);
   };
 }
 
@@ -439,11 +623,21 @@ function determineStepSize(
   useLineSearch: boolean,
   fixedStepSize: number | undefined,
   options: AdjointGradientDescentOptions,
-  logger: Logger
+  logger: Logger,
+  cachedPartials?: { dfdp: Float64Array; dfdx: Float64Array; dcdp: Matrix; dcdx: Matrix }
 ): { stepSize: number; usedLineSearch: boolean } {
   if (!useLineSearch || fixedStepSize !== undefined) {
     return { stepSize: fixedStepSize ?? DEFAULT_STEP_SIZE, usedLineSearch: false };
   }
+
+  // Pre-compute partial derivatives once and reuse in both wrappers
+  const partials = cachedPartials ?? computePartialDerivatives(
+    currentParameters,
+    currentStates,
+    costFunction,
+    constraintFunction,
+    options
+  );
 
   const costFnWrapper = createCostFunctionWrapper(
     currentParameters,
@@ -451,15 +645,18 @@ function determineStepSize(
     costFunction,
     constraintFunction,
     options,
-    logger
+    logger,
+    { dcdx: partials.dcdx, dcdp: partials.dcdp }
   );
   const gradientFnWrapper = createGradientFunctionWrapper(
     currentParameters,
     currentStates,
+    currentGradient,
     costFunction,
     constraintFunction,
     options,
-    logger
+    logger,
+    partials
   );
 
   const searchDirection = scaleVector(currentGradient, NEGATIVE_GRADIENT_DIRECTION);
@@ -651,6 +848,20 @@ function checkStepSizeConvergenceAndReturn(
 /**
  * Creates detailed log information for progress logging.
  */
+/**
+ * Adds array elements to log details with a prefix for readability.
+ * This helps create consistent logging format across different array types.
+ */
+function addArrayToLogDetails(
+  details: Array<{ key: string; value: number }>,
+  array: Float64Array,
+  prefix: string
+): void {
+  for (let i = 0; i < array.length; i++) {
+    details.push({ key: `${prefix}[${i}]:`, value: array[i] });
+  }
+}
+
 function createProgressLogDetails(
   currentParameters: Float64Array,
   currentStates: Float64Array,
@@ -669,17 +880,11 @@ function createProgressLogDetails(
 
   // Add parameter and state information for small dimensions (for readability)
   if (currentParameters.length <= MAX_DIMENSION_FOR_DETAILED_LOGGING && currentStates.length <= MAX_DIMENSION_FOR_DETAILED_LOGGING) {
-    for (let i = 0; i < currentParameters.length; i++) {
-      logDetails.push({ key: `p[${i}]:`, value: currentParameters[i] });
-    }
-    for (let i = 0; i < currentStates.length; i++) {
-      logDetails.push({ key: `x[${i}]:`, value: currentStates[i] });
-    }
+    addArrayToLogDetails(logDetails, currentParameters, 'p');
+    addArrayToLogDetails(logDetails, currentStates, 'x');
     // Add constraint values for small dimensions
     if (constraint.length <= MAX_DIMENSION_FOR_DETAILED_LOGGING) {
-      for (let i = 0; i < constraint.length; i++) {
-        logDetails.push({ key: `c[${i}]:`, value: constraint[i] });
-      }
+      addArrayToLogDetails(logDetails, constraint, 'c');
     }
   }
 
@@ -704,7 +909,7 @@ function checkConvergenceAndHandleCallback(
 ): { converged: boolean; result?: AdjointGradientDescentResult } {
   // Handle callback
   if (onIteration) {
-    const callbackIteration = iteration === 0 ? 0 : iteration;
+    const callbackIteration = iteration;
     onIteration(callbackIteration, currentCost, currentParameters);
   }
 
@@ -746,7 +951,7 @@ function handleStepSizeAndUpdate(
   useLineSearch: boolean,
   fixedStepSize: number | undefined,
   usedLineSearchFlag: boolean,
-  partials: { dcdx: Matrix; dcdp: Matrix },
+  partials: { dfdp: Float64Array; dfdx: Float64Array; dcdx: Matrix; dcdp: Matrix },
   options: AdjointGradientDescentOptions,
   logger: Logger
 ): {
@@ -757,7 +962,7 @@ function handleStepSizeAndUpdate(
   newCost?: number;
   newUsedLineSearch?: boolean;
 } {
-  // Determine step size
+  // Determine step size (reuse pre-computed partials to avoid recomputation in line search)
   const stepSizeResult = determineStepSize(
     adjointGradient,
     currentParameters,
@@ -767,7 +972,8 @@ function handleStepSizeAndUpdate(
     useLineSearch,
     fixedStepSize,
     options,
-    logger
+    logger,
+    partials
   );
 
   if (stepSizeResult.stepSize === ZERO_STEP_SIZE) {
@@ -784,7 +990,8 @@ function handleStepSizeAndUpdate(
 
   const newUsedLineSearch = usedLineSearchFlag || stepSizeResult.usedLineSearch;
 
-  // Update parameters and states, compute new cost
+  // Update parameters and states, then compute new cost to evaluate the step quality.
+  // States are updated to maintain constraint satisfaction after parameter changes.
   const { newParameters, newStates, newCost } = updateParametersAndStates(
     currentParameters,
     currentStates,
@@ -795,15 +1002,24 @@ function handleStepSizeAndUpdate(
     logger
   );
 
-  // Check step size convergence and log progress
-  if (newParameters) {
-    const stepSizeConvergenceResult = checkStepSizeConvergenceAndLog(
-      currentParameters,
-      currentStates,
-      constraint,
-      currentCost,
-      gradientNorm,
-      stepSizeResult.stepSize,
+  // Check step size convergence to detect when optimization has stalled.
+  // Log progress to help diagnose convergence issues.
+  if (!newParameters) {
+    return {
+      converged: false,
+      newParameters,
+      newStates,
+      newCost,
+      newUsedLineSearch
+    };
+  }
+  const stepSizeConvergenceResult = checkStepSizeConvergenceAndLog(
+    currentParameters,
+    currentStates,
+    constraint,
+    currentCost,
+    gradientNorm,
+    stepSizeResult.stepSize,
     constraintNorm,
     iteration,
     constraintTolerance,
@@ -812,9 +1028,8 @@ function handleStepSizeAndUpdate(
     newParameters,
     logger
   );
-    if (stepSizeConvergenceResult.converged && stepSizeConvergenceResult.result) {
-      return stepSizeConvergenceResult;
-    }
+  if (stepSizeConvergenceResult.converged && stepSizeConvergenceResult.result) {
+    return stepSizeConvergenceResult;
   }
 
   return {
@@ -844,7 +1059,7 @@ function checkStepSizeConvergenceAndLog(
   newParameters: Float64Array,
   logger: Logger
 ): { converged: boolean; result?: AdjointGradientDescentResult } {
-  // Check step size convergence
+  // Check step size convergence: if step is too small, optimization has likely converged or stalled.
   const step = subtractVectors(newParameters, currentParameters);
   const stepNorm = vectorNorm(step);
   const stepSizeConvergenceResult = checkStepSizeConvergenceAndReturn(
@@ -864,7 +1079,7 @@ function checkStepSizeConvergenceAndLog(
     return stepSizeConvergenceResult;
   }
 
-  // Log progress with detailed information
+  // Log progress with detailed information to help diagnose optimization behavior and convergence issues.
   const logDetails = createProgressLogDetails(
     currentParameters,
     currentStates,
@@ -905,7 +1120,8 @@ function performAdjointGradientDescentIteration(
   newCost?: number;
   newUsedLineSearch?: boolean;
 } {
-  // Check constraint satisfaction
+  // Check constraint satisfaction each iteration to detect and warn about constraint violations.
+  // This helps identify when the linear approximation for state updates is breaking down.
   const { constraint, constraintNorm } = checkConstraintViolation(
     currentParameters,
     currentStates,
@@ -915,7 +1131,7 @@ function performAdjointGradientDescentIteration(
     logger
   );
 
-  // Compute adjoint gradient and norm
+  // Compute adjoint gradient and norm: the gradient drives parameter updates, norm indicates convergence.
   const { adjointGradient, gradientNorm, partials } = computeAdjointGradientAndNorm(
     currentParameters,
     currentStates,
@@ -925,7 +1141,7 @@ function performAdjointGradientDescentIteration(
     logger
   );
 
-  // Handle callback and check gradient convergence
+  // Handle callback to allow user monitoring, then check gradient convergence to detect optimality.
   const convergenceResult = checkConvergenceAndHandleCallback(
     iteration,
     currentParameters,
@@ -943,7 +1159,7 @@ function performAdjointGradientDescentIteration(
     return convergenceResult;
   }
 
-  // Handle step size and update
+  // Handle step size determination and parameter update: this is the core optimization step.
   const updateResult = handleStepSizeAndUpdate(
     adjointGradient,
     currentParameters,
