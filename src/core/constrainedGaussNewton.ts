@@ -42,6 +42,7 @@ const DEFAULT_CONSTRAINT_TOLERANCE = 1e-6;
 const DEFAULT_STEP_SIZE_P = 1e-6;
 const DEFAULT_STEP_SIZE_X = 1e-6;
 const NEGATIVE_COEFFICIENT = -1.0; // Coefficient for negative right-hand side in normal equations: (J_eff^T J_eff) δ = -J_eff^T r
+const DEFAULT_RIDGE_REGULARIZATION = 1e-8; // Small ridge regularization to recover positive definiteness when Cholesky fails
 
 /**
  * Checks constraint violation and logs warning if needed.
@@ -79,18 +80,31 @@ function solveNormalEquationsForConstrainedGN(
   const jacobianTransposeResidual = effectiveJacobianTranspose.mmul(residualMatrix);
 
   const negativeJacobianTransposeResidual = jacobianTransposeResidual.mul(NEGATIVE_COEFFICIENT);
-  let stepMatrix: Matrix;
+  const jittered = jacobianTransposeJacobian.add(Matrix.eye(jacobianTransposeJacobian.rows, jacobianTransposeJacobian.columns).mul(DEFAULT_RIDGE_REGULARIZATION));
+
+  // Try Cholesky on original matrix first
   try {
     const cholesky = new CholeskyDecomposition(jacobianTransposeJacobian);
     if (cholesky.isPositiveDefinite()) {
-      stepMatrix = cholesky.solve(negativeJacobianTransposeResidual);
-    } else {
-      stepMatrix = solve(jacobianTransposeJacobian, negativeJacobianTransposeResidual);
+      return matrixToFloat64Array(cholesky.solve(negativeJacobianTransposeResidual));
     }
   } catch (choleskyError) {
-    stepMatrix = solve(jacobianTransposeJacobian, negativeJacobianTransposeResidual);
+    // Fall through to ridge regularization
   }
-  return matrixToFloat64Array(stepMatrix);
+
+  // Ridge regularization helps recover positive definiteness when matrix is near-singular
+  // This improves numerical stability by adding small diagonal terms
+  try {
+    const choleskyRidge = new CholeskyDecomposition(jittered);
+    if (choleskyRidge.isPositiveDefinite()) {
+      return matrixToFloat64Array(choleskyRidge.solve(negativeJacobianTransposeResidual));
+    }
+  } catch (ridgeError) {
+    // Fall through to general solver
+  }
+
+  // Final fallback: general solver (may fail if matrix is truly singular)
+  return matrixToFloat64Array(solve(jacobianTransposeJacobian, negativeJacobianTransposeResidual));
 }
 
 /**
@@ -136,6 +150,127 @@ function updateParametersAndStatesForConstrainedGN(
 }
 
 /**
+ * Computes step vector for constrained Gauss-Newton iteration.
+ * Handles singular matrix errors by returning convergence result.
+ */
+function computeStepForGN(
+  currentParameters: Float64Array,
+  currentStates: Float64Array,
+  residualFunction: ConstrainedResidualFn,
+  constraintFunction: ConstraintFn,
+  effectiveJacobianOptions: EffectiveJacobianOptions,
+  iteration: number,
+  logger: Logger,
+  cost: number,
+  residualNorm: number,
+  constraintNorm: number
+): { step: Float64Array } | { converged: boolean; result: ConstrainedGaussNewtonResult } {
+  const effectiveJacobian = computeEffectiveJacobian(
+    currentParameters,
+    currentStates,
+    residualFunction,
+    constraintFunction,
+    effectiveJacobianOptions,
+    logger,
+    'constrainedGaussNewton'
+  );
+
+  const residual = residualFunction(currentParameters, currentStates);
+  let step: Float64Array;
+  try {
+    step = solveNormalEquationsForConstrainedGN(effectiveJacobian, residual);
+  } catch (error) {
+    logger.warn('constrainedGaussNewton', iteration, 'Singular matrix encountered. Consider using constrained Levenberg-Marquardt method for better robustness.', [
+      { key: 'Cost:', value: cost },
+      { key: 'Residual norm:', value: residualNorm },
+      { key: 'Constraint norm:', value: constraintNorm }
+    ]);
+    const result = createConvergenceResult(currentParameters, iteration, false, cost, undefined);
+    return {
+      converged: false,
+      result: {
+        ...result,
+        finalResidualNorm: residualNorm,
+        finalStates: currentStates,
+        finalConstraintNorm: constraintNorm
+      }
+    };
+  }
+  return { step };
+}
+
+/**
+ * Checks step size convergence for constrained Gauss-Newton.
+ * Returns convergence result if converged, null otherwise.
+ */
+function checkStepSizeConvergenceForGN(
+  stepNorm: number,
+  constraintSatisfied: boolean,
+  tolerance: number,
+  iteration: number,
+  currentParameters: Float64Array,
+  currentStates: Float64Array,
+  cost: number,
+  residualNorm: number,
+  constraintNorm: number,
+  logger: Logger
+): ConstrainedGaussNewtonResult | null {
+  if (constraintSatisfied && checkStepSizeConvergence(stepNorm, tolerance, iteration)) {
+    logger.info('constrainedGaussNewton', iteration, 'Converged', [
+      { key: 'Cost:', value: cost },
+      { key: 'Residual norm:', value: residualNorm },
+      { key: 'Step size:', value: stepNorm },
+      { key: 'Constraint norm:', value: constraintNorm }
+    ]);
+    const result = createConvergenceResult(currentParameters, iteration, true, cost, undefined);
+    return {
+      ...result,
+      finalResidualNorm: residualNorm,
+      finalStates: currentStates,
+      finalConstraintNorm: constraintNorm
+    };
+  }
+  return null;
+}
+
+/**
+ * Checks residual convergence after parameter/state update.
+ * Returns convergence result if converged, null otherwise.
+ */
+function checkResidualConvergenceForGN(
+  newParameters: Float64Array,
+  newStates: Float64Array,
+  newResidualNorm: number,
+  newCost: number,
+  constraintFunction: ConstraintFn,
+  constraintTolerance: number,
+  tolerance: number,
+  iteration: number,
+  constraintNorm: number,
+  logger: Logger
+): ConstrainedGaussNewtonResult | null {
+  if (checkResidualConvergence(newResidualNorm, tolerance, iteration)) {
+    logger.info('constrainedGaussNewton', iteration, 'Converged', [
+      { key: 'Cost:', value: newCost },
+      { key: 'Residual norm:', value: newResidualNorm },
+      { key: 'Constraint norm:', value: constraintNorm }
+    ]);
+    const finalConstraint = constraintFunction(newParameters, newStates);
+    const finalConstraintNorm = vectorNorm(finalConstraint);
+    if (finalConstraintNorm <= constraintTolerance) {
+      const result = createConvergenceResult(newParameters, iteration, true, newCost, undefined);
+      return {
+        ...result,
+        finalResidualNorm: newResidualNorm,
+        finalStates: newStates,
+        finalConstraintNorm: finalConstraintNorm
+      };
+    }
+  }
+  return null;
+}
+
+/**
  * Performs one iteration of constrained Gauss-Newton optimization.
  * Returns updated parameters/states or null if converged/error occurred.
  */
@@ -178,54 +313,43 @@ function performConstrainedGaussNewtonIteration(
     onIteration(iteration, cost, currentParameters);
   }
 
-  const effectiveJacobian = computeEffectiveJacobian(
+  const stepResult = computeStepForGN(
     currentParameters,
     currentStates,
     residualFunction,
     constraintFunction,
     effectiveJacobianOptions,
+    iteration,
     logger,
-    'constrainedGaussNewton'
+    cost,
+    residualNorm,
+    constraintNorm
   );
 
-  let step: Float64Array;
-  try {
-    step = solveNormalEquationsForConstrainedGN(effectiveJacobian, residual);
-  } catch (error) {
-    logger.warn('constrainedGaussNewton', iteration, 'Singular matrix encountered. Consider using constrained Levenberg-Marquardt method for better robustness.', [
-      { key: 'Cost:', value: cost },
-      { key: 'Residual norm:', value: residualNorm },
-      { key: 'Constraint norm:', value: constraintNorm }
-    ]);
-    const result = createConvergenceResult(currentParameters, iteration, false, cost, undefined);
-    return {
-      converged: false,
-      result: {
-        ...result,
-        finalResidualNorm: residualNorm,
-        finalStates: currentStates,
-        finalConstraintNorm: constraintNorm
-      }
-    };
+  if ('converged' in stepResult) {
+    return stepResult;
   }
 
+  const step = stepResult.step;
   const stepNorm = vectorNorm(step);
-  if (constraintSatisfied && checkStepSizeConvergence(stepNorm, tolerance, iteration)) {
-    logger.info('constrainedGaussNewton', iteration, 'Converged', [
-      { key: 'Cost:', value: cost },
-      { key: 'Residual norm:', value: residualNorm },
-      { key: 'Step size:', value: stepNorm },
-      { key: 'Constraint norm:', value: constraintNorm }
-    ]);
-    const result = createConvergenceResult(currentParameters, iteration, true, cost, undefined);
+  
+  const stepSizeConvergenceResult = checkStepSizeConvergenceForGN(
+    stepNorm,
+    constraintSatisfied,
+    tolerance,
+    iteration,
+    currentParameters,
+    currentStates,
+    cost,
+    residualNorm,
+    constraintNorm,
+    logger
+  );
+
+  if (stepSizeConvergenceResult) {
     return {
       converged: true,
-      result: {
-        ...result,
-        finalResidualNorm: residualNorm,
-        finalStates: currentStates,
-        finalConstraintNorm: constraintNorm
-      }
+      result: stepSizeConvergenceResult
     };
   }
 
@@ -246,26 +370,24 @@ function performConstrainedGaussNewtonIteration(
   const newResidualNorm = vectorNorm(newResidual);
   const newCost = computeSumOfSquaredResiduals(newResidualNorm);
 
-  if (checkResidualConvergence(newResidualNorm, tolerance, iteration)) {
-    logger.info('constrainedGaussNewton', iteration, 'Converged', [
-      { key: 'Cost:', value: newCost },
-      { key: 'Residual norm:', value: newResidualNorm },
-      { key: 'Constraint norm:', value: constraintNorm }
-    ]);
-    const finalConstraint = constraintFunction(newParameters, newStates);
-    const finalConstraintNorm = vectorNorm(finalConstraint);
-    if (finalConstraintNorm <= constraintTolerance) {
-      const result = createConvergenceResult(newParameters, iteration, true, newCost, undefined);
-      return {
-        converged: true,
-        result: {
-          ...result,
-          finalResidualNorm: newResidualNorm,
-          finalStates: newStates,
-          finalConstraintNorm: finalConstraintNorm
-        }
-      };
-    }
+  const residualConvergenceResult = checkResidualConvergenceForGN(
+    newParameters,
+    newStates,
+    newResidualNorm,
+    newCost,
+    constraintFunction,
+    constraintTolerance,
+    tolerance,
+    iteration,
+    constraintNorm,
+    logger
+  );
+
+  if (residualConvergenceResult) {
+    return {
+      converged: true,
+      result: residualConvergenceResult
+    };
   }
 
   logger.debug('constrainedGaussNewton', iteration, 'Progress', [
@@ -276,6 +398,62 @@ function performConstrainedGaussNewtonIteration(
   ]);
 
   return { converged: false, newParameters, newStates };
+}
+
+/**
+ * Runs the main iteration loop for constrained Gauss-Newton optimization.
+ * Returns the result if converged, or final state if max iterations reached.
+ */
+function runGaussNewtonIterations(
+  initialParameters: Float64Array,
+  initialStates: Float64Array,
+  residualFunction: ConstrainedResidualFn,
+  constraintFunction: ConstraintFn,
+  effectiveJacobianOptions: EffectiveJacobianOptions,
+  tolerance: number,
+  constraintTolerance: number,
+  stepSizeP: number,
+  stepSizeX: number,
+  maxIterations: number,
+  logger: Logger,
+  onIteration?: (iteration: number, cost: number, parameters: Float64Array) => void,
+  dcdp?: (parameters: Float64Array, states: Float64Array) => Matrix,
+  dcdx?: (parameters: Float64Array, states: Float64Array) => Matrix
+): { result: ConstrainedGaussNewtonResult } | { finalParameters: Float64Array; finalStates: Float64Array } {
+  let currentParameters: Float64Array = new Float64Array(initialParameters);
+  let currentStates: Float64Array = new Float64Array(initialStates);
+
+  for (let iteration = 0; iteration < maxIterations; iteration++) {
+    const iterationResult = performConstrainedGaussNewtonIteration(
+      currentParameters,
+      currentStates,
+      residualFunction,
+      constraintFunction,
+      effectiveJacobianOptions,
+      tolerance,
+      constraintTolerance,
+      stepSizeP,
+      stepSizeX,
+      iteration,
+      logger,
+      onIteration,
+      dcdp,
+      dcdx
+    );
+
+    if (iterationResult.converged && iterationResult.result) {
+      return { result: iterationResult.result };
+    }
+
+    if (iterationResult.newParameters && iterationResult.newStates) {
+      currentParameters = iterationResult.newParameters as Float64Array;
+      currentStates = iterationResult.newStates as Float64Array;
+    } else {
+      break;
+    }
+  }
+
+  return { finalParameters: currentParameters, finalStates: currentStates };
 }
 
 /**
@@ -332,39 +510,29 @@ export function constrainedGaussNewton(
     stepSizeX
   };
 
-  let currentParameters: Float64Array = new Float64Array(initialParameters);
-  let currentStates: Float64Array = new Float64Array(initialStates);
+  const iterationResult = runGaussNewtonIterations(
+    initialParameters,
+    initialStates,
+    residualFunction,
+    constraintFunction,
+    effectiveJacobianOptions,
+    tolerance,
+    constraintTolerance,
+    stepSizeP,
+    stepSizeX,
+    maxIterations,
+    logger,
+    onIteration,
+    options.dcdp,
+    options.dcdx
+  );
 
-  for (let iteration = 0; iteration < maxIterations; iteration++) {
-    const iterationResult = performConstrainedGaussNewtonIteration(
-      currentParameters,
-      currentStates,
-      residualFunction,
-      constraintFunction,
-      effectiveJacobianOptions,
-      tolerance,
-      constraintTolerance,
-      stepSizeP,
-      stepSizeX,
-      iteration,
-      logger,
-      onIteration,
-      options.dcdp,
-      options.dcdx
-    );
-
-    if (iterationResult.converged && iterationResult.result) {
-      return iterationResult.result;
-    }
-
-    if (iterationResult.newParameters && iterationResult.newStates) {
-      currentParameters = iterationResult.newParameters as Float64Array;
-      currentStates = iterationResult.newStates as Float64Array;
-    } else {
-      break;
-    }
+  if ('result' in iterationResult) {
+    return iterationResult.result;
   }
 
+  const currentParameters = iterationResult.finalParameters;
+  const currentStates = iterationResult.finalStates;
   const finalResidual = residualFunction(currentParameters, currentStates);
   const finalResidualNorm = vectorNorm(finalResidual);
   const finalCost = computeSumOfSquaredResiduals(finalResidualNorm);

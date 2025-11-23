@@ -16,7 +16,7 @@
  * Extracted from adjointGradientDescent.ts to enable code reuse.
  */
 
-import { Matrix, solve, CholeskyDecomposition, QR, pseudoInverse } from 'ml-matrix';
+import { Matrix, solve, CholeskyDecomposition } from 'ml-matrix';
 import type { ConstraintFn } from './types.js';
 import { vectorNorm, scaleVector, addVectors } from '../utils/matrix.js';
 import { float64ArrayToMatrix, matrixToFloat64Array } from '../utils/matrix.js';
@@ -24,13 +24,274 @@ import { Logger } from './logger.js';
 import { finiteDiffConstraintPartialX } from './finiteDiff.js';
 
 const NEGATIVE_COEFFICIENT = -1.0; // Coefficient for negating vectors
+const MAX_DIAG_LOG_DIM = 40; // upper bound to log row/col diagnostics
+const MAX_REGULARIZATION_ATTEMPTS = 8; // Maximum number of regularization attempts when solving linear systems
+const REGULARIZATION_BASE = 10; // Base for exponential regularization scaling
+const REGULARIZATION_INITIAL_EXPONENT = -8; // Initial exponent for regularization: 10^(-8)
+const REGULARIZATION_MAX_EXPONENT = 7; // Maximum exponent for regularization: 10^7
+const REGULARIZATION_FALLBACK_EXPONENT = -1; // Fallback exponent when baseReg is 0: 10^(-1)
+const MAX_DIAGNOSTIC_ENTRIES = 5; // Maximum number of smallest rows/columns to include in diagnostics
+
+function checkFiniteMatrix(mat: Matrix): { ok: boolean; firstBad?: { row: number; col: number; value: number } } {
+  for (let r = 0; r < mat.rows; r++) {
+    for (let c = 0; c < mat.columns; c++) {
+      const v = mat.get(r, c);
+      if (!Number.isFinite(v)) {
+        return { ok: false, firstBad: { row: r, col: c, value: v } };
+      }
+    }
+  }
+  return { ok: true };
+}
+
+function computeVectorDiagnostics(b: Matrix): { norm: number; minAbs: number; maxAbs: number } {
+  let sum = 0;
+  let minAbs = Number.POSITIVE_INFINITY;
+  let maxAbs = 0;
+  for (let r = 0; r < b.rows; r++) {
+    for (let c = 0; c < b.columns; c++) {
+      const v = b.get(r, c);
+      const abs = Math.abs(v);
+      sum += v * v;
+      minAbs = Math.min(minAbs, abs);
+      maxAbs = Math.max(maxAbs, abs);
+    }
+  }
+  return { norm: Math.sqrt(sum), minAbs: minAbs === Number.POSITIVE_INFINITY ? 0 : minAbs, maxAbs };
+}
+
+function computeRowColDiagnostics(A: Matrix): {
+  minRowNorm: number;
+  maxRowNorm: number;
+  minColNorm: number;
+  maxColNorm: number;
+  smallestRows: Array<{ index: number; norm: number }>;
+  smallestCols: Array<{ index: number; norm: number }>;
+} {
+  const rowNorms: number[] = [];
+  const colNorms: number[] = [];
+
+  for (let r = 0; r < A.rows; r++) {
+    let sum = 0;
+    for (let c = 0; c < A.columns; c++) {
+      const v = A.get(r, c);
+      sum += v * v;
+    }
+    rowNorms.push(Math.sqrt(sum));
+  }
+
+  for (let c = 0; c < A.columns; c++) {
+    let sum = 0;
+    for (let r = 0; r < A.rows; r++) {
+      const v = A.get(r, c);
+      sum += v * v;
+    }
+    colNorms.push(Math.sqrt(sum));
+  }
+
+  const rowPairs = rowNorms.map((norm, index) => ({ index, norm })).sort((a, b) => a.norm - b.norm).slice(0, MAX_DIAGNOSTIC_ENTRIES);
+  const colPairs = colNorms.map((norm, index) => ({ index, norm })).sort((a, b) => a.norm - b.norm).slice(0, MAX_DIAGNOSTIC_ENTRIES);
+
+  return {
+    minRowNorm: Math.min(...rowNorms),
+    maxRowNorm: Math.max(...rowNorms),
+    minColNorm: Math.min(...colNorms),
+    maxColNorm: Math.max(...colNorms),
+    smallestRows: rowPairs,
+    smallestCols: colPairs
+  };
+}
 
 /**
- * Solves a least squares problem Ax = b using hierarchical approach.
- * For square matrices, uses existing Cholesky/LU decomposition (backward compatibility).
- * For non-square matrices:
- * - Overdetermined (rows > columns): QR decomposition → normal equations → pseudoInverse
- * - Underdetermined (rows < columns): pseudoInverse directly (QR fails with rank deficient error)
+ * Computes regularization lambda for a given attempt.
+ * Uses exponential scaling to gradually increase regularization strength.
+ */
+function computeRegularizationLambda(
+  baseReg: number,
+  attempt: number
+): number {
+  return baseReg > 0
+    ? baseReg * Math.pow(REGULARIZATION_BASE, attempt)
+    : Math.pow(REGULARIZATION_BASE, REGULARIZATION_INITIAL_EXPONENT + attempt);
+}
+
+/**
+ * Attempts to solve linear system with regularization retries.
+ * Cholesky decomposition is preferred for efficiency, falls back to general solver.
+ */
+function trySolveWithRegularization(
+  A: Matrix,
+  b: Matrix,
+  baseReg: number,
+  logger: Logger,
+  algorithmName: string
+): Float64Array {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < MAX_REGULARIZATION_ATTEMPTS; attempt++) {
+    const lambda = computeRegularizationLambda(baseReg, attempt);
+    const AwithReg = A.add(Matrix.eye(A.rows, A.columns).mul(lambda));
+    try {
+      const chol = new CholeskyDecomposition(AwithReg);
+      if (chol.isPositiveDefinite()) {
+        return matrixToFloat64Array(chol.solve(b));
+      }
+    } catch (err) {
+      lastError = err;
+    }
+    try {
+      return matrixToFloat64Array(solve(AwithReg, b));
+    } catch (err) {
+      lastError = err;
+      continue;
+    }
+  }
+  logger.warn(algorithmName, undefined, `Failed to solve system with regularization: ${lastError}`);
+  throw new Error(
+    `Failed to solve linear system even with Tikhonov regularization. ` +
+    `Matrix may be singular or ill-conditioned. Last error: ${lastError}`
+  );
+}
+
+/**
+ * Solves square system Ax = b with validation and regularization.
+ * Fast path for square matrices using direct Cholesky/LU decomposition.
+ */
+function solveSquareSystem(
+  Areg: Matrix,
+  b: Matrix,
+  regularization: number,
+  logger: Logger,
+  algorithmName: string
+): Float64Array {
+  const baseReg = regularization > 0 ? regularization : 0;
+  const diagnostics =
+    Areg.rows <= MAX_DIAG_LOG_DIM && Areg.columns <= MAX_DIAG_LOG_DIM
+      ? computeRowColDiagnostics(Areg)
+      : undefined;
+  const rhsDiagnostics = computeVectorDiagnostics(b);
+
+  const dimsOk = Areg.rows === b.rows;
+  const Afinite = checkFiniteMatrix(Areg);
+  const bFinite = checkFiniteMatrix(b);
+  if (!dimsOk || !Afinite.ok || !bFinite.ok) {
+    const detailRows: Array<{ key: string; value: number | string }> = [
+      { key: 'A_rows', value: Areg.rows },
+      { key: 'A_cols', value: Areg.columns },
+      { key: 'b_rows', value: b.rows },
+      { key: 'b_cols', value: b.columns }
+    ];
+    if (!Afinite.ok && Afinite.firstBad) {
+      detailRows.push({ key: 'A_bad_row', value: Afinite.firstBad.row });
+      detailRows.push({ key: 'A_bad_col', value: Afinite.firstBad.col });
+      detailRows.push({ key: 'A_bad_val', value: Afinite.firstBad.value });
+    }
+    if (!bFinite.ok && bFinite.firstBad) {
+      detailRows.push({ key: 'b_bad_row', value: bFinite.firstBad.row });
+      detailRows.push({ key: 'b_bad_col', value: bFinite.firstBad.col });
+      detailRows.push({ key: 'b_bad_val', value: bFinite.firstBad.value });
+    }
+    const numericDetails = detailRows.filter(d => typeof d.value === 'number') as Array<{ key: string; value: number }>;
+    logger.warn(algorithmName, undefined, 'Invalid dimensions or NaN/Inf detected before solve', numericDetails);
+    throw new Error('Invalid dimensions or NaN/Inf in inputs for square solve');
+  }
+
+  try {
+    return trySolveWithRegularization(Areg, b, baseReg, logger, algorithmName);
+  } catch (error) {
+    const detailRows: Array<{ key: string; value: number | string }> = [
+      { key: 'rows', value: Areg.rows },
+      { key: 'cols', value: Areg.columns },
+      { key: 'reg_final', value: baseReg > 0 ? baseReg * Math.pow(REGULARIZATION_BASE, REGULARIZATION_MAX_EXPONENT) : Math.pow(REGULARIZATION_BASE, REGULARIZATION_FALLBACK_EXPONENT) }
+    ];
+    detailRows.push(
+      { key: 'rhs_norm', value: rhsDiagnostics.norm },
+      { key: 'rhs_min_abs', value: rhsDiagnostics.minAbs },
+      { key: 'rhs_max_abs', value: rhsDiagnostics.maxAbs }
+    );
+    if (diagnostics) {
+      detailRows.push(
+        { key: 'minRowNorm', value: diagnostics.minRowNorm },
+        { key: 'minColNorm', value: diagnostics.minColNorm },
+        { key: 'maxRowNorm', value: diagnostics.maxRowNorm },
+        { key: 'maxColNorm', value: diagnostics.maxColNorm }
+      );
+      diagnostics.smallestRows.forEach((row, idx) => {
+        detailRows.push({ key: `row_${idx}`, value: row.index });
+        detailRows.push({ key: `row_${idx}_norm`, value: row.norm });
+      });
+      diagnostics.smallestCols.forEach((col, idx) => {
+        detailRows.push({ key: `col_${idx}`, value: col.index });
+        detailRows.push({ key: `col_${idx}_norm`, value: col.norm });
+      });
+    }
+    const numericDetails = detailRows.filter(d => typeof d.value === 'number') as Array<{ key: string; value: number }>;
+    logger.warn(algorithmName, undefined, `Failed to solve square system with regularization up to ~1e0: ${error}`, numericDetails);
+    throw error;
+  }
+}
+
+/**
+ * Solves overdetermined system (rows > columns) using normal equations.
+ * Converts to square system A^T A x = A^T b for efficient Cholesky solution.
+ */
+function solveOverdeterminedSystem(
+  A: Matrix,
+  b: Matrix,
+  regularization: number,
+  logger: Logger,
+  algorithmName: string
+): Float64Array {
+  const AT = A.transpose();
+  const ATA = AT.mmul(A);
+  const ATb = AT.mmul(b);
+  const baseReg = regularization > 0 ? regularization : 0;
+  
+  try {
+    return trySolveWithRegularization(ATA, ATb, baseReg, logger, algorithmName);
+  } catch (error) {
+    logger.warn(algorithmName, undefined, `Failed to solve overdetermined system with normal equations: ${error}`);
+    throw new Error(
+      `Failed to solve overdetermined system Ax = b using normal equations A^T A x = A^T b. ` +
+      `Matrix A^T A may be singular or ill-conditioned. Last error: ${error}`
+    );
+  }
+}
+
+/**
+ * Solves underdetermined system (rows < columns) using normal equations.
+ * Strategy: solve A A^T y = b, then x = A^T y for minimum-norm solution.
+ */
+function solveUnderdeterminedSystem(
+  A: Matrix,
+  b: Matrix,
+  regularization: number,
+  logger: Logger,
+  algorithmName: string
+): Float64Array {
+  const AT = A.transpose();
+  const AAT = A.mmul(AT);
+  const baseReg = regularization > 0 ? regularization : 0;
+  
+  try {
+    const y = trySolveWithRegularization(AAT, b, baseReg, logger, algorithmName);
+    const x = AT.mmul(float64ArrayToMatrix(y));
+    return matrixToFloat64Array(x);
+  } catch (error) {
+    logger.warn(algorithmName, undefined, `Failed to solve underdetermined system with normal equations: ${error}`);
+    throw new Error(
+      `Failed to solve underdetermined system Ax = b using normal equations A A^T y = b, x = A^T y. ` +
+      `Matrix A A^T may be singular or ill-conditioned. Last error: ${error}`
+    );
+  }
+}
+
+/**
+ * Solves a least squares problem Ax = b using Cholesky decomposition.
+ * For square matrices, uses Cholesky/LU decomposition directly.
+ * For non-square matrices, uses normal equations to convert to square system:
+ * - Overdetermined (rows > columns): A^T A x = A^T b (Cholesky on A^T A)
+ * - Underdetermined (rows < columns): A A^T y = b, x = A^T y (Cholesky on A A^T)
+ * This approach avoids SVD/pseudoInverse entirely for better performance.
  * 
  * @param A - Coefficient matrix
  * @param b - Right-hand side vector (as Matrix column vector)
@@ -42,83 +303,24 @@ export function solveLeastSquares(
   A: Matrix,
   b: Matrix,
   logger: Logger,
-  algorithmName: string = 'constrainedOptimization'
+  algorithmName: string = 'constrainedOptimization',
+  regularization: number = 0
 ): Float64Array {
-  // Square matrix: use existing fast methods (backward compatibility)
-  if (A.rows === A.columns) {
-    try {
-      // Try Cholesky decomposition first for efficiency
-      const cholesky = new CholeskyDecomposition(A);
-      if (cholesky.isPositiveDefinite()) {
-        return matrixToFloat64Array(cholesky.solve(b));
-      } else {
-        // Fallback to LU decomposition
-        return matrixToFloat64Array(solve(A, b));
-      }
-    } catch (error) {
-      // Fallback to LU decomposition if Cholesky fails
-      try {
-        return matrixToFloat64Array(solve(A, b));
-      } catch (solveError) {
-        logger.warn(algorithmName, undefined, `Failed to solve square system: ${solveError}`);
-        throw new Error(
-          `Failed to solve square system Ax = b. ` +
-          `The matrix A may be singular or ill-conditioned. ` +
-          `Original error: ${solveError}`
-        );
-      }
-    }
+  const Areg =
+    regularization > 0 && A.rows === A.columns
+      ? A.add(Matrix.eye(A.rows, A.columns).mul(regularization))
+      : A;
+
+  if (Areg.rows === Areg.columns) {
+    return solveSquareSystem(Areg, b, regularization, logger, algorithmName);
   }
 
-  // Non-square matrix: hierarchical approach
   const isOverdetermined = A.rows > A.columns;
-  
   if (isOverdetermined) {
-    // Overdetermined system (rows > columns)
-    // Strategy: QR decomposition (most stable) → normal equations → pseudoInverse
-    
-    // Try QR decomposition first (most numerically stable)
-    try {
-      const qr = new QR(A);
-      return matrixToFloat64Array(qr.solve(b));
-    } catch (qrError) {
-      // QR failed, try normal equations
-      try {
-        const AT = A.transpose();
-        const ATA = AT.mmul(A);
-        const ATb = AT.mmul(b);
-        return matrixToFloat64Array(solve(ATA, ATb));
-      } catch (normalError) {
-        // Normal equations failed, use pseudoInverse as last resort
-        try {
-          const pinv = pseudoInverse(A);
-          return matrixToFloat64Array(pinv.mmul(b));
-        } catch (pinvError) {
-          logger.warn(algorithmName, undefined, `All methods failed for overdetermined system: QR=${qrError}, Normal=${normalError}, PseudoInv=${pinvError}`);
-          throw new Error(
-            `Failed to solve overdetermined system Ax = b. ` +
-            `All methods (QR, normal equations, pseudoInverse) failed. ` +
-            `The matrix A may be rank deficient or ill-conditioned.`
-          );
-        }
-      }
-    }
-  } else {
-    // Underdetermined system (rows < columns)
-    // Strategy: pseudoInverse directly (QR fails with rank deficient error)
-    try {
-      const pinv = pseudoInverse(A);
-      return matrixToFloat64Array(pinv.mmul(b));
-    } catch (pinvError) {
-      logger.warn(algorithmName, undefined, `Failed to solve underdetermined system with pseudoInverse: ${pinvError}`);
-      throw new Error(
-        `Failed to solve underdetermined system Ax = b. ` +
-        `PseudoInverse computation failed. ` +
-        `The matrix A may be ill-conditioned. ` +
-        `Original error: ${pinvError}`
-      );
-    }
+    return solveOverdeterminedSystem(A, b, regularization, logger, algorithmName);
   }
+
+  return solveUnderdeterminedSystem(A, b, regularization, logger, algorithmName);
 }
 
 /**
@@ -139,18 +341,17 @@ export function solveAdjointEquation(
   dcdx: Matrix,
   rhs: Float64Array,
   logger: Logger,
-  algorithmName: string = 'constrainedOptimization'
+  algorithmName: string = 'constrainedOptimization',
+  regularization: number = 0
 ): Float64Array {
-  // Transpose dcdx: (∂c/∂x)^T
+  // Transpose needed to form adjoint equation: (∂c/∂x)^T λ = rhs (standard form for linear solve)
   const dcdxTranspose = dcdx.transpose();
 
-  // Right-hand side as column vector
   const rhsMatrix = float64ArrayToMatrix(rhs);
 
-  // Solve: (∂c/∂x)^T λ = rhs
-  // Uses hierarchical solver that handles both square and non-square matrices
+  // Hierarchical solver handles both square and non-square constraint Jacobians efficiently
   try {
-    return solveLeastSquares(dcdxTranspose, rhsMatrix, logger, algorithmName);
+    return solveLeastSquares(dcdxTranspose, rhsMatrix, logger, algorithmName, regularization);
   } catch (error) {
     logger.warn(algorithmName, undefined, `Failed to solve adjoint equation: ${error}`);
     throw new Error(
@@ -187,19 +388,18 @@ export function updateStates(
   logger: Logger,
   algorithmName: string = 'constrainedOptimization'
 ): Float64Array {
-  // Compute ∂c/∂p · Δp
+  // Compute how parameter changes affect constraints: needed to determine state updates
   const deltaPMatrix = float64ArrayToMatrix(deltaP);
   const dcdpDeltaP = dcdp.mmul(deltaPMatrix);
   const dcdpDeltaPVector = matrixToFloat64Array(dcdpDeltaP);
 
-  // Solve: (∂c/∂x) dx = -∂c/∂p · Δp
+  // Linear approximation maintains constraint satisfaction: (∂c/∂x) dx = -∂c/∂p · Δp
   const negativeDcdpDeltaP = scaleVector(dcdpDeltaPVector, NEGATIVE_COEFFICIENT);
   const negativeDcdpDeltaPMatrix = float64ArrayToMatrix(negativeDcdpDeltaP);
   
-  // Use hierarchical solver that handles both square and non-square matrices
+  // Hierarchical solver efficiently handles both square and non-square constraint Jacobians
   const dx = solveLeastSquares(dcdx, negativeDcdpDeltaPMatrix, logger, algorithmName);
 
-  // x_new = x_old + dx
   return addVectors(currentStates, dx);
 }
 
@@ -234,7 +434,8 @@ export function projectStatesToConstraints(
 
     try {
       const deltaX = solveLeastSquares(dcdx, negativeConstraintMatrix, logger, algorithmName);
-      projectedStates = addVectors(projectedStates, deltaX);
+      const updatedStates = addVectors(projectedStates, deltaX);
+      projectedStates = new Float64Array(updatedStates);
     } catch (error) {
       logger.warn(algorithmName, undefined, `Failed to project onto constraints: ${error}`);
       break;

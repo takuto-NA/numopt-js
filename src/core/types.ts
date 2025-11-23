@@ -402,7 +402,7 @@ export interface ConstrainedGaussNewtonOptions extends CommonOptimizationOptions
    * If provided, this will be used instead of numerical differentiation.
    * Returns a Matrix of size (constraintCount × stateCount).
    * Supports both square (constraintCount == stateCount) and non-square matrices.
-   * For non-square matrices, the adjoint method uses QR decomposition or pseudoInverse.
+   * For non-square matrices, the adjoint method uses normal equations with Cholesky decomposition.
    */
   dcdx?: (parameters: Float64Array, states: Float64Array) => Matrix;
 

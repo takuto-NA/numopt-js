@@ -29,6 +29,7 @@
     "example:constrained-gauss-newton": "tsx examples/constrained-gauss-newton-example.ts",
     "example:constrained-lm": "tsx examples/constrained-levenberg-marquardt-example.ts",
     "example:constrained-benchmark": "tsx examples/constrained-benchmark.ts",
+    "example:curve-bending-benchmark": "tsx examples/curve-bending-benchmark.ts",
     "docs": "typedoc --out docs src"
   },
   "keywords": [
