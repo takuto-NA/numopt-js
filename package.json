@@ -1,12 +1,16 @@
 {
   "name": "numopt-js",
-  "private": true,
   "version": "0.1.0",
   "type": "module",
   "description": "A flexible numerical optimization library for JavaScript/TypeScript that works smoothly in browsers",
   "main": "dist/index.js",
-  "module": "dist/index.esm.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
   "files": [
     "dist",
     "README.md",
