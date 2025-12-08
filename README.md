@@ -32,6 +32,76 @@ A flexible numerical optimization library for JavaScript/TypeScript that works s
 npm install numopt-js
 ```
 
+## Browser Usage
+
+numopt-js is designed to work seamlessly in browser environments. The library automatically provides a browser-optimized bundle that includes all dependencies.
+
+### Option 1: Automatic Detection (Recommended)
+
+Modern bundlers and browsers with import maps support will automatically use the browser bundle (`dist/index.browser.js`) when importing numopt-js in a browser environment. No additional configuration is needed.
+
+```html
+<script type="module">
+  import { gradientDescent } from './node_modules/numopt-js/dist/index.browser.js';
+  
+  // Your code here
+</script>
+```
+
+### Option 2: Using Import Maps
+
+If you're using import maps, you can explicitly specify the browser bundle:
+
+```html
+<script type="importmap">
+{
+  "imports": {
+    "numopt-js": "./node_modules/numopt-js/dist/index.browser.js"
+  }
+}
+</script>
+<script type="module">
+  import { gradientDescent } from 'numopt-js';
+  
+  // Your code here
+</script>
+```
+
+### Option 3: Using a Bundler
+
+If you're using a bundler like Vite, Webpack, or Rollup, the bundler will automatically resolve the browser bundle based on the `package.json` exports configuration:
+
+```typescript
+// In your TypeScript/JavaScript file
+import { gradientDescent } from 'numopt-js';
+
+// The bundler automatically uses dist/index.browser.js in browser builds
+```
+
+**Example with Vite:**
+
+```typescript
+// vite.config.ts
+import { defineConfig } from 'vite';
+
+export default defineConfig({
+  // Vite automatically handles browser bundle resolution
+});
+```
+
+### Troubleshooting
+
+**Problem**: `ReferenceError: exports is not defined` when using in browser
+
+**Solution**: Make sure you're using `dist/index.browser.js` instead of `dist/index.js`. The browser bundle includes all dependencies and is pre-configured for browser environments.
+
+**Problem**: Module not found errors
+
+**Solution**: 
+- Ensure you're using a modern bundler that supports `package.json` exports
+- For direct browser usage, use import maps or explicitly import from `dist/index.browser.js`
+- Check that your build tool supports ES modules
+
 ## Examples
 
 After installing dependencies with `npm install`, you can run the example scripts with `npm run <script>`:
