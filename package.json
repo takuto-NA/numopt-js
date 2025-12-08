@@ -1,6 +1,6 @@
 {
   "name": "numopt-js",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "description": "A flexible numerical optimization library for JavaScript/TypeScript that works smoothly in browsers",
   "main": "dist/index.js",
@@ -8,8 +8,15 @@
   "exports": {
     ".": {
       "import": "./dist/index.js",
-      "types": "./dist/index.d.ts"
+      "types": "./dist/index.d.ts",
+      "browser": {
+        "import": "./dist/index.browser.js",
+        "types": "./dist/index.d.ts"
+      }
     }
+  },
+  "browser": {
+    "./dist/index.js": "./dist/index.browser.js"
   },
   "files": [
     "dist",
@@ -18,7 +25,8 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc && tsc -p tsconfig.build.json",
+    "build": "tsc && tsc -p tsconfig.build.json && npm run build:browser",
+    "build:browser": "rollup -c",
     "prepare": "npm run build",
     "test": "vitest",
     "test:coverage": "vitest --coverage",
@@ -61,8 +69,13 @@
     "ml-matrix": "^6.10.5"
   },
   "devDependencies": {
+    "@rollup/plugin-commonjs": "^28.0.1",
+    "@rollup/plugin-node-resolve": "^15.3.0",
+    "@rollup/plugin-typescript": "^12.1.0",
     "@types/node": "^20.10.0",
     "@vitest/coverage-v8": "^1.1.0",
+    "rollup": "^4.18.0",
+    "tslib": "^2.8.1",
     "tsx": "^4.20.6",
     "typedoc": "^0.28.14",
     "typescript": "^5.3.3",
