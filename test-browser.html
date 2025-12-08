@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>numopt-js Browser Test</title>
+</head>
+<body>
+    <h1>numopt-js Browser Bundle Test</h1>
+    <div id="output"></div>
+
+    <script type="module">
+        import { gradientDescent } from './dist/index.browser.js';
+
+        const output = document.getElementById('output');
+        
+        try {
+            // Simple test: minimize x^2 + y^2
+            const cost = (params) => params[0] * params[0] + params[1] * params[1];
+            const grad = (params) => new Float64Array([2 * params[0], 2 * params[1]]);
+
+            const result = gradientDescent(new Float64Array([5, -3]), cost, grad, {
+                maxIterations: 200,
+                tolerance: 1e-6,
+                useLineSearch: true,
+            });
+
+            output.innerHTML = `
+                <h2>✅ Test Passed!</h2>
+                <p><strong>Result:</strong></p>
+                <ul>
+                    <li>Parameters: [${result.parameters[0].toFixed(6)}, ${result.parameters[1].toFixed(6)}]</li>
+                    <li>Final Cost: ${result.finalCost.toFixed(6)}</li>
+                    <li>Iterations: ${result.iterations}</li>
+                    <li>Converged: ${result.converged}</li>
+                </ul>
+                <p style="color: green;">✅ Browser bundle is working correctly!</p>
+            `;
+        } catch (error) {
+            output.innerHTML = `
+                <h2 style="color: red;">❌ Test Failed</h2>
+                <p><strong>Error:</strong> ${error.message}</p>
+                <pre>${error.stack}</pre>
+            `;
+            console.error('Test error:', error);
+        }
+    </script>
+</body>
+</html>
+
