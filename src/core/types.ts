@@ -253,6 +253,13 @@ export interface OptimizationResult {
   finalParameters: Float64Array;
 
   /**
+   * Final optimized parameter vector.
+   *
+   * @deprecated Use finalParameters instead. This alias will be removed in a future release.
+   */
+  parameters: Float64Array;
+
+  /**
    * Number of iterations performed.
    */
   iterations: number;
