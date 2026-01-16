@@ -449,8 +449,11 @@ export function projectStatesToConstraints(
  * Validates initial conditions including constraint satisfaction and dimensions.
  * 
  * Checks that:
- * 1. Constraint count equals state count (required for adjoint method)
- * 2. Initial constraint violation is within tolerance (warns if not)
+ * 1. Initial constraint violation is within tolerance (warns if not)
+ *
+ * Note:
+ * - Constraint count and state count do not need to match.
+ * - Both square and non-square constraint Jacobians are supported by the shared solvers.
  * 
  * @param initialParameters - Initial parameter vector p0
  * @param initialStates - Initial state vector x0
@@ -458,7 +461,6 @@ export function projectStatesToConstraints(
  * @param constraintTolerance - Tolerance for constraint violation
  * @param logger - Logger instance for warnings
  * @param algorithmName - Name of calling algorithm (for error messages)
- * @throws Error if constraint count != state count
  */
 export function validateInitialConditions(
   initialParameters: Float64Array,

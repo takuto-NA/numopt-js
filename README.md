@@ -32,6 +32,31 @@ A flexible numerical optimization library for JavaScript/TypeScript that works s
 npm install numopt-js
 ```
 
+## Start Here (Pick Your Path)
+
+- **Minimize a scalar cost** (smooth unconstrained optimization): use **Gradient Descent** (`cost: (p) => number`, `grad: (p) => Float64Array`). Start at [Gradient Descent](#gradient-descent).
+- **Fit a model with residuals** (nonlinear least squares): use **Levenberg–Marquardt** or **Gauss–Newton** (`residual: (p) => Float64Array`, optional `jacobian: (p) => Matrix`). Start at [Levenberg-Marquardt](#levenberg-marquardt-nonlinear-least-squares).
+- **Equality-constrained problems** \(c(p, x) = 0\): use **Adjoint** / **Constrained GN/LM** (`constraint: (p, x) => Float64Array`). Start at [Adjoint Method](#adjoint-method-constrained-optimization).
+- **Browser usage**: start at [Browser Usage](#browser-usage).
+
+**Why `Float64Array`?** This library uses `Float64Array` for predictable numeric performance. You can always convert from normal arrays with `new Float64Array([1, 2, 3])` (more details below).
+
+## Cost Function vs Residual Function (Important)
+
+- **Cost function**: `cost(p) -> number` (used by `gradientDescent`)
+- **Residual function**: `residual(p) -> Float64Array` (used by `gaussNewton` / `levenbergMarquardt`), where the library minimizes \(f(p) = 1/2 \|r(p)\|^2\)
+
+## Result Object (What to Look At)
+
+Most algorithms return a `result` with these fields:
+
+- **Common (all algorithms)**: `finalParameters`, `converged`, `iterations`, `finalCost`
+- **Gradient Descent**: `finalGradientNorm`, `usedLineSearch`
+- **Gauss-Newton / Levenberg–Marquardt**: `finalResidualNorm` (and LM also has `finalLambda`)
+- **Constrained algorithms / Adjoint**: `finalStates`, `finalConstraintNorm`
+
+Note: `result.parameters` is a deprecated alias of `result.finalParameters` and will be removed in a future release.
+
 ## 60-second Quick Start (Node)
 
 Pick **one** of the following and run it.
@@ -113,6 +138,10 @@ const { gradientDescent } = require('numopt-js');
 
 numopt-js is designed to work seamlessly in browser environments. The library automatically provides a browser-optimized bundle that includes all dependencies.
 
+**Important**:
+- **Don’t use `file://`** for the import-maps / direct-import examples. Serve your files via a local static server (for example: `npx serve`, `python -m http.server`, or Vite) so ES modules load correctly.
+- **SSR frameworks (Next.js, etc.)**: run numopt-js on the client side. If you hit SSR errors, move the code into a client component (`"use client"`) or dynamically import it with SSR disabled.
+
 ### Option 1: Bundler (Recommended)
 
 If you're using a bundler (Vite/Webpack/Rollup), just import from the package and the bundler will resolve the browser build via `package.json` exports.
@@ -176,6 +205,15 @@ After installing dependencies with `npm install`, you can run the example script
 - `npm run example:adjoint-advanced` — adjoint method with custom Jacobians
 - `npm run example:constrained-gauss-newton` — constrained least squares via effective Jacobian
 - `npm run example:constrained-lm` — constrained Levenberg–Marquardt
+
+**Start with these (recommended reading order):**
+
+- `npm run example:gradient` — smallest end-to-end example (scalar cost + gradient)
+- `npm run example:rosenbrock` — shows why line search matters on a classic non-convex problem
+- `npm run example:lm` — first least-squares example (residuals, optional numeric Jacobian)
+- `npm run example:constrained-gauss-newton` — first constrained least-squares example
+- `npm run example:constrained-lm` — robust constrained least-squares (damping)
+- `npm run example:adjoint` — constrained optimization with states \(x\) and parameters \(p\)
 
 **Pick an algorithm:**
 
@@ -349,6 +387,10 @@ const gradientFn = createFiniteDiffGradient(costFn, { stepSize: 1e-8 });
 // Direct usage
 const gradient = finiteDiffGradient(params, costFn, { stepSize: 1e-8 });
 ```
+
+**Practical tips (finite differences)**:
+- **Scale your parameters** so typical values are around \(O(1)\). If one parameter is \(10^{-6}\) and another is \(10^{6}\), a single global `stepSize` will often fail.
+- If you work in physical units, consider **normalizing inputs/parameters** first, then convert back after optimization.
 
 ### Adjoint Method (Constrained Optimization)
 
@@ -636,7 +678,7 @@ Extends `ConstrainedGaussNewtonOptions` with:
 - `tolStep?: number` - Tolerance for step size convergence (default: 1e-6)
 - `tolResidual?: number` - Tolerance for residual norm convergence (default: 1e-6)
 
-**Note**: The constraint function `c(p, x)` does not need to return a vector with the same length as the state vector `x`. The adjoint method supports both square and non-square constraint Jacobians (overdetermined and underdetermined systems). For non-square matrices, the method uses QR decomposition or pseudo-inverse to solve the adjoint equation.
+**Note**: The constraint function `c(p, x)` does not need to return a vector with the same length as the state vector `x`. The constrained solvers support both square and non-square constraint Jacobians (overdetermined and underdetermined systems) by solving the relevant linear systems in a least-squares sense (with regularization when needed). If you see instability, try scaling/normalizing your states/constraints.
 
 #### Numerical Differentiation Options
 
