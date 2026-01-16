@@ -16,10 +16,17 @@ jobs:
     - uses: actions/checkout@v4
 
     - name: Use Node.js
-      uses: actions/setup-node@v4
+      uses: actions/setup-node@v6
       with:
         node-version: '20.x'
+        registry-url: https://registry.npmjs.org
         cache: 'npm'
+
+    - name: Upgrade npm (Trusted Publishing requires newer npm)
+      run: |
+        npm --version
+        npm install -g npm@^11.5.1
+        npm --version
 
     - name: Install dependencies
       run: npm ci
