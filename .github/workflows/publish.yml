@@ -1,0 +1,44 @@
+name: npm publish (trusted)
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch: {}
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # required for npm Trusted Publishing (OIDC)
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Use Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20.x'
+        registry-url: https://registry.npmjs.org
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Work around npm optional dependency bug for Rollup natives
+      run: npm install --no-save --no-package-lock @rollup/rollup-linux-x64-gnu
+
+    - name: Verify tag matches package.json version
+      if: github.event_name == 'release'
+      run: |
+        node -e "const v=require('./package.json').version; const tag='${{ github.event.release.tag_name }}'.replace(/^v/,''); if(v!==tag){console.error(`package.json version ${v} does not match release tag ${tag}`); process.exit(1);} console.log('Version OK:', v);"
+
+    - name: Run tests
+      run: npm test
+
+    - name: Smoke test packed artifact (npm pack)
+      run: npm run smoke:pack
+
+    - name: Publish to npm (Trusted Publishing)
+      run: npm publish --provenance --access public
+
