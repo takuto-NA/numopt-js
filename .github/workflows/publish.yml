@@ -50,5 +50,8 @@ jobs:
       run: npm run smoke:pack
 
     - name: Publish to npm (Trusted Publishing)
-      run: npm publish --provenance --access public
+      run: |
+        # Ensure we don't accidentally use an invalid NODE_AUTH_TOKEN.
+        unset NODE_AUTH_TOKEN
+        npm publish --provenance --access public
 
