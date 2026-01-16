@@ -548,6 +548,7 @@ export function constrainedGaussNewton(
 
   return {
     finalParameters: currentParameters,
+    parameters: currentParameters,
     iterations: maxIterations,
     converged: false,
     finalCost: finalCost,

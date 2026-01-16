@@ -80,6 +80,7 @@ function createConvergenceResultForLM(
 ): ConstrainedLevenbergMarquardtResult {
   return {
     finalParameters,
+    parameters: finalParameters,
     iterations: iteration + 1,
     converged,
     finalCost,

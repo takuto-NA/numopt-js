@@ -27,6 +27,7 @@ export function createConvergenceResult(
 ): OptimizationResult {
   return {
     finalParameters,
+    parameters: finalParameters,
     iterations: iteration + 1,
     converged,
     finalCost,

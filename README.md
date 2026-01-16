@@ -32,17 +32,78 @@ A flexible numerical optimization library for JavaScript/TypeScript that works s
 npm install numopt-js
 ```
 
+## 60-second Quick Start (Node)
+
+Pick **one** of the following and run it.
+
+### ESM (recommended)
+
+Create `quick.mjs`:
+
+```js
+import { gradientDescent } from 'numopt-js';
+
+const cost = (params) => params[0] * params[0] + params[1] * params[1];
+const grad = (params) => new Float64Array([2 * params[0], 2 * params[1]]);
+
+const result = gradientDescent(new Float64Array([5, -3]), cost, grad, {
+  maxIterations: 200,
+  tolerance: 1e-6,
+  useLineSearch: true,
+});
+
+console.log(result.finalParameters);
+```
+
+Run:
+
+```bash
+node quick.mjs
+```
+
+### CommonJS
+
+Create `quick.cjs`:
+
+```js
+const { gradientDescent } = require('numopt-js');
+
+const cost = (params) => params[0] * params[0] + params[1] * params[1];
+const grad = (params) => new Float64Array([2 * params[0], 2 * params[1]]);
+
+const result = gradientDescent(new Float64Array([5, -3]), cost, grad, {
+  maxIterations: 200,
+  tolerance: 1e-6,
+  useLineSearch: true,
+});
+
+console.log(result.finalParameters);
+```
+
+Run:
+
+```bash
+node quick.cjs
+```
+
 ## Node Usage (ESM + CommonJS)
 
 numopt-js supports both ESM (`import`) and CommonJS (`require`) in Node.js.
 
 ### ESM
 
+Note:
+- If your project is CommonJS (default), use a `.mjs` file to run ESM.
+- If you want ESM by default, set `package.json` to `"type": "module"` (then `.js` is treated as ESM).
+
 ```typescript
 import { gradientDescent } from 'numopt-js';
 ```
 
 ### CommonJS
+
+Note:
+- If your project is ESM (`"type": "module"`), use a `.cjs` file to run CommonJS.
 
 ```js
 const { gradientDescent } = require('numopt-js');
@@ -52,21 +113,17 @@ const { gradientDescent } = require('numopt-js');
 
 numopt-js is designed to work seamlessly in browser environments. The library automatically provides a browser-optimized bundle that includes all dependencies.
 
-### Option 1: Automatic Detection (Recommended)
+### Option 1: Bundler (Recommended)
 
-Modern bundlers and browsers with import maps support will automatically use the browser bundle (`dist/index.browser.js`) when importing numopt-js in a browser environment. No additional configuration is needed.
+If you're using a bundler (Vite/Webpack/Rollup), just import from the package and the bundler will resolve the browser build via `package.json` exports.
 
-```html
-<script type="module">
-  import { gradientDescent } from './node_modules/numopt-js/dist/index.browser.js';
-  
-  // Your code here
-</script>
+```typescript
+import { gradientDescent } from 'numopt-js';
 ```
 
-### Option 2: Using Import Maps
+### Option 2: Import Maps
 
-If you're using import maps, you can explicitly specify the browser bundle:
+If you're using import maps (no bundler), map `numopt-js` to the browser bundle:
 
 ```html
 <script type="importmap">
@@ -83,26 +140,15 @@ If you're using import maps, you can explicitly specify the browser bundle:
 </script>
 ```
 
-### Option 3: Using a Bundler
+### Option 3: Direct file import (no bundler, no import maps)
 
-If you're using a bundler like Vite, Webpack, or Rollup, the bundler will automatically resolve the browser bundle based on the `package.json` exports configuration:
+Import the browser bundle by path. (In this mode, you **cannot** use the bare specifier `numopt-js`.)
 
-```typescript
-// In your TypeScript/JavaScript file
-import { gradientDescent } from 'numopt-js';
-
-// The bundler automatically uses dist/index.browser.js in browser builds
-```
-
-**Example with Vite:**
-
-```typescript
-// vite.config.ts
-import { defineConfig } from 'vite';
-
-export default defineConfig({
-  // Vite automatically handles browser bundle resolution
-});
+```html
+<script type="module">
+  import { gradientDescent } from "./node_modules/numopt-js/dist/index.browser.js";
+  // Your code here
+</script>
 ```
 
 ### Troubleshooting
@@ -122,35 +168,14 @@ export default defineConfig({
 
 After installing dependencies with `npm install`, you can run the example scripts with `npm run <script>`:
 
-- `npm run example:gradient` – Runs a basic gradient-descent optimization example.
-- `npm run example:rosenbrock` – Optimizes the Rosenbrock function to show robust convergence behavior.
-- `npm run example:lm` – Demonstrates Levenberg-Marquardt for nonlinear curve fitting.
-- `npm run example:gauss-newton` – Shows Gauss-Newton applied to a nonlinear least-squares problem.
-- `npm run example:adjoint` – Introduces the adjoint method for constrained optimization.
-- `npm run example:adjoint-advanced` – Explores a more advanced adjoint-based constrained problem.
-- `npm run example:constrained-gauss-newton` – Solves constrained nonlinear least squares via the effective Jacobian.
-- `npm run example:constrained-lm` – Uses constrained Levenberg-Marquardt for robust constrained least squares.
-
-## Quick Start
-
-1. Ensure Node.js 18+ is installed.
-2. Install the library with `npm install numopt-js`.
-3. Run the minimal example below to verify your setup:
-
-```typescript
-import { gradientDescent } from 'numopt-js';
-
-const cost = (params: Float64Array) => params[0] * params[0] + params[1] * params[1];
-const grad = (params: Float64Array) => new Float64Array([2 * params[0], 2 * params[1]]);
-
-const result = gradientDescent(new Float64Array([5, -3]), cost, grad, {
-  maxIterations: 200,
-  tolerance: 1e-6,
-  useLineSearch: true,
-});
-
-console.log(result.finalParameters);
-```
+- `npm run example:gradient` — basic gradient descent on a quadratic bowl
+- `npm run example:rosenbrock` — Rosenbrock optimization with line search
+- `npm run example:lm` — Levenberg–Marquardt curve fitting
+- `npm run example:gauss-newton` — nonlinear least squares with Gauss-Newton
+- `npm run example:adjoint` — simple adjoint-based constrained optimization
+- `npm run example:adjoint-advanced` — adjoint method with custom Jacobians
+- `npm run example:constrained-gauss-newton` — constrained least squares via effective Jacobian
+- `npm run example:constrained-lm` — constrained Levenberg–Marquardt
 
 **Pick an algorithm:**
 
@@ -158,19 +183,6 @@ console.log(result.finalParameters);
 - Gauss-Newton — efficient for nonlinear least squares when residuals are available
 - Levenberg–Marquardt — robust least-squares solver with damping
 - Constrained methods & Adjoint — enforce constraints with effective Jacobians or adjoint variables
-
-## Examples
-
-After `npm install`, you can try the bundled scripts:
-
-- `npm run example:gradient` — basic gradient descent on a quadratic bowl
-- `npm run example:rosenbrock` — Rosenbrock optimization with line search
-- `npm run example:gauss-newton` — nonlinear least squares with Gauss-Newton
-- `npm run example:lm` — Levenberg–Marquardt curve fitting
-- `npm run example:adjoint` — simple adjoint-based constrained optimization
-- `npm run example:adjoint-advanced` — adjoint method with custom Jacobians
-- `npm run example:constrained-gauss-newton` — constrained least squares via effective Jacobian
-- `npm run example:constrained-lm` — constrained Levenberg–Marquardt
 
 ### Gradient Descent
 
@@ -698,7 +710,7 @@ The formatters automatically handle parameter arrays:
 - **Medium arrays (4-10 elements)**: Displayed as array (`[1.0, 2.0, 3.0, ...]`)
 - **Large arrays (>10 elements)**: Truncated with "... and N more" (`[1.0, 2.0, ..., ... and 15 more]`)
 
-## Examples
+## Example Directory
 
 See the `examples/` directory for complete working examples:
 

@@ -123,6 +123,7 @@ function handleLineSearchFailure(
     converged: true,
     result: {
       finalParameters: currentParameters,
+      parameters: currentParameters,
       iterations: iteration,
       converged: false,
       finalCost: currentCost,
@@ -328,6 +329,7 @@ export function gradientDescent(
 
   return {
     finalParameters: currentParameters,
+    parameters: currentParameters,
     iterations: maxIterations,
     converged: false,
     finalCost: currentCost,

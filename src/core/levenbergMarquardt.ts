@@ -69,6 +69,7 @@ function createConvergenceResultForLM(
 ): LevenbergMarquardtResult {
   return {
     finalParameters,
+    parameters: finalParameters,
     iterations: iteration + 1,
     converged,
     finalCost,
@@ -404,6 +405,7 @@ export function levenbergMarquardt(
 
   return {
     finalParameters: bestParameters,
+    parameters: bestParameters,
     iterations: maxIterations,
     converged: false,
     finalCost: bestCost,
