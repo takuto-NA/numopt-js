@@ -74,7 +74,7 @@ const result2D = adjointGradientDescent(
   }
 );
 
-const finalConstraint2D = constraint2D(result2D.parameters, result2D.finalStates);
+const finalConstraint2D = constraint2D(result2D.finalParameters, result2D.finalStates);
 printAdjointGradientDescentResult(result2D, {
   showSectionHeaders: false
 });
@@ -127,7 +127,7 @@ const resultCircle = adjointGradientDescent(
   }
 );
 
-const finalConstraintCircle = constraintCircle(resultCircle.parameters, resultCircle.finalStates);
+const finalConstraintCircle = constraintCircle(resultCircle.finalParameters, resultCircle.finalStates);
 printAdjointGradientDescentResult(resultCircle, {
   showSectionHeaders: false
 });
@@ -178,7 +178,7 @@ const resultResidual = adjointGradientDescent(
   }
 );
 
-const finalConstraintResidual = constraintResidual(resultResidual.parameters, resultResidual.finalStates);
+const finalConstraintResidual = constraintResidual(resultResidual.finalParameters, resultResidual.finalStates);
 printAdjointGradientDescentResult(resultResidual, {
   showSectionHeaders: false
 });

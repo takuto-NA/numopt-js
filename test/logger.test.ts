@@ -1,4 +1,3 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Logger, getEffectiveLogLevel, shouldLog, LogLevel } from '../src/core/logger';
 
 describe('Logger', () => {

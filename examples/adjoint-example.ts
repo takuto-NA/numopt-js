@@ -70,7 +70,7 @@ const result = adjointGradientDescent(
 const endTime = performance.now();
 const elapsedTime = endTime - startTime;
 
-const finalConstraint = constraintFunction(result.parameters, result.finalStates);
+const finalConstraint = constraintFunction(result.finalParameters, result.finalStates);
 printAdjointGradientDescentResult(result, {
   showExecutionTime: true,
   elapsedTimeMs: elapsedTime
@@ -79,7 +79,7 @@ console.log(`\n  c(p, x) = ${finalConstraint[0].toFixed(8)} (should be ≈ 0)`);
 
 // Verify solution
 console.log('\n=== Verification ===');
-const errorP = Math.abs(result.parameters[0] - 0.5);
+const errorP = Math.abs(result.finalParameters[0] - 0.5);
 const errorX = Math.abs(result.finalStates[0] - 0.5);
 const errorF = Math.abs(result.finalCost - 0.5);
 const constraintNorm = vectorNorm(finalConstraint);

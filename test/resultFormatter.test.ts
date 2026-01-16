@@ -2,7 +2,6 @@
  * Tests for result formatting utilities.
  */
 
-import { describe, it, expect } from 'vitest';
 import {
   formatOptimizationResult,
   formatGradientDescentResult,
@@ -26,7 +25,7 @@ describe('ResultFormatter', () => {
   describe('formatOptimizationResult', () => {
     it('should format basic optimization result', () => {
       const result: OptimizationResult = {
-        parameters: new Float64Array([1.0, 2.0]),
+        finalParameters: new Float64Array([1.0, 2.0]),
         iterations: 10,
         converged: true,
         finalCost: 0.001,
@@ -45,7 +44,7 @@ describe('ResultFormatter', () => {
 
     it('should format result without optional fields', () => {
       const result: OptimizationResult = {
-        parameters: new Float64Array([0.5]),
+        finalParameters: new Float64Array([0.5]),
         iterations: 5,
         converged: false,
         finalCost: 1.5
@@ -59,7 +58,7 @@ describe('ResultFormatter', () => {
 
     it('should respect options', () => {
       const result: OptimizationResult = {
-        parameters: new Float64Array([1.0]),
+        finalParameters: new Float64Array([1.0]),
         iterations: 10,
         converged: true,
         finalCost: 0.001
@@ -78,7 +77,7 @@ describe('ResultFormatter', () => {
   describe('formatGradientDescentResult', () => {
     it('should format gradient descent result with line search info', () => {
       const result: GradientDescentResult = {
-        parameters: new Float64Array([0.0, 0.0]),
+        finalParameters: new Float64Array([0.0, 0.0]),
         iterations: 20,
         converged: true,
         finalCost: 1e-8,
@@ -94,7 +93,7 @@ describe('ResultFormatter', () => {
   describe('formatLevenbergMarquardtResult', () => {
     it('should format Levenberg-Marquardt result with lambda', () => {
       const result: LevenbergMarquardtResult = {
-        parameters: new Float64Array([2.0]),
+        finalParameters: new Float64Array([2.0]),
         iterations: 15,
         converged: true,
         finalCost: 0.0001,
@@ -111,7 +110,7 @@ describe('ResultFormatter', () => {
   describe('formatConstrainedGaussNewtonResult', () => {
     it('should format constrained Gauss-Newton result with states', () => {
       const result: ConstrainedGaussNewtonResult = {
-        parameters: new Float64Array([0.5]),
+        finalParameters: new Float64Array([0.5]),
         finalStates: new Float64Array([0.5]),
         iterations: 8,
         converged: true,
@@ -129,7 +128,7 @@ describe('ResultFormatter', () => {
   describe('formatConstrainedLevenbergMarquardtResult', () => {
     it('should format constrained Levenberg-Marquardt result', () => {
       const result: ConstrainedLevenbergMarquardtResult = {
-        parameters: new Float64Array([0.5]),
+        finalParameters: new Float64Array([0.5]),
         finalStates: new Float64Array([0.5]),
         iterations: 12,
         converged: true,
@@ -148,7 +147,7 @@ describe('ResultFormatter', () => {
   describe('formatAdjointGradientDescentResult', () => {
     it('should format adjoint gradient descent result', () => {
       const result: AdjointGradientDescentResult = {
-        parameters: new Float64Array([0.5]),
+        finalParameters: new Float64Array([0.5]),
         finalStates: new Float64Array([0.5]),
         iterations: 25,
         converged: true,
@@ -167,7 +166,7 @@ describe('ResultFormatter', () => {
   describe('formatResult (overloaded)', () => {
     it('should format OptimizationResult', () => {
       const result: OptimizationResult = {
-        parameters: new Float64Array([1.0]),
+        finalParameters: new Float64Array([1.0]),
         iterations: 10,
         converged: true,
         finalCost: 0.001
@@ -179,7 +178,7 @@ describe('ResultFormatter', () => {
 
     it('should format GradientDescentResult', () => {
       const result: GradientDescentResult = {
-        parameters: new Float64Array([1.0]),
+        finalParameters: new Float64Array([1.0]),
         iterations: 10,
         converged: true,
         finalCost: 0.001,
@@ -192,7 +191,7 @@ describe('ResultFormatter', () => {
 
     it('should format LevenbergMarquardtResult', () => {
       const result: LevenbergMarquardtResult = {
-        parameters: new Float64Array([1.0]),
+        finalParameters: new Float64Array([1.0]),
         iterations: 10,
         converged: true,
         finalCost: 0.001,
@@ -206,7 +205,7 @@ describe('ResultFormatter', () => {
 
     it('should format ConstrainedGaussNewtonResult', () => {
       const result: ConstrainedGaussNewtonResult = {
-        parameters: new Float64Array([0.5]),
+        finalParameters: new Float64Array([0.5]),
         finalStates: new Float64Array([0.5]),
         iterations: 10,
         converged: true,
@@ -222,7 +221,7 @@ describe('ResultFormatter', () => {
   describe('parameter array formatting', () => {
     it('should format small arrays individually', () => {
       const result: OptimizationResult = {
-        parameters: new Float64Array([1.0, 2.0, 3.0]),
+        finalParameters: new Float64Array([1.0, 2.0, 3.0]),
         iterations: 10,
         converged: true,
         finalCost: 0.001
@@ -236,7 +235,7 @@ describe('ResultFormatter', () => {
 
     it('should format medium arrays as array', () => {
       const result: OptimizationResult = {
-        parameters: new Float64Array([1.0, 2.0, 3.0, 4.0, 5.0]),
+        finalParameters: new Float64Array([1.0, 2.0, 3.0, 4.0, 5.0]),
         iterations: 10,
         converged: true,
         finalCost: 0.001
@@ -253,7 +252,7 @@ describe('ResultFormatter', () => {
       }
 
       const result: OptimizationResult = {
-        parameters: largeArray,
+        finalParameters: largeArray,
         iterations: 10,
         converged: true,
         finalCost: 0.001
@@ -268,7 +267,7 @@ describe('ResultFormatter', () => {
   describe('execution time formatting', () => {
     it('should include execution time when provided', () => {
       const result: OptimizationResult = {
-        parameters: new Float64Array([1.0]),
+        finalParameters: new Float64Array([1.0]),
         iterations: 10,
         converged: true,
         finalCost: 0.001
@@ -285,7 +284,7 @@ describe('ResultFormatter', () => {
 
     it('should not include execution time by default', () => {
       const result: OptimizationResult = {
-        parameters: new Float64Array([1.0]),
+        finalParameters: new Float64Array([1.0]),
         iterations: 10,
         converged: true,
         finalCost: 0.001

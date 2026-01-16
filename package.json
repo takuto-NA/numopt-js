@@ -1,13 +1,15 @@
 {
   "name": "numopt-js",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "module",
   "description": "A flexible numerical optimization library for JavaScript/TypeScript that works smoothly in browsers",
-  "main": "dist/index.js",
+  "main": "dist/index.cjs",
+  "module": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
     ".": {
       "import": "./dist/index.js",
+      "require": "./dist/index.cjs",
       "types": "./dist/index.d.ts",
       "browser": {
         "import": "./dist/index.browser.js",
@@ -25,8 +27,9 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc && tsc -p tsconfig.build.json && npm run build:browser",
-    "build:browser": "rollup -c",
+    "build": "tsc && tsc -p tsconfig.build.json && npm run build:bundles",
+    "build:bundles": "rollup -c",
+    "smoke:pack": "npm run build && node scripts/smoke-pack.mjs",
     "prepare": "npm run build",
     "test": "vitest",
     "test:coverage": "vitest --coverage",

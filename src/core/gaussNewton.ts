@@ -174,7 +174,7 @@ export function gaussNewton(
   ]);
 
   return {
-    parameters: currentParameters,
+    finalParameters: currentParameters,
     iterations: maxIterations,
     converged: false,
     finalCost: finalCost,

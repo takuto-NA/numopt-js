@@ -59,7 +59,7 @@ console.log(`Final gradient norm: ${result.finalGradientNorm}`);
 console.log(`Final residual norm: ${result.finalResidualNorm}`);
 console.log(`Final constraint norm: ${result.finalConstraintNorm}`);
 console.log(`Final lambda: ${result.finalLambda}`);
-console.log(`Final parameters: [${Array.from(result.parameters).join(', ')}]`);
+console.log(`Final parameters: [${Array.from(result.finalParameters).join(', ')}]`);
 console.log(`Final states: [${Array.from(result.finalStates).join(', ')}]`);
 
 // Check for NaN or Infinity
@@ -68,9 +68,9 @@ if (!isFinite(result.finalCost)) {
   console.log('This indicates a numerical instability issue.');
 }
 
-if (result.parameters.some(p => !isFinite(p))) {
+if (result.finalParameters.some(p => !isFinite(p))) {
   console.log('\n⚠️ ERROR: Some parameters are not finite!');
-  console.log(`Parameters: [${Array.from(result.parameters).join(', ')}]`);
+  console.log(`Parameters: [${Array.from(result.finalParameters).join(', ')}]`);
 }
 
 if (result.finalStates.some(x => !isFinite(x))) {

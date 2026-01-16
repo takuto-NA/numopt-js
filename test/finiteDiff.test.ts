@@ -1,4 +1,3 @@
-import { describe, it, expect } from 'vitest';
 import { finiteDiffGradient, finiteDiffJacobian } from '../src/core/finiteDiff';
 import type { CostFn, ResidualFn } from '../src/core/types';
 

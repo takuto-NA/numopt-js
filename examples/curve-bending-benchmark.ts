@@ -139,12 +139,12 @@ const solvers: Solver[] = [
         problem.options.constrainedLM
       );
       return {
-        parameters: result.parameters,
+        parameters: result.finalParameters,
         finalStates: result.finalStates,
         iterations: result.iterations,
         converged: result.converged,
         finalCost: result.finalCost,
-        constraintNorm: vectorNorm(constraint(result.parameters, result.finalStates ?? initial.x))
+        constraintNorm: vectorNorm(constraint(result.finalParameters, result.finalStates ?? initial.x))
       };
     }
   },
@@ -155,12 +155,12 @@ const solvers: Solver[] = [
       const constraint: ConstraintFn = (_p: Float64Array, x: Float64Array) => arcLengthConstraintFromStates(x, problem);
       const result = constrainedGaussNewton(initial.p, initial.x, constrainedResidual, constraint, problem.options.constrainedGN);
       return {
-        parameters: result.parameters,
+        parameters: result.finalParameters,
         finalStates: result.finalStates,
         iterations: result.iterations,
         converged: result.converged,
         finalCost: result.finalCost,
-        constraintNorm: vectorNorm(constraint(result.parameters, result.finalStates ?? initial.x))
+        constraintNorm: vectorNorm(constraint(result.finalParameters, result.finalStates ?? initial.x))
       };
     }
   },
@@ -169,9 +169,9 @@ const solvers: Solver[] = [
     run: (initial, problem, penaltyWeight) => {
       const penaltyResidual = buildPenaltyResidual(problem, penaltyWeight ?? problem.penaltyWeights[0]);
       const result = levenbergMarquardt(initial.x, penaltyResidual, problem.options.penaltyLM);
-      const constraintNorm = vectorNorm(arcLengthConstraintFromStates(result.parameters, problem));
+      const constraintNorm = vectorNorm(arcLengthConstraintFromStates(result.finalParameters, problem));
       return {
-        finalStates: result.parameters,
+        finalStates: result.finalParameters,
         iterations: result.iterations,
         converged: result.converged,
         finalCost: result.finalCost,
@@ -184,9 +184,9 @@ const solvers: Solver[] = [
     run: (initial, problem, penaltyWeight) => {
       const penaltyResidual = buildPenaltyResidual(problem, penaltyWeight ?? problem.penaltyWeights[0]);
       const result = gaussNewton(initial.x, penaltyResidual, problem.options.penaltyGN);
-      const constraintNorm = vectorNorm(arcLengthConstraintFromStates(result.parameters, problem));
+      const constraintNorm = vectorNorm(arcLengthConstraintFromStates(result.finalParameters, problem));
       return {
-        finalStates: result.parameters,
+        finalStates: result.finalParameters,
         iterations: result.iterations,
         converged: result.converged,
         finalCost: result.finalCost ?? 0,
@@ -207,9 +207,9 @@ const solvers: Solver[] = [
         constraint,
         problem.options.adjoint ?? {}
       );
-      const constraintNorm = vectorNorm(constraint(result.parameters, result.finalStates ?? initial.x));
+      const constraintNorm = vectorNorm(constraint(result.finalParameters, result.finalStates ?? initial.x));
       return {
-        parameters: result.parameters,
+        parameters: result.finalParameters,
         finalStates: result.finalStates,
         iterations: result.iterations,
         converged: result.converged,

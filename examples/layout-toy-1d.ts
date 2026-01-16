@@ -70,7 +70,7 @@ printLevenbergMarquardtResult(result);
 // Show layout
 console.log('\nLayout visualization:');
 for (let i = 0; i < boxWidths.length; i++) {
-  const position = result.parameters[i];
+  const position = result.finalParameters[i];
   const width = boxWidths[i];
   const bar = '█'.repeat(Math.max(1, Math.round(width)));
   console.log(`Box ${i}: position=${position.toFixed(2)}, width=${width.toFixed(2)} ${bar}`);

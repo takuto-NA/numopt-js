@@ -75,9 +75,9 @@ printOptimizationResult(result, {
 // Show predictions vs actual
 console.log('\n=== Predictions vs Actual Data ===');
 for (let i = 0; i < xData.length; i++) {
-  const predicted = result.parameters[0] * xData[i] * xData[i] + 
-                    result.parameters[1] * xData[i] + 
-                    result.parameters[2];
+  const predicted = result.finalParameters[0] * xData[i] * xData[i] +
+                    result.finalParameters[1] * xData[i] +
+                    result.finalParameters[2];
   const actual = yData[i];
   const error = Math.abs(predicted - actual);
   console.log(`x=${xData[i].toString().padStart(3)}: predicted=${predicted.toFixed(4)}, actual=${actual.toFixed(4)}, error=${error.toFixed(4)}`);
@@ -88,9 +88,9 @@ let ssRes = 0;
 let ssTot = 0;
 const yMean = yData.reduce((a, b) => a + b, 0) / yData.length;
 for (let i = 0; i < xData.length; i++) {
-  const predicted = result.parameters[0] * xData[i] * xData[i] + 
-                    result.parameters[1] * xData[i] + 
-                    result.parameters[2];
+  const predicted = result.finalParameters[0] * xData[i] * xData[i] +
+                    result.finalParameters[1] * xData[i] +
+                    result.finalParameters[2];
   ssRes += (predicted - yData[i]) ** 2;
   ssTot += (yData[i] - yMean) ** 2;
 }

@@ -19,14 +19,14 @@ import type { OptimizationResult } from './types.js';
  * Used to avoid code duplication across optimization algorithms.
  */
 export function createConvergenceResult(
-  parameters: Float64Array,
+  finalParameters: Float64Array,
   iteration: number,
   converged: boolean,
   finalCost: number,
   finalGradientNorm?: number
 ): OptimizationResult {
   return {
-    parameters,
+    finalParameters,
     iterations: iteration + 1,
     converged,
     finalCost,

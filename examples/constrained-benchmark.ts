@@ -216,7 +216,7 @@ const solvers: Solver[] = [
       const theta0 = concatState(initial);
       const residual: ResidualFn = buildPenaltyResidual(problem, problem.penaltyWeight);
       const result = gaussNewton(theta0, residual, problem.options.penaltyGaussNewton);
-      const { p, x } = splitState(result.parameters, initial.p.length);
+      const { p, x } = splitState(result.finalParameters, initial.p.length);
       return {
         parameters: p,
         finalStates: x,
@@ -232,7 +232,7 @@ const solvers: Solver[] = [
       const theta0 = concatState(initial);
       const residual: ResidualFn = buildPenaltyResidual(problem, problem.penaltyWeight);
       const result = levenbergMarquardt(theta0, residual, problem.options.penaltyLevenbergMarquardt);
-      const { p, x } = splitState(result.parameters, initial.p.length);
+      const { p, x } = splitState(result.finalParameters, initial.p.length);
       return {
         parameters: p,
         finalStates: x,
@@ -278,7 +278,7 @@ function runSolver(solver: Solver, problem: Problem) {
   try {
     const result = solver.run(initial, problem);
     const elapsedMs = performance.now() - start;
-    const constraintNorm = vectorNorm(problem.constraint(result.parameters, result.finalStates));
+    const constraintNorm = vectorNorm(problem.constraint(result.finalParameters, result.finalStates));
 
     return {
       Method: solver.name,

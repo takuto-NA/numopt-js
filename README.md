@@ -32,6 +32,22 @@ A flexible numerical optimization library for JavaScript/TypeScript that works s
 npm install numopt-js
 ```
 
+## Node Usage (ESM + CommonJS)
+
+numopt-js supports both ESM (`import`) and CommonJS (`require`) in Node.js.
+
+### ESM
+
+```typescript
+import { gradientDescent } from 'numopt-js';
+```
+
+### CommonJS
+
+```js
+const { gradientDescent } = require('numopt-js');
+```
+
 ## Browser Usage
 
 numopt-js is designed to work seamlessly in browser environments. The library automatically provides a browser-optimized bundle that includes all dependencies.
@@ -133,7 +149,7 @@ const result = gradientDescent(new Float64Array([5, -3]), cost, grad, {
   useLineSearch: true,
 });
 
-console.log(result.parameters);
+console.log(result.finalParameters);
 ```
 
 **Pick an algorithm:**
@@ -180,7 +196,7 @@ const result = gradientDescent(initialParams, costFunction, gradientFunction, {
   useLineSearch: true
 });
 
-console.log('Optimized parameters:', result.parameters);
+console.log('Optimized parameters:', result.finalParameters);
 console.log('Final cost:', result.finalCost);
 console.log('Converged:', result.converged);
 ```
@@ -226,7 +242,7 @@ const result = levenbergMarquardt(initialParams, residualFunction, {
   tolGradient: 1e-6
 });
 
-console.log('Optimized parameters:', result.parameters);
+console.log('Optimized parameters:', result.finalParameters);
 console.log('Final residual norm:', result.finalResidualNorm);
 ```
 
@@ -361,7 +377,7 @@ const result = adjointGradientDescent(
   }
 );
 
-console.log('Optimized parameters:', result.parameters);
+console.log('Optimized parameters:', result.finalParameters);
 console.log('Final states:', result.finalStates);
 console.log('Final cost:', result.finalCost);
 console.log('Constraint norm:', result.finalConstraintNorm);
@@ -437,7 +453,7 @@ const result = constrainedGaussNewton(
   }
 );
 
-console.log('Optimized parameters:', result.parameters);
+console.log('Optimized parameters:', result.finalParameters);
 console.log('Final states:', result.finalStates);
 console.log('Final cost:', result.finalCost);
 console.log('Constraint norm:', result.finalConstraintNorm);

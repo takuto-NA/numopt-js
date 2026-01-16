@@ -1,4 +1,3 @@
-import { describe, it, expect } from 'vitest';
 import { backtrackingLineSearch } from '../src/core/lineSearch';
 import type { CostFn, GradientFn } from '../src/core/types';
 

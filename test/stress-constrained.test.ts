@@ -1,4 +1,3 @@
-import { describe, it, expect } from 'vitest';
 import { adjointGradientDescent } from '../src/core/adjointGradientDescent';
 import { constrainedGaussNewton } from '../src/core/constrainedGaussNewton';
 import { constrainedLevenbergMarquardt } from '../src/core/constrainedLevenbergMarquardt';
@@ -59,7 +58,7 @@ describe('Stress Tests: Challenging Nonlinear Constrained Optimization', () => {
       expect(result.finalCost).toBeLessThan(100); // Should make some progress
       
       // Constraint should be satisfied
-      const finalConstraint = circleConstraint(result.parameters, result.finalStates);
+      const finalConstraint = circleConstraint(result.finalParameters, result.finalStates);
       expect(vectorNorm(finalConstraint)).toBeLessThan(1e-2);
     });
 
@@ -82,7 +81,7 @@ describe('Stress Tests: Challenging Nonlinear Constrained Optimization', () => {
       expect(result.iterations).toBeGreaterThan(0);
       expect(result.finalCost).toBeLessThan(100);
       
-      const finalConstraint = circleConstraint(result.parameters, result.finalStates);
+      const finalConstraint = circleConstraint(result.finalParameters, result.finalStates);
       expect(vectorNorm(finalConstraint)).toBeLessThan(1e-2);
     });
 
@@ -107,7 +106,7 @@ describe('Stress Tests: Challenging Nonlinear Constrained Optimization', () => {
       expect(result.iterations).toBeGreaterThan(0);
       expect(result.finalCost).toBeLessThan(100);
       
-      const finalConstraint = circleConstraint(result.parameters, result.finalStates);
+      const finalConstraint = circleConstraint(result.finalParameters, result.finalStates);
       expect(vectorNorm(finalConstraint)).toBeLessThan(1e-2);
     });
   });
@@ -172,7 +171,7 @@ describe('Stress Tests: Challenging Nonlinear Constrained Optimization', () => {
       expect(result.iterations).toBeGreaterThan(0);
       expect(result.finalCost).toBeLessThan(50); // Should make significant progress
       
-      const finalConstraint = highDimConstraint(result.parameters, result.finalStates);
+      const finalConstraint = highDimConstraint(result.finalParameters, result.finalStates);
       expect(vectorNorm(finalConstraint)).toBeLessThan(1e-2);
     });
 
@@ -195,7 +194,7 @@ describe('Stress Tests: Challenging Nonlinear Constrained Optimization', () => {
       expect(result.iterations).toBeGreaterThan(0);
       expect(result.finalCost).toBeLessThan(50);
       
-      const finalConstraint = highDimConstraint(result.parameters, result.finalStates);
+      const finalConstraint = highDimConstraint(result.finalParameters, result.finalStates);
       expect(vectorNorm(finalConstraint)).toBeLessThan(1e-2);
     });
 
@@ -218,7 +217,7 @@ describe('Stress Tests: Challenging Nonlinear Constrained Optimization', () => {
       expect(result.iterations).toBeGreaterThan(0);
       expect(result.finalCost).toBeLessThan(50);
       
-      const finalConstraint = highDimConstraint(result.parameters, result.finalStates);
+      const finalConstraint = highDimConstraint(result.finalParameters, result.finalStates);
       expect(vectorNorm(finalConstraint)).toBeLessThan(1e-2);
     });
   });
@@ -271,7 +270,7 @@ describe('Stress Tests: Challenging Nonlinear Constrained Optimization', () => {
       const initialCost = illConditionedCost(initialP, initialX);
       expect(result.finalCost).toBeLessThan(initialCost * 0.5);
       
-      const finalConstraint = simpleConstraint(result.parameters, result.finalStates);
+      const finalConstraint = simpleConstraint(result.finalParameters, result.finalStates);
       expect(vectorNorm(finalConstraint)).toBeLessThan(1e-2);
     });
 
@@ -296,7 +295,7 @@ describe('Stress Tests: Challenging Nonlinear Constrained Optimization', () => {
       const initialCost = illConditionedCost(initialP, initialX);
       expect(result.finalCost).toBeLessThan(initialCost * 0.5);
       
-      const finalConstraint = simpleConstraint(result.parameters, result.finalStates);
+      const finalConstraint = simpleConstraint(result.finalParameters, result.finalStates);
       expect(vectorNorm(finalConstraint)).toBeLessThan(1e-2);
     });
   });
@@ -344,7 +343,7 @@ describe('Stress Tests: Challenging Nonlinear Constrained Optimization', () => {
       // Should find some local minimum
       expect(result.finalCost).toBeLessThan(5);
       
-      const finalConstraint = piConstraint(result.parameters, result.finalStates);
+      const finalConstraint = piConstraint(result.finalParameters, result.finalStates);
       expect(vectorNorm(finalConstraint)).toBeLessThan(1e-2);
     });
 
@@ -367,7 +366,7 @@ describe('Stress Tests: Challenging Nonlinear Constrained Optimization', () => {
       expect(result.iterations).toBeGreaterThan(0);
       expect(result.finalCost).toBeLessThan(5);
       
-      const finalConstraint = piConstraint(result.parameters, result.finalStates);
+      const finalConstraint = piConstraint(result.finalParameters, result.finalStates);
       expect(vectorNorm(finalConstraint)).toBeLessThan(1e-2);
     });
   });
@@ -410,7 +409,7 @@ describe('Stress Tests: Challenging Nonlinear Constrained Optimization', () => {
       // Should make significant progress
       expect(result.finalCost).toBeLessThan(5000);
       
-      const finalConstraint = simpleConstraint(result.parameters, result.finalStates);
+      const finalConstraint = simpleConstraint(result.finalParameters, result.finalStates);
       expect(vectorNorm(finalConstraint)).toBeLessThan(1e-2);
     });
 
@@ -434,7 +433,7 @@ describe('Stress Tests: Challenging Nonlinear Constrained Optimization', () => {
       expect(result.iterations).toBeGreaterThan(0);
       expect(result.finalCost).toBeLessThan(5000);
       
-      const finalConstraint = simpleConstraint(result.parameters, result.finalStates);
+      const finalConstraint = simpleConstraint(result.finalParameters, result.finalStates);
       expect(vectorNorm(finalConstraint)).toBeLessThan(1e-2);
     });
   });
@@ -492,7 +491,7 @@ describe('Stress Tests: Challenging Nonlinear Constrained Optimization', () => {
       expect(result.iterations).toBeGreaterThan(2);
       
       // Should make progress
-      const finalConstraint = circleConstraint(result.parameters, result.finalStates);
+      const finalConstraint = circleConstraint(result.finalParameters, result.finalStates);
       expect(vectorNorm(finalConstraint)).toBeLessThan(1e-1); // Relaxed constraint tolerance
       
       // Log for debugging
@@ -526,7 +525,7 @@ describe('Stress Tests: Challenging Nonlinear Constrained Optimization', () => {
       expect(result.iterations).toBeGreaterThan(2);
       
       // Should satisfy constraint
-      const finalConstraint = circleConstraint(result.parameters, result.finalStates);
+      const finalConstraint = circleConstraint(result.finalParameters, result.finalStates);
       expect(vectorNorm(finalConstraint)).toBeLessThan(1e-1);
       
       console.log(`  Very poor initial guess: ${result.iterations} iterations, cost: ${result.finalCost}, converged: ${result.converged}`);
@@ -579,7 +578,7 @@ describe('Stress Tests: Challenging Nonlinear Constrained Optimization', () => {
       expect(result.iterations).toBeGreaterThan(0);
       expect(result.iterations).toBeGreaterThan(1);
       
-      const finalConstraint = circleConstraint(result.parameters, result.finalStates);
+      const finalConstraint = circleConstraint(result.finalParameters, result.finalStates);
       expect(vectorNorm(finalConstraint)).toBeLessThan(1e-1); // Relaxed constraint tolerance
       
       console.log(`  Ill-conditioned Rosenbrock: ${result.iterations} iterations, cost: ${result.finalCost}, converged: ${result.converged}`);

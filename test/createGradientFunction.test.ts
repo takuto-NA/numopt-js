@@ -1,4 +1,3 @@
-import { describe, it, expect } from 'vitest';
 import { createFiniteDiffGradient, createFiniteDiffJacobian } from '../src/core/createGradientFunction';
 import { gradientDescent } from '../src/core/gradientDescent';
 import { gaussNewton } from '../src/core/gaussNewton';
@@ -33,7 +32,7 @@ describe('createFiniteDiffGradient', () => {
         });
 
         expect(result.converged).toBe(true);
-        expect(Math.abs(result.parameters[0])).toBeLessThan(1e-3);
+        expect(Math.abs(result.finalParameters[0])).toBeLessThan(1e-3);
         expect(result.finalCost).toBeLessThan(1e-6);
     });
 

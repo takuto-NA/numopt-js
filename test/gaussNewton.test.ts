@@ -1,4 +1,3 @@
-import { describe, it, expect } from 'vitest';
 import { gaussNewton } from '../src/core/gaussNewton';
 import type { ResidualFn, JacobianFn } from '../src/core/types';
 import { Matrix } from 'ml-matrix';
@@ -26,7 +25,7 @@ describe('Gauss-Newton Method', () => {
     });
 
     expect(result.converged).toBe(true);
-    expect(Math.abs(result.parameters[0] - 2.0)).toBeLessThan(1e-3);
+    expect(Math.abs(result.finalParameters[0] - 2.0)).toBeLessThan(1e-3);
     expect(result.finalCost).toBeLessThan(1e-6);
   });
 
@@ -39,7 +38,7 @@ describe('Gauss-Newton Method', () => {
     });
 
     expect(result.converged).toBe(true);
-    expect(Math.abs(result.parameters[0] - 2.0)).toBeLessThan(1e-3);
+    expect(Math.abs(result.finalParameters[0] - 2.0)).toBeLessThan(1e-3);
   });
 
   /**
@@ -65,7 +64,7 @@ describe('Gauss-Newton Method', () => {
 
     expect(result.converged).toBe(true);
     // Should converge to x = 2 (positive solution)
-    expect(Math.abs(result.parameters[0] - 2.0)).toBeLessThan(1e-3);
+    expect(Math.abs(result.finalParameters[0] - 2.0)).toBeLessThan(1e-3);
     expect(result.finalCost).toBeLessThan(1e-6);
   });
 
@@ -106,8 +105,8 @@ describe('Gauss-Newton Method', () => {
     });
 
     expect(result.converged).toBe(true);
-    expect(Math.abs(result.parameters[0] - 1.0)).toBeLessThan(1e-3);
-    expect(Math.abs(result.parameters[1] - 2.0)).toBeLessThan(1e-3);
+    expect(Math.abs(result.finalParameters[0] - 1.0)).toBeLessThan(1e-3);
+    expect(Math.abs(result.finalParameters[1] - 2.0)).toBeLessThan(1e-3);
     expect(result.finalCost).toBeLessThan(1e-6);
   });
 
@@ -146,7 +145,7 @@ describe('Gauss-Newton Method', () => {
 
     expect(result.converged).toBe(false);
     expect(result.iterations).toBe(5);
-    expect(result.parameters).toBeInstanceOf(Float64Array);
+    expect(result.finalParameters).toBeInstanceOf(Float64Array);
   });
 });
 

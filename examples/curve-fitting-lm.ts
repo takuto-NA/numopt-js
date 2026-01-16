@@ -49,12 +49,12 @@ const result = levenbergMarquardt(initialParameters, residualFunction, {
 });
 
 printLevenbergMarquardtResult(result);
-console.log(`\nFitted line: y = ${result.parameters[0].toFixed(4)}x + ${result.parameters[1].toFixed(4)}`);
+console.log(`\nFitted line: y = ${result.finalParameters[0].toFixed(4)}x + ${result.finalParameters[1].toFixed(4)}`);
 
 // Show predictions
 console.log('\nPredictions vs Actual:');
 for (let i = 0; i < xData.length; i++) {
-  const predicted = result.parameters[0] * xData[i] + result.parameters[1];
+  const predicted = result.finalParameters[0] * xData[i] + result.finalParameters[1];
   const actual = yData[i];
   const error = Math.abs(predicted - actual);
   console.log(`  x=${xData[i]}: predicted=${predicted.toFixed(2)}, actual=${actual.toFixed(2)}, error=${error.toFixed(2)}`);
