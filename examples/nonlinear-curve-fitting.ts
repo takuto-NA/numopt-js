@@ -86,14 +86,14 @@ printLevenbergMarquardtResult(result, {
 });
 
 console.log('\nParameter comparison:');
-console.log(`  A = ${result.parameters[0].toFixed(6)} (true: ${trueParams.A}), error: ${Math.abs(result.parameters[0] - trueParams.A).toFixed(6)}`);
-console.log(`  lambda = ${result.parameters[1].toFixed(6)} (true: ${trueParams.lambda}), error: ${Math.abs(result.parameters[1] - trueParams.lambda).toFixed(6)}`);
-console.log(`  B = ${result.parameters[2].toFixed(6)} (true: ${trueParams.B}), error: ${Math.abs(result.parameters[2] - trueParams.B).toFixed(6)}`);
+console.log(`  A = ${result.finalParameters[0].toFixed(6)} (true: ${trueParams.A}), error: ${Math.abs(result.finalParameters[0] - trueParams.A).toFixed(6)}`);
+console.log(`  lambda = ${result.finalParameters[1].toFixed(6)} (true: ${trueParams.lambda}), error: ${Math.abs(result.finalParameters[1] - trueParams.lambda).toFixed(6)}`);
+console.log(`  B = ${result.finalParameters[2].toFixed(6)} (true: ${trueParams.B}), error: ${Math.abs(result.finalParameters[2] - trueParams.B).toFixed(6)}`);
 
 // Show predictions vs actual
 console.log('\n=== Predictions vs Actual Data ===');
 for (let i = 0; i < xData.length; i++) {
-  const predicted = result.parameters[0] * Math.exp(-result.parameters[1] * xData[i]) + result.parameters[2];
+  const predicted = result.finalParameters[0] * Math.exp(-result.finalParameters[1] * xData[i]) + result.finalParameters[2];
   const actual = yData[i];
   const error = Math.abs(predicted - actual);
   console.log(`x=${xData[i].toFixed(1).padStart(4)}: predicted=${predicted.toFixed(4)}, actual=${actual.toFixed(4)}, error=${error.toFixed(4)}`);

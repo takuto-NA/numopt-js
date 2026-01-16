@@ -68,7 +68,7 @@ function computeNormalEquationsMatrices(
  * Centralizes result creation to avoid code duplication.
  */
 function createConvergenceResultForLM(
-  parameters: Float64Array,
+  finalParameters: Float64Array,
   states: Float64Array,
   iteration: number,
   converged: boolean,
@@ -79,7 +79,7 @@ function createConvergenceResultForLM(
   finalLambda: number
 ): ConstrainedLevenbergMarquardtResult {
   return {
-    parameters,
+    finalParameters,
     iterations: iteration + 1,
     converged,
     finalCost,

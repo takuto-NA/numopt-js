@@ -166,7 +166,7 @@ const gdResult = gradientDescent(float64Initial, costFn, gradFn, {
 });
 
 // Convert back to regular array if needed
-const regularResult = Array.from(gdResult.parameters);
+const regularResult = Array.from(gdResult.finalParameters);
 console.log(`   Optimization result: [${regularResult.map(x => x.toFixed(4)).join(', ')}]\n`);
 
 // Example 6: Using Numerical Gradient with Gradient Descent

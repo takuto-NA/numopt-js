@@ -1,4 +1,3 @@
-import { describe, it, expect } from 'vitest';
 import { gradientDescent } from '../src/core/gradientDescent';
 import { finiteDiffGradient } from '../src/core/finiteDiff';
 import { createFiniteDiffGradient } from '../src/core/createGradientFunction';
@@ -23,8 +22,8 @@ describe('Integration: finiteDiffGradient with gradientDescent', () => {
         );
 
         expect(result.converged).toBe(true);
-        expect(Math.abs(result.parameters[0] - 3)).toBeLessThan(1e-3);
-        expect(Math.abs(result.parameters[1] - 2)).toBeLessThan(1e-3);
+        expect(Math.abs(result.finalParameters[0] - 3)).toBeLessThan(1e-3);
+        expect(Math.abs(result.finalParameters[1] - 2)).toBeLessThan(1e-3);
     });
 
     it('should work with createFiniteDiffGradient helper (recommended approach)', () => {
@@ -39,8 +38,8 @@ describe('Integration: finiteDiffGradient with gradientDescent', () => {
         );
 
         expect(result.converged).toBe(true);
-        expect(Math.abs(result.parameters[0] - 3)).toBeLessThan(1e-3);
-        expect(Math.abs(result.parameters[1] - 2)).toBeLessThan(1e-3);
+        expect(Math.abs(result.finalParameters[0] - 3)).toBeLessThan(1e-3);
+        expect(Math.abs(result.finalParameters[1] - 2)).toBeLessThan(1e-3);
     });
 
     it('should reproduce exact user scenario from bug report', () => {
@@ -77,13 +76,13 @@ describe('Integration: finiteDiffGradient with gradientDescent', () => {
         expect(resultHelper.converged).toBe(true);
 
         // All should find the minimum at (3, 2)
-        expect(Math.abs(resultManual.parameters[0] - 3)).toBeLessThan(1e-3);
-        expect(Math.abs(resultFiniteDiff.parameters[0] - 3)).toBeLessThan(1e-3);
-        expect(Math.abs(resultHelper.parameters[0] - 3)).toBeLessThan(1e-3);
+        expect(Math.abs(resultManual.finalParameters[0] - 3)).toBeLessThan(1e-3);
+        expect(Math.abs(resultFiniteDiff.finalParameters[0] - 3)).toBeLessThan(1e-3);
+        expect(Math.abs(resultHelper.finalParameters[0] - 3)).toBeLessThan(1e-3);
 
-        expect(Math.abs(resultManual.parameters[1] - 2)).toBeLessThan(1e-3);
-        expect(Math.abs(resultFiniteDiff.parameters[1] - 2)).toBeLessThan(1e-3);
-        expect(Math.abs(resultHelper.parameters[1] - 2)).toBeLessThan(1e-3);
+        expect(Math.abs(resultManual.finalParameters[1] - 2)).toBeLessThan(1e-3);
+        expect(Math.abs(resultFiniteDiff.finalParameters[1] - 2)).toBeLessThan(1e-3);
+        expect(Math.abs(resultHelper.finalParameters[1] - 2)).toBeLessThan(1e-3);
     });
 
     it('should fail with incorrect parameter order (reproducing user bug)', () => {

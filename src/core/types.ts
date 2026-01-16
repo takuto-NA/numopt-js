@@ -248,9 +248,9 @@ export interface LevenbergMarquardtOptions extends GaussNewtonOptions {
  */
 export interface OptimizationResult {
   /**
-   * Optimized parameter vector.
+   * Final optimized parameter vector.
    */
-  parameters: Float64Array;
+  finalParameters: Float64Array;
 
   /**
    * Number of iterations performed.

@@ -148,7 +148,7 @@ function formatBasicResult(
 
   // Parameters
   lines.push('Optimized parameters:');
-  const paramStr = formatParameters(result.parameters, options);
+  const paramStr = formatParameters(result.finalParameters, options);
   lines.push(`  ${paramStr}`);
 
   // Cost
@@ -250,7 +250,7 @@ export function formatConstrainedGaussNewtonResult(
 
   // Parameters
   lines.push('Optimized parameters:');
-  const paramStr = formatParameters(result.parameters, opts);
+  const paramStr = formatParameters(result.finalParameters, opts);
   lines.push(`  ${paramStr}`);
 
   // States
@@ -311,7 +311,7 @@ export function formatConstrainedLevenbergMarquardtResult(
 
   // Parameters
   lines.push('Optimized parameters:');
-  const paramStr = formatParameters(result.parameters, opts);
+  const paramStr = formatParameters(result.finalParameters, opts);
   lines.push(`  ${paramStr}`);
 
   // States
@@ -374,7 +374,7 @@ export function formatAdjointGradientDescentResult(
 
   // Parameters
   lines.push('Optimized parameters:');
-  const paramStr = formatParameters(result.parameters, opts);
+  const paramStr = formatParameters(result.finalParameters, opts);
   lines.push(`  ${paramStr}`);
 
   // States

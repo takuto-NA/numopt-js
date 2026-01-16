@@ -1,4 +1,3 @@
-import { describe, it, expect } from 'vitest';
 import { levenbergMarquardt } from '../src/core/levenbergMarquardt';
 import type { ResidualFn, JacobianFn } from '../src/core/types';
 import { Matrix } from 'ml-matrix';
@@ -26,7 +25,7 @@ describe('Levenberg-Marquardt Method', () => {
     });
 
     expect(result.converged).toBe(true);
-    expect(Math.abs(result.parameters[0] - 2.0)).toBeLessThan(1e-3);
+    expect(Math.abs(result.finalParameters[0] - 2.0)).toBeLessThan(1e-3);
     // Allow slightly larger tolerance for numerical errors
     expect(result.finalCost).toBeLessThan(1e-5);
     expect(result.finalResidualNorm).toBeLessThan(1e-3);
@@ -41,7 +40,7 @@ describe('Levenberg-Marquardt Method', () => {
     });
 
     expect(result.converged).toBe(true);
-    expect(Math.abs(result.parameters[0] - 2.0)).toBeLessThan(1e-3);
+    expect(Math.abs(result.finalParameters[0] - 2.0)).toBeLessThan(1e-3);
   });
 
   /**
@@ -67,7 +66,7 @@ describe('Levenberg-Marquardt Method', () => {
 
     expect(result.converged).toBe(true);
     // Should converge to x = 2 (positive solution)
-    expect(Math.abs(result.parameters[0] - 2.0)).toBeLessThan(1e-3);
+    expect(Math.abs(result.finalParameters[0] - 2.0)).toBeLessThan(1e-3);
     expect(result.finalCost).toBeLessThan(1e-6);
   });
 
@@ -98,7 +97,7 @@ describe('Levenberg-Marquardt Method', () => {
 
     expect(result.converged).toBe(true);
     // Check that solution satisfies constraints approximately
-    const residual = residual2D(result.parameters);
+    const residual = residual2D(result.finalParameters);
     const residualNorm = Math.sqrt(residual[0] * residual[0] + residual[1] * residual[1]);
     expect(residualNorm).toBeLessThan(1e-3);
   });
@@ -155,7 +154,7 @@ describe('Levenberg-Marquardt Method', () => {
 
     expect(result.converged).toBe(false);
     expect(result.iterations).toBe(5);
-    expect(result.parameters).toBeInstanceOf(Float64Array);
+    expect(result.finalParameters).toBeInstanceOf(Float64Array);
     // Should return best solution found, not necessarily the last one
     expect(result.finalCost).toBeLessThanOrEqual(
       nonlinearResidual(initialParams)[0] * nonlinearResidual(initialParams)[0]

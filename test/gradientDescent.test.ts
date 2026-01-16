@@ -1,4 +1,3 @@
-import { describe, it, expect } from 'vitest';
 import { gradientDescent } from '../src/core/gradientDescent';
 import type { CostFn, GradientFn } from '../src/core/types';
 
@@ -24,7 +23,7 @@ describe('Gradient Descent', () => {
     });
 
     expect(result.converged).toBe(true);
-    expect(Math.abs(result.parameters[0])).toBeLessThan(1e-3);
+    expect(Math.abs(result.finalParameters[0])).toBeLessThan(1e-3);
     expect(result.finalCost).toBeLessThan(1e-6);
   });
 
@@ -38,7 +37,7 @@ describe('Gradient Descent', () => {
     });
 
     expect(result.converged).toBe(true);
-    expect(Math.abs(result.parameters[0])).toBeLessThan(1e-3);
+    expect(Math.abs(result.finalParameters[0])).toBeLessThan(1e-3);
   });
 
   it('should use line search when enabled', () => {
@@ -74,8 +73,8 @@ describe('Gradient Descent', () => {
     });
 
     expect(result.converged).toBe(true);
-    expect(Math.abs(result.parameters[0])).toBeLessThan(1e-3);
-    expect(Math.abs(result.parameters[1])).toBeLessThan(1e-3);
+    expect(Math.abs(result.finalParameters[0])).toBeLessThan(1e-3);
+    expect(Math.abs(result.finalParameters[1])).toBeLessThan(1e-3);
     expect(result.finalCost).toBeLessThan(1e-6);
   });
 
@@ -121,7 +120,7 @@ describe('Gradient Descent', () => {
 
     expect(result.converged).toBe(false);
     expect(result.iterations).toBe(5);
-    expect(result.parameters).toBeInstanceOf(Float64Array);
+    expect(result.finalParameters).toBeInstanceOf(Float64Array);
   });
 });
 

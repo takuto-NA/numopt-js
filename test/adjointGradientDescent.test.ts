@@ -1,4 +1,3 @@
-import { describe, it, expect } from 'vitest';
 import { adjointGradientDescent } from '../src/core/adjointGradientDescent';
 import type { ConstrainedCostFn, ConstraintFn, ConstrainedResidualFn } from '../src/core/types';
 import { Matrix } from 'ml-matrix';
@@ -40,12 +39,12 @@ describe('Adjoint Gradient Descent', () => {
     );
 
     expect(result.converged).toBe(true);
-    expect(Math.abs(result.parameters[0] - 0.5)).toBeLessThan(1e-3);
+    expect(Math.abs(result.finalParameters[0] - 0.5)).toBeLessThan(1e-3);
     expect(Math.abs(result.finalStates[0] - 0.5)).toBeLessThan(1e-3);
     expect(Math.abs(result.finalCost - 0.5)).toBeLessThan(1e-3);
     
     // Check constraint satisfaction
-    const constraint = simpleConstraint(result.parameters, result.finalStates);
+    const constraint = simpleConstraint(result.finalParameters, result.finalStates);
     expect(vectorNorm(constraint)).toBeLessThan(1e-3);
   });
 
@@ -69,7 +68,7 @@ describe('Adjoint Gradient Descent', () => {
     );
 
     expect(result.converged).toBe(true);
-    expect(Math.abs(result.parameters[0] - 0.5)).toBeLessThan(1e-3);
+    expect(Math.abs(result.finalParameters[0] - 0.5)).toBeLessThan(1e-3);
   });
 
   it('should work with fixed step size', () => {
@@ -133,7 +132,7 @@ describe('Adjoint Gradient Descent', () => {
     // Note: When initial values don't satisfy constraints, linear approximation
     // may not perfectly satisfy constraints, but the algorithm should still run
     expect(result.finalConstraintNorm).toBeDefined();
-    expect(result.parameters).toBeInstanceOf(Float64Array);
+    expect(result.finalParameters).toBeInstanceOf(Float64Array);
     expect(result.finalStates).toBeInstanceOf(Float64Array);
     
     // The algorithm should complete without errors
@@ -172,7 +171,7 @@ describe('Adjoint Gradient Descent', () => {
     expect(result.finalCost).toBeDefined();
     // For overdetermined systems, we verify that the algorithm runs without errors
     // The constraint norm may not be zero due to least squares approximation
-    const finalConstraint = overdeterminedConstraint(result.parameters, result.finalStates);
+    const finalConstraint = overdeterminedConstraint(result.finalParameters, result.finalStates);
     expect(Number.isFinite(vectorNorm(finalConstraint))).toBe(true);
   });
 
@@ -201,7 +200,7 @@ describe('Adjoint Gradient Descent', () => {
 
     expect(result.converged).toBe(true);
     // Constraint should be satisfied
-    const finalConstraint = underdeterminedConstraint(result.parameters, result.finalStates);
+    const finalConstraint = underdeterminedConstraint(result.finalParameters, result.finalStates);
     expect(vectorNorm(finalConstraint)).toBeLessThan(1e-3);
   });
 
@@ -231,7 +230,7 @@ describe('Adjoint Gradient Descent', () => {
     );
 
     expect(result.converged).toBe(true);
-    expect(Math.abs(result.parameters[0] - 0.5)).toBeLessThan(1e-2);
+    expect(Math.abs(result.finalParameters[0] - 0.5)).toBeLessThan(1e-2);
     expect(Math.abs(result.finalStates[0] - 0.5)).toBeLessThan(1e-2);
   });
 
@@ -281,7 +280,7 @@ describe('Adjoint Gradient Descent', () => {
 
     expect(result.converged).toBe(false);
     expect(result.iterations).toBe(5);
-    expect(result.parameters).toBeInstanceOf(Float64Array);
+    expect(result.finalParameters).toBeInstanceOf(Float64Array);
     expect(result.finalStates).toBeInstanceOf(Float64Array);
   });
 
@@ -320,13 +319,13 @@ describe('Adjoint Gradient Descent', () => {
     );
 
     expect(result.converged).toBe(true);
-    expect(Math.abs(result.parameters[0] - 0.5)).toBeLessThan(1e-2);
-    expect(Math.abs(result.parameters[1] - 0.5)).toBeLessThan(1e-2);
+    expect(Math.abs(result.finalParameters[0] - 0.5)).toBeLessThan(1e-2);
+    expect(Math.abs(result.finalParameters[1] - 0.5)).toBeLessThan(1e-2);
     expect(Math.abs(result.finalStates[0] - 0.5)).toBeLessThan(1e-2);
     expect(Math.abs(result.finalStates[1] - 0.5)).toBeLessThan(1e-2);
     
     // Check constraint satisfaction
-    const constraint = constraint2D(result.parameters, result.finalStates);
+    const constraint = constraint2D(result.finalParameters, result.finalStates);
     expect(vectorNorm(constraint)).toBeLessThan(1e-3);
   });
 });

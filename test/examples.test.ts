@@ -1,4 +1,3 @@
-import { describe, it, expect } from 'vitest';
 import { gradientDescent, levenbergMarquardt } from '../src/index';
 import type { CostFn, GradientFn, ResidualFn } from '../src/core/types';
 
@@ -34,8 +33,8 @@ describe('Example Problems', () => {
       });
 
       expect(result.converged).toBe(true);
-      expect(Math.abs(result.parameters[0] - 1.0)).toBeLessThan(0.1);
-      expect(Math.abs(result.parameters[1] - 1.0)).toBeLessThan(0.1);
+      expect(Math.abs(result.finalParameters[0] - 1.0)).toBeLessThan(0.1);
+      expect(Math.abs(result.finalParameters[1] - 1.0)).toBeLessThan(0.1);
     });
   });
 
@@ -102,7 +101,7 @@ describe('Example Problems', () => {
 
       expect(result.converged).toBe(true);
       // Should find approximately a ≈ 2, b ≈ 0
-      expect(Math.abs(result.parameters[0] - 2.0)).toBeLessThan(0.1);
+      expect(Math.abs(result.finalParameters[0] - 2.0)).toBeLessThan(0.1);
       expect(result.finalCost).toBeLessThan(0.1);
     });
   });

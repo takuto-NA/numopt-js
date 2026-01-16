@@ -45,8 +45,8 @@ const result = gaussNewton(initialParameters, residualFunction, {
 printOptimizationResult(result);
 
 // Verify solution
-const residual = residualFunction(result.parameters);
+const residual = residualFunction(result.finalParameters);
 console.log('\nVerification:');
 console.log(`Residual: ${residual[0]} (should be close to 0)`);
-console.log(`x^2 = ${result.parameters[0] * result.parameters[0]} (should be close to 4)`);
+console.log(`x^2 = ${result.finalParameters[0] * result.finalParameters[0]} (should be close to 4)`);
 

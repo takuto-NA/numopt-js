@@ -1,4 +1,3 @@
-import { describe, it, expect } from 'vitest';
 import { constrainedLevenbergMarquardt } from '../src/core/constrainedLevenbergMarquardt';
 import type { ConstrainedResidualFn, ConstraintFn } from '../src/core/types';
 import { Matrix } from 'ml-matrix';
@@ -37,13 +36,13 @@ describe('Constrained Levenberg-Marquardt Method', () => {
     );
 
     expect(result.converged).toBe(true);
-    expect(Math.abs(result.parameters[0] - 0.5)).toBeLessThan(1e-3);
+    expect(Math.abs(result.finalParameters[0] - 0.5)).toBeLessThan(1e-3);
     expect(Math.abs(result.finalStates[0] - 0.5)).toBeLessThan(1e-3);
     expect(result.finalCost).toBeLessThan(1e-5);
     expect(result.finalLambda).toBeGreaterThan(0);
     
     // Check constraint satisfaction
-    const constraint = simpleConstraint(result.parameters, result.finalStates);
+    const constraint = simpleConstraint(result.finalParameters, result.finalStates);
     expect(vectorNorm(constraint)).toBeLessThan(1e-3);
   });
 
@@ -63,7 +62,7 @@ describe('Constrained Levenberg-Marquardt Method', () => {
     );
 
     expect(result.converged).toBe(true);
-    expect(Math.abs(result.parameters[0] - 0.5)).toBeLessThan(1e-2);
+    expect(Math.abs(result.finalParameters[0] - 0.5)).toBeLessThan(1e-2);
   });
 
   it('should work with analytical derivatives', () => {
@@ -88,7 +87,7 @@ describe('Constrained Levenberg-Marquardt Method', () => {
     );
 
     expect(result.converged).toBe(true);
-    expect(Math.abs(result.parameters[0] - 0.5)).toBeLessThan(1e-2);
+    expect(Math.abs(result.finalParameters[0] - 0.5)).toBeLessThan(1e-2);
   });
 
   it('should handle lambda updates correctly', () => {
@@ -131,7 +130,7 @@ describe('Constrained Levenberg-Marquardt Method', () => {
 
     // The algorithm should handle initial constraint violation gracefully
     expect(result.finalConstraintNorm).toBeDefined();
-    expect(result.parameters).toBeInstanceOf(Float64Array);
+    expect(result.finalParameters).toBeInstanceOf(Float64Array);
     expect(result.finalStates).toBeInstanceOf(Float64Array);
   });
 
@@ -206,7 +205,7 @@ describe('Constrained Levenberg-Marquardt Method', () => {
 
     // May converge or not depending on initial conditions
     expect(result.iterations).toBeLessThanOrEqual(3);
-    expect(result.parameters).toBeInstanceOf(Float64Array);
+    expect(result.finalParameters).toBeInstanceOf(Float64Array);
     expect(result.finalStates).toBeInstanceOf(Float64Array);
     // Should return best solution found, not necessarily the last one
     expect(result.finalCost).toBeLessThanOrEqual(

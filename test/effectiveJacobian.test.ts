@@ -1,4 +1,3 @@
-import { describe, it, expect } from 'vitest';
 import { computeEffectiveJacobian } from '../src/core/effectiveJacobian';
 import type { ConstrainedResidualFn, ConstraintFn } from '../src/core/types';
 import { Matrix } from 'ml-matrix';

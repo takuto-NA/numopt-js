@@ -775,7 +775,7 @@ function handleLineSearchFailure(
   return {
     converged: true,
     result: {
-      parameters: currentParameters,
+      finalParameters: currentParameters,
       iterations: iteration,
       converged: false,
       finalCost: currentCost,
@@ -1256,7 +1256,7 @@ function createMaxIterationsResult(
   ]);
 
   return {
-    parameters: currentParameters,
+    finalParameters: currentParameters,
     iterations: maxIterations,
     converged: false,
     finalCost: currentCost,

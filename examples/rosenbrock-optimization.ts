@@ -68,7 +68,7 @@ printGradientDescentResult(result1, {
   elapsedTimeMs: elapsedTime1
 });
 console.log('  Error from true minimum:', 
-  Math.sqrt((result1.parameters[0] - 1)**2 + (result1.parameters[1] - 1)**2).toFixed(10));
+  Math.sqrt((result1.finalParameters[0] - 1)**2 + (result1.finalParameters[1] - 1)**2).toFixed(10));
 
 // Test with numerical gradient
 console.log('\n--- Using Numerical Gradient (Finite Differences) ---');
@@ -101,5 +101,5 @@ printGradientDescentResult(result2, {
   elapsedTimeMs: elapsedTime2
 });
 console.log('  Error from true minimum:', 
-  Math.sqrt((result2.parameters[0] - 1)**2 + (result2.parameters[1] - 1)**2).toFixed(10));
+  Math.sqrt((result2.finalParameters[0] - 1)**2 + (result2.finalParameters[1] - 1)**2).toFixed(10));
 
