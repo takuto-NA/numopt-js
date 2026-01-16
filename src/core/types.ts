@@ -340,7 +340,13 @@ export interface AdjointGradientDescentOptions extends GradientDescentOptions {
    * Analytical partial derivative of constraint function with respect to states.
    * If provided, this will be used instead of numerical differentiation.
    * Returns a Matrix of size (constraintCount × stateCount).
-   * Must be square (constraintCount == stateCount) for the adjoint method.
+   *
+   * The adjoint method supports both square and non-square constraint Jacobians:
+   * - If square, it solves (∂c/∂x)^T λ = rhs directly.
+   * - If non-square, it solves the system in a least-squares sense.
+   *
+   * Note: Non-square (or ill-conditioned) Jacobians can be numerically sensitive.
+   * Consider scaling/normalizing your states and constraints if you see instability.
    */
   dcdx?: (parameters: Float64Array, states: Float64Array) => Matrix;
 
