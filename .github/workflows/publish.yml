@@ -19,7 +19,6 @@ jobs:
       uses: actions/setup-node@v6
       with:
         node-version: '20.x'
-        registry-url: https://registry.npmjs.org
         cache: 'npm'
 
     - name: Upgrade npm (Trusted Publishing requires newer npm)
@@ -27,6 +26,11 @@ jobs:
         npm --version
         npm install -g npm@^11.5.1
         npm --version
+
+    - name: Verify npm registry config
+      run: |
+        npm config get registry
+        npm config list --location=project || true
 
     - name: Install dependencies
       run: npm ci
