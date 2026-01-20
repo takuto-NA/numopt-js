@@ -14,9 +14,11 @@
 
 // Core algorithms
 export { gradientDescent } from './core/gradientDescent.js';
-export { backtrackingLineSearch } from './core/lineSearch.js';
+export { backtrackingLineSearch, strongWolfeLineSearch } from './core/lineSearch.js';
 export { gaussNewton } from './core/gaussNewton.js';
 export { levenbergMarquardt } from './core/levenbergMarquardt.js';
+export { bfgs } from './core/bfgs.js';
+export { lbfgs } from './core/lbfgs.js';
 export { adjointGradientDescent } from './core/adjointGradientDescent.js';
 export { constrainedGaussNewton } from './core/constrainedGaussNewton.js';
 export { constrainedLevenbergMarquardt } from './core/constrainedLevenbergMarquardt.js';
@@ -46,9 +48,12 @@ export type {
   CommonOptimizationOptions,
   GradientDescentOptions,
   LineSearchOptions,
+  StrongWolfeLineSearchOptions,
   NumericalDifferentiationOptions,
   GaussNewtonOptions,
   LevenbergMarquardtOptions,
+  BfgsOptions,
+  LbfgsOptions,
   AdjointGradientDescentOptions,
   ConstrainedGaussNewtonOptions,
   ConstrainedLevenbergMarquardtOptions,

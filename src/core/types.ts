@@ -175,6 +175,106 @@ export interface LineSearchOptions {
 }
 
 /**
+ * Options for Strong Wolfe line search (Nocedal & Wright, 2nd ed., Algorithm 3.5).
+ *
+ * This line search aims to satisfy both:
+ * - sufficient decrease (Armijo) and
+ * - curvature condition (Strong Wolfe)
+ *
+ * Strong Wolfe is commonly used with quasi-Newton methods (BFGS / L-BFGS) because
+ * it tends to produce steps that satisfy the curvature condition \(s^T y > 0\),
+ * which helps keep Hessian approximations well-behaved.
+ */
+export interface StrongWolfeLineSearchOptions {
+  /**
+   * Initial step size to try.
+   * If not provided, the initial step size is scaled by the gradient norm:
+   * α₀ = 1.0 / ||∇f(x)||
+   */
+  initialStepSize?: number;
+
+  /**
+   * Armijo parameter c1 for sufficient decrease condition.
+   * Typical value: 1e-4.
+   */
+  wolfeC1?: number;
+
+  /**
+   * Curvature parameter c2 for Strong Wolfe condition.
+   * Typical value: 0.9.
+   */
+  wolfeC2?: number;
+
+  /**
+   * Maximum number of outer iterations (bracketing phase).
+   * Default: 25
+   */
+  maxIterations?: number;
+
+  /**
+   * Maximum number of zoom iterations (within a bracket).
+   * Default: 25
+   */
+  maxZoomIterations?: number;
+
+  /**
+   * Growth factor for expanding the trial step size when still in the bracketing phase.
+   * Default: 2.0
+   */
+  stepSizeGrowthFactor?: number;
+}
+
+/**
+ * Options for L-BFGS (limited-memory BFGS).
+ */
+export interface LbfgsOptions extends CommonOptimizationOptions {
+  /**
+   * Maximum number of correction pairs to store.
+   * Default: 10
+   */
+  historySize?: number;
+
+  /**
+   * Whether to use Strong Wolfe line search.
+   * Default: true
+   */
+  useLineSearch?: boolean;
+
+  /**
+   * Options passed to Strong Wolfe line search.
+   */
+  lineSearchOptions?: StrongWolfeLineSearchOptions;
+
+  /**
+   * Fixed step size used only when useLineSearch is false.
+   * Default: 1.0
+   */
+  stepSize?: number;
+}
+
+/**
+ * Options for dense BFGS (stores a full inverse Hessian approximation).
+ */
+export interface BfgsOptions extends CommonOptimizationOptions {
+  /**
+   * Whether to use Strong Wolfe line search.
+   * Default: true
+   */
+  useLineSearch?: boolean;
+
+  /**
+   * Options passed to Strong Wolfe line search.
+   */
+  lineSearchOptions?: StrongWolfeLineSearchOptions;
+
+  /**
+   * Fixed step size used only when useLineSearch is false.
+   * Default: 1.0
+   */
+  stepSize?: number;
+}
+
+/**
  * Options for numerical differentiation.
  */
 export interface NumericalDifferentiationOptions {
