@@ -1,6 +1,9 @@
 name: npm publish (trusted)
 
 on:
+  push:
+    tags:
+      - 'v*'
   release:
     types: [published]
   workflow_dispatch:
@@ -21,7 +24,7 @@ jobs:
     - name: Checkout publish ref
       uses: actions/checkout@v4
       with:
-        ref: ${{ github.event_name == 'release' && github.event.release.tag_name || inputs.publish_ref }}
+        ref: ${{ github.event_name == 'release' && github.event.release.tag_name || github.event_name == 'push' && github.ref || inputs.publish_ref }}
 
     - name: Use Node.js
       uses: actions/setup-node@v6
@@ -49,7 +52,7 @@ jobs:
 
     - name: Verify ref matches package.json version
       run: |
-        node -e "const v=require('./package.json').version; const ref='${{ github.event_name == 'release' && github.event.release.tag_name || inputs.publish_ref }}'.replace(/^refs\\//,'').replace(/^tags\\//,''); const tag=ref.replace(/^v/,''); if(v!==tag){console.error(`package.json version ${v} does not match ref ${ref}`); process.exit(1);} console.log('Version OK:', v);"
+        node -e "const v=require('./package.json').version; const ref='${{ github.event_name == 'release' && github.event.release.tag_name || github.event_name == 'push' && github.ref || inputs.publish_ref }}'.replace(/^refs\\//,'').replace(/^tags\\//,''); const tag=ref.replace(/^v/,''); if(v!==tag){console.error(`package.json version ${v} does not match ref ${ref}`); process.exit(1);} console.log('Version OK:', v);"
 
     - name: Run tests
       run: npm test
