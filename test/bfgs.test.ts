@@ -26,6 +26,18 @@ describe('BFGS', () => {
     expect(result.finalCost).toBeLessThan(1e-12);
   });
 
+  it('should converge immediately when starting at the optimum (zero gradient)', () => {
+    const initialParameters = new Float64Array([0.0]);
+    const result = bfgs(initialParameters, quadraticCost, quadraticGradient, {
+      maxIterations: 10,
+      tolerance: 1e-12
+    });
+
+    expect(result.converged).toBe(true);
+    expect(result.finalCost).toBeLessThan(1e-24);
+    expect(Math.abs(result.finalParameters[0])).toBeLessThan(1e-12);
+  });
+
   /**
    * Rosenbrock function: f(x, y) = (1-x)^2 + 100*(y-x^2)^2
    * Minimum at (1, 1)
