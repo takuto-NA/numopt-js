@@ -28,7 +28,9 @@ const NEGATIVE_GRADIENT_DIRECTION = -1.0;
 const MINIMUM_CURVATURE_THRESHOLD = 1e-10;
 
 function createIdentityMatrix(dimension: number): Matrix {
-  return Matrix.eye(dimension);
+  // NOTE: Provide both dimensions to stay compatible with our (older) local typing history
+  // and with ml-matrix's API where `columns` is optional.
+  return Matrix.eye(dimension, dimension);
 }
 
 function multiplyMatrixVector(matrix: Matrix, vector: Float64Array): Float64Array {
