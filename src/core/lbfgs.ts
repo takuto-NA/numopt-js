@@ -70,7 +70,11 @@ function computeLbfgsSearchDirection(currentGradient: Float64Array, history: Lbf
     return scaleVector(currentGradient, NEGATIVE_GRADIENT_DIRECTION);
   }
 
-  let qVector = new Float64Array(currentGradient);
+  // NOTE: Avoid `new Float64Array(existingFloat64Array)` because TS can infer
+  // `ArrayBufferLike` for the resulting buffer, which conflicts with stricter lib types.
+  const qVectorInitial = new Float64Array(currentGradient.length);
+  qVectorInitial.set(currentGradient);
+  let qVector: Float64Array = qVectorInitial;
   const alphaCoefficients = new Array<number>(historyLength);
 
   for (let index = historyLength - 1; index >= 0; index--) {
