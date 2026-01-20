@@ -11,6 +11,9 @@ A flexible numerical optimization library for JavaScript/TypeScript that works s
 
 - **Gradient Descent**: Simple, robust optimization algorithm with line search support
 - **Line Search**: Backtracking line search with Armijo condition for optimal step sizes (following Nocedal & Wright, *Numerical Optimization* (2nd ed.), Algorithm 3.1)
+- **Strong Wolfe Line Search**: Robust line search satisfying Strong Wolfe conditions (recommended for quasi-Newton methods)
+- **BFGS**: Quasi-Newton method that updates a dense inverse Hessian approximation (unconstrained smooth optimization)
+- **L-BFGS**: Memory-efficient quasi-Newton method (two-loop recursion) for larger parameter counts
 - **Gauss-Newton Method**: Efficient method for nonlinear least squares problems
 - **Levenberg-Marquardt Algorithm**: Robust algorithm combining Gauss-Newton with damping
 - **Constrained Gauss-Newton**: Efficient constrained nonlinear least squares using effective Jacobian
@@ -35,6 +38,7 @@ npm install numopt-js
 ## Start Here (Pick Your Path)
 
 - **Minimize a scalar cost** (smooth unconstrained optimization): use **Gradient Descent** (`cost: (p) => number`, `grad: (p) => Float64Array`). Start at [Gradient Descent](#gradient-descent).
+- **Minimize a scalar cost (faster than GD for many problems)**: use **BFGS** or **L-BFGS** (`cost: (p) => number`, `grad: (p) => Float64Array`). Start at [BFGS / L-BFGS](#bfgs--l-bfgs).
 - **Fit a model with residuals** (nonlinear least squares): use **Levenberg–Marquardt** or **Gauss–Newton** (`residual: (p) => Float64Array`, optional `jacobian: (p) => Matrix`). Start at [Levenberg-Marquardt](#levenberg-marquardt-nonlinear-least-squares).
 - **Equality-constrained problems** \(c(p, x) = 0\): use **Adjoint** / **Constrained GN/LM** (`constraint: (p, x) => Float64Array`). Start at [Adjoint Method](#adjoint-method-constrained-optimization).
 - **Browser usage**: start at [Browser Usage](#browser-usage).
@@ -52,6 +56,7 @@ Most algorithms return a `result` with these fields:
 
 - **Common (all algorithms)**: `finalParameters`, `converged`, `iterations`, `finalCost`
 - **Gradient Descent**: `finalGradientNorm`, `usedLineSearch`
+- **BFGS / L-BFGS**: `finalGradientNorm`
 - **Gauss-Newton / Levenberg–Marquardt**: `finalResidualNorm` (and LM also has `finalLambda`)
 - **Constrained algorithms / Adjoint**: `finalStates`, `finalConstraintNorm`
 
@@ -78,6 +83,30 @@ const result = gradientDescent(new Float64Array([5, -3]), cost, grad, {
 });
 
 console.log(result.finalParameters);
+```
+
+## BFGS / L-BFGS
+
+Use these for smooth unconstrained problems when you can provide a gradient.
+
+```js
+import { bfgs, lbfgs } from 'numopt-js';
+
+const cost = (params) => (params[0] - 1) ** 2 + (params[1] + 2) ** 2;
+const grad = (params) => new Float64Array([2 * (params[0] - 1), 2 * (params[1] + 2)]);
+
+const bfgsResult = bfgs(new Float64Array([10, 10]), cost, grad, {
+  maxIterations: 200,
+  tolerance: 1e-8
+});
+
+const lbfgsResult = lbfgs(new Float64Array([10, 10]), cost, grad, {
+  maxIterations: 200,
+  tolerance: 1e-8,
+  historySize: 10
+});
+
+console.log(bfgsResult.finalParameters, lbfgsResult.finalParameters);
 ```
 
 Run:
