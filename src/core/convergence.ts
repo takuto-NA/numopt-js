@@ -44,8 +44,12 @@ export function checkGradientConvergence(
   tolerance: number,
   iteration: number
 ): boolean {
-  // Skip convergence check on first iteration (no step taken yet)
-  return iteration > 0 && gradientNorm < tolerance;
+  // NOTE:
+  // If the initial point is already a stationary point (||∇f(x0)|| ≈ 0),
+  // optimizers should report convergence immediately. Skipping iteration 0
+  // can incorrectly trigger line-search failures (e.g., zero search direction).
+  void iteration; // kept for backward-compatible signature
+  return gradientNorm < tolerance;
 }
 
 /**
@@ -57,8 +61,10 @@ export function checkStepSizeConvergence(
   tolerance: number,
   iteration: number
 ): boolean {
-  // Skip convergence check on first iteration (no step taken yet)
-  return iteration > 0 && stepNorm < tolerance;
+  // A tiny step on the first iteration is still a valid convergence signal
+  // (e.g., already near the optimum).
+  void iteration; // kept for backward-compatible signature
+  return stepNorm < tolerance;
 }
 
 /**
@@ -70,7 +76,8 @@ export function checkResidualConvergence(
   tolerance: number,
   iteration: number
 ): boolean {
-  // Skip convergence check on first iteration (no step taken yet)
-  return iteration > 0 && residualNorm < tolerance;
+  // If the initial residual is already small, we should converge immediately.
+  void iteration; // kept for backward-compatible signature
+  return residualNorm < tolerance;
 }
 
