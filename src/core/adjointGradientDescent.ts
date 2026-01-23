@@ -81,19 +81,22 @@ const MAX_REGULARIZATION_RETRY_ATTEMPTS = 20; // Maximum number of retry attempt
 const REGULARIZATION_MULTIPLIER = 10; // Multiplier for increasing regularization on each retry
 const FALLBACK_REGULARIZATION = 1e-6; // Fallback regularization value when current regularization is zero
 const MAX_MATRIX_DIMENSION_FOR_SVD_DIAGNOSTICS = 300; // Maximum matrix dimension for expensive SVD diagnostics
-const FLOATING_POINT_EQUALITY_TOLERANCE = 1e-15; // Tolerance for floating point equality comparisons
 const INITIAL_ATTEMPT_NUMBER = 1; // Initial attempt number for logging
 
-/**
- * Checks if a function is a residual function by calling it and checking return type.
- */
-function isResidualFunction(
+type CostOrResidualEval =
+  | { kind: 'cost'; cost: number }
+  | { kind: 'residual'; residual: Float64Array };
+
+function evaluateCostOrResidual(
   costFunction: ConstrainedCostFn | ConstrainedResidualFn,
   parameters: Float64Array,
   states: Float64Array
-): costFunction is ConstrainedResidualFn {
+): CostOrResidualEval {
   const result = costFunction(parameters, states);
-  return result instanceof Float64Array;
+  if (result instanceof Float64Array) {
+    return { kind: 'residual', residual: result };
+  }
+  return { kind: 'cost', cost: result };
 }
 
 /**
@@ -105,13 +108,13 @@ function computeCost(
   parameters: Float64Array,
   states: Float64Array
 ): number {
-  if (isResidualFunction(costFunction, parameters, states)) {
-    const residual = costFunction(parameters, states);
-    const residualNorm = vectorNorm(residual);
+  const evaluation = evaluateCostOrResidual(costFunction, parameters, states);
+  if (evaluation.kind === 'residual') {
+    const residualNorm = vectorNorm(evaluation.residual);
     return RESIDUAL_COST_COEFFICIENT * residualNorm * residualNorm;
   }
-  
-  return costFunction(parameters, states);
+
+  return evaluation.cost;
 }
 
 /**
@@ -134,7 +137,9 @@ function computeDfdp(
   parameters: Float64Array,
   states: Float64Array,
   costFunction: ConstrainedCostFn | ConstrainedResidualFn,
-  options: AdjointGradientDescentOptions
+  options: AdjointGradientDescentOptions,
+  isResidualMode: boolean,
+  residualAtPoint?: Float64Array
 ): Float64Array {
   const stepSizeP = options.stepSizeP ?? DEFAULT_STEP_SIZE_P;
   
@@ -142,14 +147,18 @@ function computeDfdp(
     return options.dfdp(parameters, states);
   }
   
-  const isResidual = isResidualFunction(costFunction, parameters, states);
-  if (isResidual) {
-    const derivativeResidualPartialP = finiteDiffResidualPartialP(parameters, states, costFunction, { stepSize: stepSizeP });
-    const residual = costFunction(parameters, states);
+  if (isResidualMode) {
+    const derivativeResidualPartialP = finiteDiffResidualPartialP(
+      parameters,
+      states,
+      costFunction as ConstrainedResidualFn,
+      { stepSize: stepSizeP }
+    );
+    const residual = residualAtPoint ?? (costFunction as ConstrainedResidualFn)(parameters, states);
     return computeGradientFromResidual(residual, derivativeResidualPartialP);
   }
   
-  return finiteDiffPartialP(parameters, states, costFunction, { stepSize: stepSizeP });
+  return finiteDiffPartialP(parameters, states, costFunction as ConstrainedCostFn, { stepSize: stepSizeP });
 }
 
 /**
@@ -159,7 +168,9 @@ function computeDfdx(
   parameters: Float64Array,
   states: Float64Array,
   costFunction: ConstrainedCostFn | ConstrainedResidualFn,
-  options: AdjointGradientDescentOptions
+  options: AdjointGradientDescentOptions,
+  isResidualMode: boolean,
+  residualAtPoint?: Float64Array
 ): Float64Array {
   const stepSizeX = options.stepSizeX ?? DEFAULT_STEP_SIZE_X;
   
@@ -167,14 +178,18 @@ function computeDfdx(
     return options.dfdx(parameters, states);
   }
   
-  const isResidual = isResidualFunction(costFunction, parameters, states);
-  if (isResidual) {
-    const derivativeResidualPartialX = finiteDiffResidualPartialX(parameters, states, costFunction, { stepSize: stepSizeX });
-    const residual = costFunction(parameters, states);
+  if (isResidualMode) {
+    const derivativeResidualPartialX = finiteDiffResidualPartialX(
+      parameters,
+      states,
+      costFunction as ConstrainedResidualFn,
+      { stepSize: stepSizeX }
+    );
+    const residual = residualAtPoint ?? (costFunction as ConstrainedResidualFn)(parameters, states);
     return computeGradientFromResidual(residual, derivativeResidualPartialX);
   }
   
-  return finiteDiffPartialX(parameters, states, costFunction, { stepSize: stepSizeX });
+  return finiteDiffPartialX(parameters, states, costFunction as ConstrainedCostFn, { stepSize: stepSizeX });
 }
 
 /**
@@ -185,7 +200,8 @@ function computePartialDerivatives(
   states: Float64Array,
   costFunction: ConstrainedCostFn | ConstrainedResidualFn,
   constraintFunction: ConstraintFn,
-  options: AdjointGradientDescentOptions
+  options: AdjointGradientDescentOptions,
+  isResidualMode: boolean
 ): {
   dfdp: Float64Array;
   dfdx: Float64Array;
@@ -195,8 +211,9 @@ function computePartialDerivatives(
   const stepSizeP = options.stepSizeP ?? DEFAULT_STEP_SIZE_P;
   const stepSizeX = options.stepSizeX ?? DEFAULT_STEP_SIZE_X;
   
-  const dfdp = computeDfdp(parameters, states, costFunction, options);
-  const dfdx = computeDfdx(parameters, states, costFunction, options);
+  const residualAtPoint = isResidualMode ? (costFunction as ConstrainedResidualFn)(parameters, states) : undefined;
+  const dfdp = computeDfdp(parameters, states, costFunction, options, isResidualMode, residualAtPoint);
+  const dfdx = computeDfdx(parameters, states, costFunction, options, isResidualMode, residualAtPoint);
 
   // Compute ∂c/∂p: needed for adjoint gradient computation (df/dp = ∂f/∂p - λ^T ∂c/∂p)
   const dcdp = options.dcdp
@@ -263,6 +280,21 @@ function updateRegularizationWithMultiplier(currentRegularization: number): numb
   return currentRegularization > 0 ? currentRegularization * REGULARIZATION_MULTIPLIER : FALLBACK_REGULARIZATION;
 }
 
+function computeSvd(matrix: Matrix): any {
+  // `ml-matrix` emits a warning when computing SVD with more columns than rows unless
+  // `autoTranspose` is enabled. Since we only use SVD for diagnostics/logging here,
+  // always enable `autoTranspose` to keep output clean without changing singular values.
+  //
+  // Note: `SingularValueDecomposition` exists at runtime but may be missing/partial in TS typings,
+  // so we treat it as `any` and support both ctor signatures (with or without options).
+  const SVD: any = SingularValueDecomposition as any;
+  try {
+    return new SVD(matrix, { autoTranspose: true });
+  } catch {
+    return new SVD(matrix);
+  }
+}
+
 function computeSvdDiagnostics(
   matrix: Matrix
 ): { sigmaMax: number; sigmaMin: number; condEst: number; rankEst: number } | undefined {
@@ -270,7 +302,7 @@ function computeSvdDiagnostics(
     return undefined;
   }
   try {
-    const svd = new SingularValueDecomposition(matrix);
+    const svd = computeSvd(matrix);
     const singularValues = svd.diagonal;
     const sigmaMax = Math.max(...singularValues);
     const sigmaMin = Math.min(...singularValues);
@@ -294,6 +326,16 @@ function logAdjointDiagnostics(
   error?: unknown,
   svdDiagnostics?: { sigmaMax: number; sigmaMin: number; condEst: number; rankEst: number }
 ): void {
+  if (level === 'warn') {
+    if (!logger.isEnabled('WARN')) {
+      return;
+    }
+  } else {
+    if (!logger.isEnabled('DEBUG')) {
+      return;
+    }
+  }
+
   const matrixStats = computeMatrixDiagnostics(dcdx);
   const rightHandSideStats = computeVectorDiagnostics(rightHandSide);
   const details: Array<{ key: string; value: number | string }> = [
@@ -350,7 +392,7 @@ function logSvdDiagnosticsForSmallMatrix(matrix: Matrix, logger: Logger): void {
     return;
   }
   try {
-    const svd = new SingularValueDecomposition(matrix);
+    const svd = computeSvd(matrix);
     const singularValues = svd.diagonal;
     const maxSingularValue = Math.max(...singularValues);
     const minSingularValue = Math.min(...singularValues);
@@ -405,30 +447,42 @@ function solveAdjointEquation(
   const baseRegularization = (globalThis as any).__ADJOINT_REGULARIZATION__ ?? DEFAULT_REGULARIZATION;
   let regularization = baseRegularization;
   let lastError: unknown;
-  const svdDiagnostics = computeSvdDiagnostics(dcdx);
+
+  // Avoid expensive diagnostics (SVD + full matrix scans) unless they will actually be logged.
+  const wantDebug = logger.isEnabled('DEBUG');
+  const wantWarn = logger.isEnabled('WARN');
+  const wantDiagnostics = wantDebug || wantWarn;
+  const svdDiagnostics = wantDiagnostics ? computeSvdDiagnostics(dcdx) : undefined;
   const warnAboutCondition =
+    wantWarn &&
     dcdx.rows === dcdx.columns &&
     svdDiagnostics !== undefined &&
     svdDiagnostics.condEst > CONDITION_WARNING_THRESHOLD;
 
   // If Jacobian is numerically singular, seed a tiny regularization up front.
-  if (svdDiagnostics && (!isFinite(svdDiagnostics.condEst) || svdDiagnostics.rankEst === 0 || svdDiagnostics.sigmaMin === 0)) {
+  // Only do this when diagnostics are computed; otherwise rely on retry logic below.
+  if (
+    svdDiagnostics &&
+    (!isFinite(svdDiagnostics.condEst) || svdDiagnostics.rankEst === 0 || svdDiagnostics.sigmaMin === 0)
+  ) {
     regularization = Math.max(regularization, AUTO_REGULARIZATION);
   }
 
-  logAdjointDiagnostics(
-    dcdx,
-    dfdx,
-    logger,
-    warnAboutCondition
-      ? 'Adjoint Jacobian appears ill-conditioned before solve'
-      : 'Adjoint Jacobian diagnostics before solve',
-    warnAboutCondition ? 'warn' : 'debug',
-    INITIAL_ATTEMPT_NUMBER,
-    regularization,
-    undefined,
-    svdDiagnostics
-  );
+  if (wantDiagnostics) {
+    logAdjointDiagnostics(
+      dcdx,
+      dfdx,
+      logger,
+      warnAboutCondition
+        ? 'Adjoint Jacobian appears ill-conditioned before solve'
+        : 'Adjoint Jacobian diagnostics before solve',
+      warnAboutCondition ? 'warn' : 'debug',
+      INITIAL_ATTEMPT_NUMBER,
+      regularization,
+      undefined,
+      svdDiagnostics
+    );
+  }
 
   for (let attempt = 0; attempt < MAX_REGULARIZATION_RETRY_ATTEMPTS; attempt++) {
     try {
@@ -436,17 +490,19 @@ function solveAdjointEquation(
     } catch (error) {
       lastError = error;
       regularization = updateRegularizationWithMultiplier(regularization);
-      logAdjointDiagnostics(
-        dcdx,
-        dfdx,
-        logger,
-        'solveAdjointEquation failed, retrying with higher regularization',
-        'warn',
-        attempt + 1,
-        regularization,
-        error,
-        svdDiagnostics
-      );
+      if (logger.isEnabled('WARN')) {
+        logAdjointDiagnostics(
+          dcdx,
+          dfdx,
+          logger,
+          'solveAdjointEquation failed, retrying with higher regularization',
+          'warn',
+          attempt + 1,
+          regularization,
+          error,
+          svdDiagnostics
+        );
+      }
     }
   }
   throw lastError instanceof Error ? lastError : new Error(String(lastError));
@@ -520,6 +576,7 @@ function createCostFunctionWrapper(
   constraintFunction: ConstraintFn,
   options: AdjointGradientDescentOptions,
   logger: Logger,
+  isResidualMode: boolean,
   cachedPartials?: { dcdx: Matrix; dcdp: Matrix }
 ): (params: Float64Array) => number {
   // Pre-compute partial derivatives once if not provided
@@ -528,7 +585,8 @@ function createCostFunctionWrapper(
     currentStates,
     costFunction,
     constraintFunction,
-    options
+    options,
+    isResidualMode
   );
   const { dcdx, dcdp } = partials;
 
@@ -539,75 +597,6 @@ function createCostFunctionWrapper(
     const deltaP = subtractVectors(params, currentParameters);
     const newStates = updateStates(currentStates, dcdx, dcdp, deltaP, logger);
     return computeCost(costFunction, params, newStates);
-  };
-}
-
-/**
- * Checks if two parameter arrays are equal within floating point tolerance.
- * Used to avoid redundant gradient computation when line search evaluates at the starting point.
- */
-function areParametersEqual(
-  parameters1: Float64Array,
-  parameters2: Float64Array
-): boolean {
-  if (parameters1.length !== parameters2.length) {
-    return false;
-  }
-  for (let i = 0; i < parameters1.length; i++) {
-    if (Math.abs(parameters1[i] - parameters2[i]) > FLOATING_POINT_EQUALITY_TOLERANCE) {
-      return false;
-    }
-  }
-  return true;
-}
-
-/**
- * Creates a gradient function wrapper for line search.
- * For each trial parameter, updates states and computes gradient at that point.
- * Uses pre-computed currentGradient for current point to ensure consistency.
- */
-function createGradientFunctionWrapper(
-  currentParameters: Float64Array,
-  currentStates: Float64Array,
-  currentGradient: Float64Array,
-  costFunction: ConstrainedCostFn | ConstrainedResidualFn,
-  constraintFunction: ConstraintFn,
-  options: AdjointGradientDescentOptions,
-  logger: Logger,
-  cachedPartials?: { dfdp: Float64Array; dfdx: Float64Array; dcdp: Matrix; dcdx: Matrix }
-): (_params: Float64Array) => Float64Array {
-  // Pre-compute partial derivatives once for state updates
-  const currentPartials = cachedPartials ?? computePartialDerivatives(
-    currentParameters,
-    currentStates,
-    costFunction,
-    constraintFunction,
-    options
-  );
-  const { dcdx: currentDcdx, dcdp: currentDcdp } = currentPartials;
-
-  return (trialParams: Float64Array): Float64Array => {
-    // Return pre-computed gradient if parameters haven't changed to avoid redundant computation.
-    // Line search evaluates gradient at the starting point for direction derivative calculation.
-    if (areParametersEqual(trialParams, currentParameters)) {
-      return new Float64Array(currentGradient);
-    }
-    
-    // For different trial parameters, update states to maintain constraints and compute gradient.
-    // We use linear approximation for efficiency: solving full nonlinear constraints for each trial would be too slow.
-    const deltaP = subtractVectors(trialParams, currentParameters);
-    const trialStates = updateStates(currentStates, currentDcdx, currentDcdp, deltaP, logger);
-    
-    // Compute gradient at trial point to evaluate search direction quality in line search.
-    const trialPartials = computePartialDerivatives(
-      trialParams,
-      trialStates,
-      costFunction,
-      constraintFunction,
-      options
-    );
-    const lambda = solveAdjointEquation(trialPartials.dcdx, trialPartials.dfdx, logger);
-    return computeAdjointGradient(trialPartials.dfdp, lambda, trialPartials.dcdp);
   };
 }
 
@@ -624,6 +613,7 @@ function determineStepSize(
   fixedStepSize: number | undefined,
   options: AdjointGradientDescentOptions,
   logger: Logger,
+  isResidualMode: boolean,
   cachedPartials?: { dfdp: Float64Array; dfdx: Float64Array; dcdp: Matrix; dcdx: Matrix }
 ): { stepSize: number; usedLineSearch: boolean } {
   if (!useLineSearch || fixedStepSize !== undefined) {
@@ -636,7 +626,8 @@ function determineStepSize(
     currentStates,
     costFunction,
     constraintFunction,
-    options
+    options,
+    isResidualMode
   );
 
   const costFnWrapper = createCostFunctionWrapper(
@@ -646,18 +637,12 @@ function determineStepSize(
     constraintFunction,
     options,
     logger,
+    isResidualMode,
     { dcdx: partials.dcdx, dcdp: partials.dcdp }
   );
-  const gradientFnWrapper = createGradientFunctionWrapper(
-    currentParameters,
-    currentStates,
-    currentGradient,
-    costFunction,
-    constraintFunction,
-    options,
-    logger,
-    partials
-  );
+  // backtrackingLineSearch only queries the gradient at the current point (not at trial points),
+  // so we can provide a constant gradient function and avoid any extra work/allocation.
+  const gradientFnWrapper = (_params: Float64Array): Float64Array => currentGradient;
 
   const searchDirection = scaleVector(currentGradient, NEGATIVE_GRADIENT_DIRECTION);
   const stepSize = backtrackingLineSearch(
@@ -702,7 +687,8 @@ function computeAdjointGradientAndNorm(
   costFunction: ConstrainedCostFn | ConstrainedResidualFn,
   constraintFunction: ConstraintFn,
   options: AdjointGradientDescentOptions,
-  logger: Logger
+  logger: Logger,
+  isResidualMode: boolean
 ): {
   adjointGradient: Float64Array;
   gradientNorm: number;
@@ -713,7 +699,8 @@ function computeAdjointGradientAndNorm(
     currentStates,
     costFunction,
     constraintFunction,
-    options
+    options,
+    isResidualMode
   );
   const lambda = solveAdjointEquation(partials.dcdx, partials.dfdx, logger);
   const adjointGradient = computeAdjointGradient(partials.dfdp, lambda, partials.dcdp);
@@ -954,7 +941,8 @@ function handleStepSizeAndUpdate(
   usedLineSearchFlag: boolean,
   partials: { dfdp: Float64Array; dfdx: Float64Array; dcdx: Matrix; dcdp: Matrix },
   options: AdjointGradientDescentOptions,
-  logger: Logger
+  logger: Logger,
+  isResidualMode: boolean
 ): {
   converged: boolean;
   result?: AdjointGradientDescentResult;
@@ -974,6 +962,7 @@ function handleStepSizeAndUpdate(
     fixedStepSize,
     options,
     logger,
+    isResidualMode,
     partials
   );
 
@@ -1112,7 +1101,8 @@ function performAdjointGradientDescentIteration(
   onIteration: ((iteration: number, cost: number, parameters: Float64Array) => void) | undefined,
   logger: Logger,
   usedLineSearchFlag: boolean,
-  options: AdjointGradientDescentOptions
+  options: AdjointGradientDescentOptions,
+  isResidualMode: boolean
 ): {
   converged: boolean;
   result?: AdjointGradientDescentResult;
@@ -1139,7 +1129,8 @@ function performAdjointGradientDescentIteration(
     costFunction,
     constraintFunction,
     options,
-    logger
+    logger,
+    isResidualMode
   );
 
   // Handle callback to allow user monitoring, then check gradient convergence to detect optimality.
@@ -1179,7 +1170,8 @@ function performAdjointGradientDescentIteration(
     usedLineSearchFlag,
     partials,
     options,
-    logger
+    logger,
+    isResidualMode
   );
   if (updateResult.converged && updateResult.result) {
     return updateResult;
@@ -1212,17 +1204,6 @@ function validateInitialConditions(
 }
 
 /**
- * Computes initial cost from initial parameters and states.
- */
-function computeInitialCost(
-  costFunction: ConstrainedCostFn | ConstrainedResidualFn,
-  initialParameters: Float64Array,
-  initialStates: Float64Array
-): number {
-  return computeCost(costFunction, initialParameters, initialStates);
-}
-
-/**
  * Creates result for maximum iterations reached case.
  */
 function createMaxIterationsResult(
@@ -1234,14 +1215,16 @@ function createMaxIterationsResult(
   maxIterations: number,
   usedLineSearchFlag: boolean,
   options: AdjointGradientDescentOptions,
-  logger: Logger
+  logger: Logger,
+  isResidualMode: boolean
 ): AdjointGradientDescentResult {
   const partials = computePartialDerivatives(
     currentParameters,
     currentStates,
     costFunction,
     constraintFunction,
-    options
+    options,
+    isResidualMode
   );
   const lambda = solveAdjointEquation(partials.dcdx, partials.dfdx, logger);
   const finalGradient = computeAdjointGradient(partials.dfdp, lambda, partials.dcdp);
@@ -1309,7 +1292,12 @@ export function adjointGradientDescent(
 
   let currentParameters = new Float64Array(initialParameters);
   let currentStates = new Float64Array(initialStates);
-  let currentCost = computeInitialCost(costFunction, currentParameters, currentStates);
+  const initialEvaluation = evaluateCostOrResidual(costFunction, currentParameters, currentStates);
+  const isResidualMode = initialEvaluation.kind === 'residual';
+  let currentCost =
+    initialEvaluation.kind === 'residual'
+      ? RESIDUAL_COST_COEFFICIENT * Math.pow(vectorNorm(initialEvaluation.residual), 2)
+      : initialEvaluation.cost;
   let usedLineSearchFlag = false;
 
   for (let iteration = 0; iteration < maxIterations; iteration++) {
@@ -1327,7 +1315,8 @@ export function adjointGradientDescent(
       onIteration,
       logger,
       usedLineSearchFlag,
-      options
+      options,
+      isResidualMode
     );
 
     if (iterationResult.converged && iterationResult.result) {
@@ -1355,7 +1344,8 @@ export function adjointGradientDescent(
     maxIterations,
     usedLineSearchFlag,
     options,
-    logger
+    logger,
+    isResidualMode
   );
 }
 

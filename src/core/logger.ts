@@ -145,6 +145,14 @@ export class Logger {
   }
 
   /**
+   * Returns true if the given level would be logged.
+   * Useful to avoid expensive diagnostics computation when logging is disabled.
+   */
+  isEnabled(level: LogLevel): boolean {
+    return shouldLog(level, this.effectiveLogLevel);
+  }
+
+  /**
    * Internal log method to handle common logging logic.
    * Checks log level, formats message, and outputs to console.
    */
