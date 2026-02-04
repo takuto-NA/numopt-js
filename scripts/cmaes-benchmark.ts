@@ -24,6 +24,7 @@ type BenchmarkCase = {
   randomSeed: number;
   targetCost: number;
   expectedMaxFinalCost: number;
+  restartStrategy?: 'none' | 'ipop';
   costFunction: CostFn;
 };
 
@@ -110,6 +111,7 @@ function buildCases(): BenchmarkCase[] {
       randomSeed: DEFAULT_RANDOM_SEED,
       targetCost: SPHERE_TARGET_COST,
       expectedMaxFinalCost: SPHERE_EXPECTED_MAX_COST,
+      restartStrategy: 'none',
       costFunction: sphereCost
     },
     {
@@ -122,6 +124,7 @@ function buildCases(): BenchmarkCase[] {
       randomSeed: DEFAULT_RANDOM_SEED,
       targetCost: ROSENBROCK_TARGET_COST,
       expectedMaxFinalCost: ROSENBROCK_EXPECTED_MAX_COST,
+      restartStrategy: 'none',
       costFunction: rosenbrockCost
     },
     {
@@ -134,6 +137,7 @@ function buildCases(): BenchmarkCase[] {
       randomSeed: DEFAULT_RANDOM_SEED,
       targetCost: RASTRIGIN_TARGET_COST,
       expectedMaxFinalCost: RASTRIGIN_EXPECTED_MAX_COST,
+      restartStrategy: 'none',
       costFunction: rastriginCost
     },
     {
@@ -146,6 +150,20 @@ function buildCases(): BenchmarkCase[] {
       randomSeed: DEFAULT_RANDOM_SEED,
       targetCost: RASTRIGIN_EXTENDED_TARGET_COST,
       expectedMaxFinalCost: RASTRIGIN_EXTENDED_EXPECTED_MAX_COST,
+      restartStrategy: 'none',
+      costFunction: rastriginCost
+    },
+    {
+      name: 'Rastrigin (IPOP)',
+      dimension: RASTRIGIN_DIMENSION,
+      initialValue: DEFAULT_RASTRIGIN_INITIAL_VALUE,
+      initialStepSize: RASTRIGIN_STEP_SIZE,
+      maxIterations: 1200,
+      populationSize: 20,
+      randomSeed: DEFAULT_RANDOM_SEED,
+      targetCost: RASTRIGIN_TARGET_COST,
+      expectedMaxFinalCost: 5.0,
+      restartStrategy: 'ipop',
       costFunction: rastriginCost
     }
   ];
@@ -176,7 +194,8 @@ function evaluateCase(caseConfig: BenchmarkCase): {
     populationSize: caseConfig.populationSize,
     initialStepSize: caseConfig.initialStepSize,
     randomSeed: caseConfig.randomSeed,
-    targetCost: caseConfig.targetCost
+    targetCost: caseConfig.targetCost,
+    restartStrategy: caseConfig.restartStrategy
   });
   const elapsedMs = Date.now() - startMs;
 

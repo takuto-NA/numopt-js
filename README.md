@@ -150,6 +150,7 @@ Use CMA-ES when your cost function is a **black box** and you **don’t have a g
 Two important inputs:
 - `initialStepSize` (sigma0): your initial error guess / search radius
 - `randomSeed`: set this for reproducible runs (recommended for testing and debugging)
+ - `restartStrategy`: use `"ipop"` for multi-modal problems (λ doubles per restart)
 
 ```js
 import { cmaEs } from 'numopt-js';
@@ -162,9 +163,24 @@ const result = cmaEs(new Float64Array([10, -7, 3, 5]), sphere, {
   initialStepSize: 2.0,
   randomSeed: 123456,
   targetCost: 1e-10,
+  restartStrategy: "none",
 });
 
 console.log(result.finalParameters, result.finalCost);
+```
+
+### IPOP (Restart Strategy)
+
+For multi-modal problems (e.g., Rastrigin), use IPOP restarts:
+
+```js
+const result = cmaEs(new Float64Array([5, 5, 5, 5, 5, 5, 5, 5, 5, 5]), sphere, {
+  maxIterations: 1200,
+  populationSize: 20,
+  initialStepSize: 2.5,
+  randomSeed: 123456,
+  restartStrategy: "ipop",
+});
 ```
 
 ## Node Usage (ESM + CommonJS)

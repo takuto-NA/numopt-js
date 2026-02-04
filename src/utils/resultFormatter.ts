@@ -252,6 +252,9 @@ export function formatCmaEsResult(
     `  Final step size (σ): ${formatNumberWithPrecision(result.finalStepSize, 6)}`,
     `  Final max std dev: ${formatNumberWithPrecision(result.finalMaxStdDev, opts.costPrecision)}`
   ];
+  if (result.stopReason) {
+    extraLines.push(`  Stop reason: ${result.stopReason}`);
+  }
 
   if (insertionIndex >= 0) {
     lines.splice(insertionIndex + 1, 0, ...extraLines);

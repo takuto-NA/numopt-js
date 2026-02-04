@@ -1,16 +1,16 @@
 /**
- * This file implements vanilla CMA-ES (Covariance Matrix Adaptation Evolution Strategy)
+ * This file implements vanilla CMA-ES and IPOP-CMA-ES restart strategy
  * for unconstrained black-box optimization (no gradients required).
  *
  * Role in system:
  * - Provides a derivative-free optimizer for scalar cost functions
- * - Complements gradient-based optimizers when gradients are unavailable
- * - Mirrors libcmaes (CMAES_DEFAULT) default parameter formulas and core stop criteria
+ * - Adds IPOP restarts (λ doubles per restart) while preserving libcmaes semantics
+ * - Mirrors libcmaes default parameter formulas and core stop criteria
  *
  * For first-time readers:
  * - Start with `cmaEs()` (public entry point)
- * - `computeLibcmaesDefaults()` matches libcmaes initialize_parameters() behavior
- * - Stop criteria mirror libcmaes: MAXITER/MAXFEVALS/FTARGET/TOLHISTFUN/TOLX
+ * - `runSingleCmaEs()` executes one CMA-ES run (no restarts)
+ * - Restart logic wraps `runSingleCmaEs()` when `restartStrategy: "ipop"`
  */
 
 import { CholeskyDecomposition, Matrix } from 'ml-matrix';
@@ -19,6 +19,8 @@ import { Logger } from './logger.js';
 import { createSeededRandom } from '../utils/random.js';
 
 const DEFAULT_MAX_ITERATIONS = 1000;
+const DEFAULT_MAX_RESTARTS = 9; // libcmaes default
+const DEFAULT_RESTART_STRATEGY: 'none' | 'ipop' = 'none';
 
 const DEFAULT_FUNCTION_TOLERANCE = 1e-12; // libcmaes default
 const DEFAULT_PARAMETER_TOLERANCE = 1e-12; // libcmaes default
@@ -37,6 +39,7 @@ const H_SIGMA_DIMENSION_FACTOR_NUMERATOR = 2.0;
 const H_SIGMA_POWER_FACTOR = 2.0;
 
 const LARGE_DIMENSION_THRESHOLD_FOR_CSIGMA = 1000;
+const IPOPN_LAMBDA_MULTIPLIER = 2;
 
 type LibcmaesDefaults = {
   populationSize: number;
@@ -59,7 +62,6 @@ type Candidate = {
 };
 
 type StopReason = 'CONT' | 'MAXITER' | 'MAXFEVALS' | 'FTARGET' | 'TOLHISTFUN' | 'TOLX';
-
 type StopResult = { shouldStop: boolean; converged: boolean; reason: StopReason };
 
 type CmaEsState = {
@@ -71,8 +73,34 @@ type CmaEsState = {
   sigmaInit: number;
   bestCost: number;
   bestParameters: Float64Array;
-  functionEvaluations: number;
   bestCostHistory: number[];
+};
+
+type RunCounters = {
+  iterations: number;
+  functionEvaluations: number;
+};
+
+type RunContext = {
+  dimension: number;
+  defaults: LibcmaesDefaults;
+  maxHistorySize: number;
+  functionTolerance: number;
+  parameterTolerance: number;
+  covarianceRegularizationBase: number;
+  maxIterations: number;
+  maxFunctionEvaluations: number | undefined;
+  targetCost: number | undefined;
+  costFunction: CostFn;
+  logger: Logger;
+  nextStandardNormal: () => number;
+  onIteration: CmaEsOptions['onIteration'] | undefined;
+  counters: RunCounters;
+};
+
+type RunResult = {
+  stop: StopResult;
+  state: CmaEsState;
 };
 
 function assertValidDimension(dimension: number): void {
@@ -80,6 +108,65 @@ function assertValidDimension(dimension: number): void {
   if (!Number.isInteger(dimension) || dimension <= 0) {
     throw new Error(`CMA-ES requires dimension >= 1, got ${dimension}`);
   }
+}
+
+function normalizePopulationSize(
+  dimension: number,
+  populationSize: number | undefined,
+  logger: Logger
+): number {
+  const defaultValue = computeDefaultPopulationSize(dimension);
+  if (populationSize === undefined) return defaultValue;
+  if (populationSize < MINIMUM_POPULATION_SIZE || !Number.isFinite(populationSize)) {
+    logger.warn('cmaEs', undefined, 'Invalid populationSize; falling back to default.', [
+      { key: 'populationSize:', value: populationSize },
+      { key: 'default:', value: defaultValue }
+    ]);
+    return defaultValue;
+  }
+  return Math.floor(populationSize);
+}
+
+function normalizeMaxIterations(value: number | undefined, logger: Logger): number {
+  if (value === undefined) return DEFAULT_MAX_ITERATIONS;
+  if (!Number.isFinite(value) || value <= 0) {
+    logger.warn('cmaEs', undefined, 'Invalid maxIterations; falling back to default.', [
+      { key: 'maxIterations:', value }
+    ]);
+    return DEFAULT_MAX_ITERATIONS;
+  }
+  return Math.floor(value);
+}
+
+function normalizeMaxFunctionEvaluations(value: number | undefined, logger: Logger): number | undefined {
+  if (value === undefined) return undefined;
+  if (!Number.isFinite(value) || value <= 0) {
+    logger.warn('cmaEs', undefined, 'Invalid maxFunctionEvaluations; disabling evaluation budget.', [
+      { key: 'maxFunctionEvaluations:', value }
+    ]);
+    return undefined;
+  }
+  return Math.floor(value);
+}
+
+function normalizeMaxRestarts(value: number | undefined, logger: Logger): number {
+  if (value === undefined) return DEFAULT_MAX_RESTARTS;
+  if (!Number.isFinite(value) || value < 0) {
+    logger.warn('cmaEs', undefined, 'Invalid maxRestarts; falling back to default.', [
+      { key: 'maxRestarts:', value }
+    ]);
+    return DEFAULT_MAX_RESTARTS;
+  }
+  return Math.floor(value);
+}
+
+function normalizeRestartStrategy(value: CmaEsOptions['restartStrategy'], logger: Logger): 'none' | 'ipop' {
+  if (value === undefined) return DEFAULT_RESTART_STRATEGY;
+  if (value === 'none' || value === 'ipop') return value;
+  logger.warn('cmaEs', undefined, 'Unknown restartStrategy; falling back to "none".', [
+    { key: 'restartStrategy:', value: Number.NaN }
+  ]);
+  return DEFAULT_RESTART_STRATEGY;
 }
 
 function computeDefaultPopulationSize(dimension: number): number {
@@ -92,7 +179,6 @@ function computeDefaultPopulationSize(dimension: number): number {
 function computeLibcmaesDefaults(dimension: number, populationSize: number): LibcmaesDefaults {
   const parentCount = Math.floor(populationSize / 2.0);
   const weights = computeLibcmaesWeights(parentCount);
-
   const effectiveParentCount = computeEffectiveParentCount(weights);
   const csigma = computeLibcmaesCsigma(dimension, effectiveParentCount);
   const cc = computeLibcmaesCc(dimension, effectiveParentCount);
@@ -118,17 +204,14 @@ function computeLibcmaesDefaults(dimension: number, populationSize: number): Lib
 function computeLibcmaesWeights(parentCount: number): Float64Array {
   const weights = new Float64Array(parentCount);
   let sum = 0.0;
-
   for (let index = 0; index < parentCount; index++) {
     const weight = Math.log(parentCount + 1) - Math.log(index + 1);
     weights[index] = weight;
     sum += weight;
   }
-
   for (let index = 0; index < parentCount; index++) {
     weights[index] /= sum;
   }
-
   return weights;
 }
 
@@ -178,8 +261,6 @@ function computeLibcmaesChiN(dimension: number): number {
 
 function computeInitialStepSize(initialStepSize: number | undefined, dimension: number, logger: Logger): number {
   if (initialStepSize !== undefined && initialStepSize > 0.0) return initialStepSize;
-
-  // Guard: libcmaes falls back to sigma0 = 1 / dim when sigma0 is not positive.
   logger.warn('cmaEs', undefined, 'initialStepSize is missing or non-positive; falling back to 1/dim.', [
     { key: 'dim:', value: dimension }
   ]);
@@ -239,7 +320,6 @@ function computeCholeskyLowerOrRegularize(
     }
   }
 
-  // Guard: if covariance is badly broken, reset to identity to keep optimizer running.
   logger.warn('cmaEs', undefined, 'Covariance Cholesky failed; resetting covariance to identity.', []);
   return new CholeskyDecomposition(createIdentityMatrix(covarianceMatrix.rows)).lowerTriangularMatrix;
 }
@@ -247,7 +327,6 @@ function computeCholeskyLowerOrRegularize(
 function solveLowerTriangularSystem(lowerTriangular: Matrix, rhs: Float64Array): Float64Array {
   const dimension = rhs.length;
   const solution = new Float64Array(dimension);
-
   for (let rowIndex = 0; rowIndex < dimension; rowIndex++) {
     let sum = rhs[rowIndex];
     for (let colIndex = 0; colIndex < rowIndex; colIndex++) {
@@ -255,7 +334,6 @@ function solveLowerTriangularSystem(lowerTriangular: Matrix, rhs: Float64Array):
     }
     solution[rowIndex] = sum / lowerTriangular.get(rowIndex, rowIndex);
   }
-
   return solution;
 }
 
@@ -377,7 +455,6 @@ function checkStopTolX(args: {
   pc: Float64Array;
   covariance: Matrix;
 }): StopResult {
-  // Guard: TolX is not meaningful for iteration 0 (matches libcmaes behavior).
   if (args.iteration <= 0) return { shouldStop: false, converged: false, reason: 'CONT' };
 
   const factor = args.sigma / args.sigmaInit;
@@ -471,10 +548,12 @@ function sampleCandidate(
 function initializeState(
   initialParameters: Float64Array,
   sigmaInit: number,
-  costFunction: CostFn
+  costFunction: CostFn,
+  counters: RunCounters
 ): CmaEsState {
   const mean = new Float64Array(initialParameters);
   const bestCost = sanitizeCost(costFunction(mean));
+  counters.functionEvaluations += 1;
   return {
     mean,
     covariance: createIdentityMatrix(initialParameters.length),
@@ -484,7 +563,6 @@ function initializeState(
     sigmaInit,
     bestCost,
     bestParameters: new Float64Array(mean),
-    functionEvaluations: 1,
     bestCostHistory: [bestCost]
   };
 }
@@ -500,7 +578,14 @@ function pushBestCostHistory(state: CmaEsState, bestCost: number, maxHistorySize
   while (state.bestCostHistory.length > maxHistorySize) state.bestCostHistory.shift();
 }
 
-function buildResult(state: CmaEsState, defaults: LibcmaesDefaults, iterations: number, converged: boolean): CmaEsResult {
+function buildResult(
+  state: CmaEsState,
+  defaults: LibcmaesDefaults,
+  iterations: number,
+  converged: boolean,
+  stopReason?: CmaEsResult['stopReason'],
+  functionEvaluations?: number
+): CmaEsResult {
   const finalMaxStdDev = state.sigma * Math.sqrt(Math.max(0.0, computeMaxDiagonalElement(state.covariance)));
   return {
     finalParameters: state.bestParameters,
@@ -509,31 +594,27 @@ function buildResult(state: CmaEsState, defaults: LibcmaesDefaults, iterations: 
     converged,
     finalCost: state.bestCost,
     populationSize: defaults.populationSize,
-    functionEvaluations: state.functionEvaluations,
+    functionEvaluations: functionEvaluations ?? 0,
     finalStepSize: state.sigma,
-    finalMaxStdDev
+    finalMaxStdDev,
+    stopReason
   };
 }
 
-function runOneGeneration(args: {
-  state: CmaEsState;
-  defaults: LibcmaesDefaults;
-  costFunction: CostFn;
-  nextStandardNormal: () => number;
-  maxFunctionEvaluations: number | undefined;
-  covarianceRegularizationBase: number;
-  logger: Logger;
-}): { candidates: Candidate[]; lowerTriangular: Matrix } {
-  const lowerTriangular = computeCholeskyLowerOrRegularize(args.state.covariance, args.covarianceRegularizationBase, args.logger);
-
+function runOneGeneration(context: RunContext, state: CmaEsState): { candidates: Candidate[]; lowerTriangular: Matrix } {
+  const lowerTriangular = computeCholeskyLowerOrRegularize(state.covariance, context.covarianceRegularizationBase, context.logger);
   const candidates: Candidate[] = [];
-  for (let sampleIndex = 0; sampleIndex < args.defaults.populationSize; sampleIndex++) {
-    const sampled = sampleCandidate(args.state.mean, args.state.sigma, lowerTriangular, args.nextStandardNormal);
-    const cost = sanitizeCost(args.costFunction(sampled.parameters));
-    args.state.functionEvaluations += 1;
+
+  for (let sampleIndex = 0; sampleIndex < context.defaults.populationSize; sampleIndex++) {
+    const sampled = sampleCandidate(state.mean, state.sigma, lowerTriangular, context.nextStandardNormal);
+    const cost = sanitizeCost(context.costFunction(sampled.parameters));
+    context.counters.functionEvaluations += 1;
     candidates.push({ parameters: sampled.parameters, normalizedStep: sampled.normalizedStep, cost });
 
-    if (args.maxFunctionEvaluations !== undefined && args.state.functionEvaluations >= args.maxFunctionEvaluations) {
+    if (
+      context.maxFunctionEvaluations !== undefined &&
+      context.counters.functionEvaluations >= context.maxFunctionEvaluations
+    ) {
       break;
     }
   }
@@ -542,48 +623,114 @@ function runOneGeneration(args: {
   return { candidates, lowerTriangular };
 }
 
-function updateDistributionParameters(args: {
-  state: CmaEsState;
-  defaults: LibcmaesDefaults;
-  candidates: Candidate[];
-  lowerTriangular: Matrix;
-  iteration: number;
-}): void {
-  const parentCount = Math.min(args.defaults.parentCount, args.candidates.length);
-  const xmean = computeWeightedMean(args.candidates, args.defaults.weights, parentCount);
+function updateDistributionParameters(
+  context: RunContext,
+  state: CmaEsState,
+  candidates: Candidate[],
+  lowerTriangular: Matrix,
+  iteration: number
+): void {
+  const parentCount = Math.min(context.defaults.parentCount, candidates.length);
+  const xmean = computeWeightedMean(candidates, context.defaults.weights, parentCount);
 
-  const diffxmean = subtractVectors(xmean, args.state.mean);
-  scaleInPlace(diffxmean, 1.0 / args.state.sigma);
+  const diffxmean = subtractVectors(xmean, state.mean);
+  scaleInPlace(diffxmean, 1.0 / state.sigma);
 
-  scaleInPlace(args.state.psigma, 1.0 - args.defaults.csigma);
-  const csqinvDiff = solveLowerTriangularSystem(args.lowerTriangular, diffxmean);
-  addScaledInPlace(args.state.psigma, csqinvDiff, args.defaults.psFactor);
-  const normPs = vectorNorm(args.state.psigma);
+  scaleInPlace(state.psigma, 1.0 - context.defaults.csigma);
+  const csqinvDiff = solveLowerTriangularSystem(lowerTriangular, diffxmean);
+  addScaledInPlace(state.psigma, csqinvDiff, context.defaults.psFactor);
+  const normPs = vectorNorm(state.psigma);
 
-  const hsigThreshold = computeHsigThreshold(args.iteration, args.defaults.csigma, args.defaults.chiN, args.state.mean.length);
+  const hsigThreshold = computeHsigThreshold(iteration, context.defaults.csigma, context.defaults.chiN, context.dimension);
   const hsig = normPs < hsigThreshold ? 1.0 : 0.0;
 
-  scaleInPlace(args.state.pc, 1.0 - args.defaults.cc);
-  addScaledInPlace(args.state.pc, diffxmean, hsig * args.defaults.pcFactor);
+  scaleInPlace(state.pc, 1.0 - context.defaults.cc);
+  addScaledInPlace(state.pc, diffxmean, hsig * context.defaults.pcFactor);
 
-  const spc = computePcOuterProduct(args.state.pc);
-  const wdiff = Matrix.zeros(args.state.mean.length, args.state.mean.length);
+  const spc = computePcOuterProduct(state.pc);
+  const wdiff = Matrix.zeros(context.dimension, context.dimension);
   for (let index = 0; index < parentCount; index++) {
-    addWeightedOuterProductInPlace(wdiff, args.candidates[index].normalizedStep, args.defaults.weights[index]);
+    addWeightedOuterProductInPlace(wdiff, candidates[index].normalizedStep, context.defaults.weights[index]);
   }
 
   const covarianceScale =
     1.0 -
-    args.defaults.c1 -
-    args.defaults.cmu +
-    (1.0 - hsig) * args.defaults.c1 * args.defaults.cc * (2.0 - args.defaults.cc);
-  args.state.covariance = args.state.covariance.mul(covarianceScale).add(spc.mul(args.defaults.c1)).add(wdiff.mul(args.defaults.cmu));
-  symmetrizeMatrixInPlace(args.state.covariance);
+    context.defaults.c1 -
+    context.defaults.cmu +
+    (1.0 - hsig) * context.defaults.c1 * context.defaults.cc * (2.0 - context.defaults.cc);
+  state.covariance = state.covariance.mul(covarianceScale).add(spc.mul(context.defaults.c1)).add(wdiff.mul(context.defaults.cmu));
+  symmetrizeMatrixInPlace(state.covariance);
 
-  const sigmaExponent = (args.defaults.csigma / args.defaults.dsigma) * (normPs / args.defaults.chiN - 1.0);
-  args.state.sigma *= Math.exp(sigmaExponent);
+  const sigmaExponent = (context.defaults.csigma / context.defaults.dsigma) * (normPs / context.defaults.chiN - 1.0);
+  state.sigma *= Math.exp(sigmaExponent);
 
-  args.state.mean = xmean;
+  state.mean = xmean;
+}
+
+function runSingleCmaEs(context: RunContext, state: CmaEsState): RunResult {
+  const initialStop = checkLibcmaesStopCriteria({
+    iteration: context.counters.iterations,
+    maxIterations: context.maxIterations,
+    functionEvaluations: context.counters.functionEvaluations,
+    maxFunctionEvaluations: context.maxFunctionEvaluations,
+    bestCost: state.bestCost,
+    targetCost: context.targetCost,
+    bestCostHistory: state.bestCostHistory,
+    maxHistorySize: context.maxHistorySize,
+    functionTolerance: context.functionTolerance,
+    sigma: state.sigma,
+    sigmaInit: state.sigmaInit,
+    parameterTolerance: context.parameterTolerance,
+    pc: state.pc,
+    covariance: state.covariance
+  });
+  if (initialStop.shouldStop) {
+    return { stop: initialStop, state };
+  }
+
+  while (true) {
+    const { candidates, lowerTriangular } = runOneGeneration(context, state);
+    if (candidates.length === 0) {
+      const budgetStop = checkStopMaxFevals(context.counters.functionEvaluations, context.maxFunctionEvaluations);
+      return { stop: budgetStop, state };
+    }
+
+    updateBestIfImproved(state, candidates[0]);
+    pushBestCostHistory(state, state.bestCost, context.maxHistorySize);
+
+    if (context.onIteration) {
+      context.onIteration(context.counters.iterations, state.bestCost, state.bestParameters);
+    }
+
+    const stop = checkLibcmaesStopCriteria({
+      iteration: context.counters.iterations + 1,
+      maxIterations: context.maxIterations,
+      functionEvaluations: context.counters.functionEvaluations,
+      maxFunctionEvaluations: context.maxFunctionEvaluations,
+      bestCost: state.bestCost,
+      targetCost: context.targetCost,
+      bestCostHistory: state.bestCostHistory,
+      maxHistorySize: context.maxHistorySize,
+      functionTolerance: context.functionTolerance,
+      sigma: state.sigma,
+      sigmaInit: state.sigmaInit,
+      parameterTolerance: context.parameterTolerance,
+      pc: state.pc,
+      covariance: state.covariance
+    });
+    if (stop.shouldStop) {
+      return { stop, state };
+    }
+
+    updateDistributionParameters(context, state, candidates, lowerTriangular, context.counters.iterations);
+    context.counters.iterations += 1;
+
+    context.logger.debug('cmaEs', context.counters.iterations, 'Progress', [
+      { key: 'bestCost:', value: state.bestCost },
+      { key: 'sigma:', value: state.sigma },
+      { key: 'fevals:', value: context.counters.functionEvaluations }
+    ]);
+  }
 }
 
 export function cmaEs(
@@ -595,26 +742,28 @@ export function cmaEs(
   assertValidDimension(dimension);
 
   const logger = new Logger(options.logLevel, options.verbose);
+  const restartStrategy = normalizeRestartStrategy(options.restartStrategy, logger);
+  const maxRestarts = normalizeMaxRestarts(options.maxRestarts, logger);
+  const maxIterations = normalizeMaxIterations(options.maxIterations, logger);
+  const maxFunctionEvaluations = normalizeMaxFunctionEvaluations(options.maxFunctionEvaluations, logger);
 
-  const populationSize = Math.max(MINIMUM_POPULATION_SIZE, options.populationSize ?? computeDefaultPopulationSize(dimension));
-  const defaults = computeLibcmaesDefaults(dimension, populationSize);
-
-  const sigmaInit = computeInitialStepSize(options.initialStepSize, dimension, logger);
   const functionTolerance = Math.max(options.functionTolerance ?? DEFAULT_FUNCTION_TOLERANCE, MINIMUM_FUNCTION_TOLERANCE);
   const parameterTolerance = Math.max(options.parameterTolerance ?? DEFAULT_PARAMETER_TOLERANCE, MINIMUM_PARAMETER_TOLERANCE);
-
   const covarianceRegularizationBase = options.covarianceRegularization ?? DEFAULT_COVARIANCE_REGULARIZATION;
-  const maxIterations = options.maxIterations ?? DEFAULT_MAX_ITERATIONS;
-  const maxFunctionEvaluations = options.maxFunctionEvaluations;
-  const targetCost = options.targetCost;
 
-  const maxHistorySize =
+  const sigmaInit = computeInitialStepSize(options.initialStepSize, dimension, logger);
+  const targetCost = options.targetCost;
+  const onIteration = options.onIteration;
+
+  const seededRandom = createSeededRandom(options.randomSeed);
+  const counters: RunCounters = { iterations: 0, functionEvaluations: 0 };
+
+  let populationSize = normalizePopulationSize(dimension, options.populationSize, logger);
+  let defaults = computeLibcmaesDefaults(dimension, populationSize);
+  let maxHistorySize =
     options.maxHistorySize && options.maxHistorySize > 0
       ? options.maxHistorySize
       : computeDefaultMaxHistorySize(dimension, defaults.populationSize);
-
-  const seededRandom = createSeededRandom(options.randomSeed);
-  const state = initializeState(initialParameters, sigmaInit, costFunction);
 
   logger.info('cmaEs', 0, 'Starting', [
     { key: 'dim:', value: dimension },
@@ -623,83 +772,95 @@ export function cmaEs(
     { key: 'sigma0:', value: sigmaInit }
   ]);
 
-  const initialStop = checkLibcmaesStopCriteria({
-    iteration: 0,
-    maxIterations,
-    functionEvaluations: state.functionEvaluations,
-    maxFunctionEvaluations,
-    bestCost: state.bestCost,
-    targetCost,
-    bestCostHistory: state.bestCostHistory,
-    maxHistorySize,
-    functionTolerance,
-    sigma: state.sigma,
-    sigmaInit: state.sigmaInit,
-    parameterTolerance,
-    pc: state.pc,
-    covariance: state.covariance
-  });
-  if (initialStop.shouldStop) return buildResult(state, defaults, 0, initialStop.converged);
+  let globalBestCost = Number.POSITIVE_INFINITY;
+  let globalBestParameters = new Float64Array(initialParameters);
+  let globalStopReason: CmaEsResult['stopReason'] | undefined;
+  let globalConverged = false;
+  let globalState: CmaEsState | null = null;
 
-  const onIteration = options.onIteration;
+  const totalRuns = restartStrategy === 'ipop' ? maxRestarts + 1 : 1;
+  for (let runIndex = 0; runIndex < totalRuns; runIndex++) {
+    defaults = computeLibcmaesDefaults(dimension, populationSize);
+    maxHistorySize =
+      options.maxHistorySize && options.maxHistorySize > 0
+        ? options.maxHistorySize
+        : computeDefaultMaxHistorySize(dimension, defaults.populationSize);
 
-  for (let iteration = 0; iteration < maxIterations; iteration++) {
-    const { candidates, lowerTriangular } = runOneGeneration({
-      state,
+    const state = initializeState(initialParameters, sigmaInit, costFunction, counters);
+    const context: RunContext = {
+      dimension,
       defaults,
-      costFunction,
-      nextStandardNormal: seededRandom.nextStandardNormal,
-      maxFunctionEvaluations,
-      covarianceRegularizationBase,
-      logger
-    });
-
-    if (candidates.length === 0) break;
-
-    updateBestIfImproved(state, candidates[0]);
-    pushBestCostHistory(state, state.bestCost, maxHistorySize);
-    if (onIteration) onIteration(iteration, state.bestCost, state.bestParameters);
-
-    const stop = checkLibcmaesStopCriteria({
-      iteration: iteration + 1,
-      maxIterations,
-      functionEvaluations: state.functionEvaluations,
-      maxFunctionEvaluations,
-      bestCost: state.bestCost,
-      targetCost,
-      bestCostHistory: state.bestCostHistory,
       maxHistorySize,
       functionTolerance,
-      sigma: state.sigma,
-      sigmaInit: state.sigmaInit,
       parameterTolerance,
-      pc: state.pc,
-      covariance: state.covariance
-    });
-    if (stop.shouldStop) {
-      logger.info('cmaEs', iteration, `Stopped (${stop.reason})`, [
-        { key: 'bestCost:', value: state.bestCost },
-        { key: 'sigma:', value: state.sigma },
-        { key: 'fevals:', value: state.functionEvaluations }
-      ]);
-      return buildResult(state, defaults, iteration + 1, stop.converged);
+      covarianceRegularizationBase,
+      maxIterations,
+      maxFunctionEvaluations,
+      targetCost,
+      costFunction,
+      logger,
+      nextStandardNormal: seededRandom.nextStandardNormal,
+      onIteration,
+      counters
+    };
+
+    const runResult = runSingleCmaEs(context, state);
+    globalState = runResult.state;
+    if (globalState.bestCost < globalBestCost) {
+      globalBestCost = globalState.bestCost;
+      globalBestParameters = new Float64Array(globalState.bestParameters);
     }
 
-    updateDistributionParameters({ state, defaults, candidates, lowerTriangular, iteration });
+    if (runResult.stop.reason === 'FTARGET') {
+      globalStopReason = 'FTARGET';
+      globalConverged = true;
+      break;
+    }
 
-    logger.debug('cmaEs', iteration, 'Progress', [
-      { key: 'bestCost:', value: state.bestCost },
-      { key: 'sigma:', value: state.sigma },
-      { key: 'fevals:', value: state.functionEvaluations }
-    ]);
+    if (runResult.stop.reason === 'MAXFEVALS' || runResult.stop.reason === 'MAXITER') {
+      globalStopReason = runResult.stop.reason;
+      globalConverged = false;
+      break;
+    }
+
+    if (restartStrategy !== 'ipop') {
+      globalStopReason = runResult.stop.reason;
+      globalConverged = runResult.stop.converged;
+      break;
+    }
+
+    if (runIndex >= maxRestarts) {
+      globalStopReason = 'IPOP_MAX_RESTARTS';
+      globalConverged = false;
+      break;
+    }
+
+    populationSize *= IPOPN_LAMBDA_MULTIPLIER;
   }
 
-  logger.warn('cmaEs', undefined, 'Maximum iterations reached', [
-    { key: 'Iterations:', value: maxIterations },
-    { key: 'bestCost:', value: state.bestCost },
-    { key: 'fevals:', value: state.functionEvaluations }
-  ]);
+  if (!globalState) {
+    const fallbackDefaults = computeLibcmaesDefaults(dimension, populationSize);
+    const fallbackState = initializeState(initialParameters, sigmaInit, costFunction, counters);
+    return buildResult(
+      fallbackState,
+      fallbackDefaults,
+      counters.iterations,
+      false,
+      globalStopReason,
+      counters.functionEvaluations
+    );
+  }
 
-  return buildResult(state, defaults, maxIterations, false);
+  globalState.bestCost = globalBestCost;
+  globalState.bestParameters = globalBestParameters;
+
+  return buildResult(
+    globalState,
+    defaults,
+    counters.iterations,
+    globalConverged,
+    globalStopReason,
+    counters.functionEvaluations
+  );
 }
 

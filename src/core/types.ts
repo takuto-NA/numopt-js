@@ -675,6 +675,19 @@ export interface CmaEsOptions extends CommonOptimizationOptions {
    * 10 + ceil(30 * dim / λ) (libcmaes)
    */
   maxHistorySize?: number;
+
+  /**
+   * Restart strategy for CMA-ES.
+   * - "none": single run (default)
+   * - "ipop": increasing population size restarts (λ doubles each restart)
+   */
+  restartStrategy?: 'none' | 'ipop';
+
+  /**
+   * Maximum number of restarts for IPOP.
+   * If not provided, defaults to 9 (libcmaes).
+   */
+  maxRestarts?: number;
 }
 
 /**
@@ -701,5 +714,10 @@ export interface CmaEsResult extends OptimizationResult {
    * Useful for assessing the final search radius.
    */
   finalMaxStdDev: number;
+
+  /**
+   * Stop reason for the overall optimization run.
+   */
+  stopReason?: 'MAXITER' | 'MAXFEVALS' | 'FTARGET' | 'TOLHISTFUN' | 'TOLX' | 'IPOP_MAX_RESTARTS';
 }
 
