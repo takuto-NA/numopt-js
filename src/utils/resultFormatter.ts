@@ -17,6 +17,7 @@ import type {
   OptimizationResult,
   GradientDescentResult,
   LevenbergMarquardtResult,
+  CmaEsResult,
   AdjointGradientDescentResult,
   ConstrainedGaussNewtonResult,
   ConstrainedLevenbergMarquardtResult
@@ -235,6 +236,33 @@ export function formatLevenbergMarquardtResult(
 }
 
 /**
+ * Formats a CMA-ES result.
+ */
+export function formatCmaEsResult(
+  result: CmaEsResult,
+  options?: ResultFormatterOptions
+): string {
+  const opts = { ...DEFAULT_OPTIONS, ...options };
+  const lines = formatBasicResult(result, opts);
+
+  const insertionIndex = lines.findIndex(line => line.includes('Final gradient norm') || line.includes('Final residual norm'));
+  const extraLines = [
+    `  Population size (λ): ${result.populationSize}`,
+    `  Function evaluations: ${result.functionEvaluations}`,
+    `  Final step size (σ): ${formatNumberWithPrecision(result.finalStepSize, 6)}`,
+    `  Final max std dev: ${formatNumberWithPrecision(result.finalMaxStdDev, opts.costPrecision)}`
+  ];
+
+  if (insertionIndex >= 0) {
+    lines.splice(insertionIndex + 1, 0, ...extraLines);
+  } else {
+    lines.push(...extraLines);
+  }
+
+  return lines.join('\n');
+}
+
+/**
  * Formats a ConstrainedGaussNewtonResult.
  */
 export function formatConstrainedGaussNewtonResult(
@@ -433,6 +461,10 @@ export function formatResult(
   options?: ResultFormatterOptions
 ): string;
 export function formatResult(
+  result: CmaEsResult,
+  options?: ResultFormatterOptions
+): string;
+export function formatResult(
   result: ConstrainedGaussNewtonResult,
   options?: ResultFormatterOptions
 ): string;
@@ -445,7 +477,14 @@ export function formatResult(
   options?: ResultFormatterOptions
 ): string;
 export function formatResult(
-  result: OptimizationResult | GradientDescentResult | LevenbergMarquardtResult | ConstrainedGaussNewtonResult | ConstrainedLevenbergMarquardtResult | AdjointGradientDescentResult,
+  result:
+    | OptimizationResult
+    | GradientDescentResult
+    | LevenbergMarquardtResult
+    | CmaEsResult
+    | ConstrainedGaussNewtonResult
+    | ConstrainedLevenbergMarquardtResult
+    | AdjointGradientDescentResult,
   options?: ResultFormatterOptions
 ): string {
   // Type guards to determine which formatter to use
@@ -460,6 +499,9 @@ export function formatResult(
   }
   if ('finalLambda' in result) {
     return formatLevenbergMarquardtResult(result as LevenbergMarquardtResult, options);
+  }
+  if ('populationSize' in result && 'functionEvaluations' in result && 'finalStepSize' in result) {
+    return formatCmaEsResult(result as CmaEsResult, options);
   }
   if ('usedLineSearch' in result) {
     return formatGradientDescentResult(result as GradientDescentResult, options);
@@ -495,6 +537,16 @@ export function printLevenbergMarquardtResult(
   options?: ResultFormatterOptions
 ): void {
   console.log(formatLevenbergMarquardtResult(result, options));
+}
+
+/**
+ * Prints a CMA-ES result directly to console.
+ */
+export function printCmaEsResult(
+  result: CmaEsResult,
+  options?: ResultFormatterOptions
+): void {
+  console.log(formatCmaEsResult(result, options));
 }
 
 /**
@@ -543,6 +595,10 @@ export function printResult(
   options?: ResultFormatterOptions
 ): void;
 export function printResult(
+  result: CmaEsResult,
+  options?: ResultFormatterOptions
+): void;
+export function printResult(
   result: ConstrainedGaussNewtonResult,
   options?: ResultFormatterOptions
 ): void;
@@ -555,7 +611,14 @@ export function printResult(
   options?: ResultFormatterOptions
 ): void;
 export function printResult(
-  result: OptimizationResult | GradientDescentResult | LevenbergMarquardtResult | ConstrainedGaussNewtonResult | ConstrainedLevenbergMarquardtResult | AdjointGradientDescentResult,
+  result:
+    | OptimizationResult
+    | GradientDescentResult
+    | LevenbergMarquardtResult
+    | CmaEsResult
+    | ConstrainedGaussNewtonResult
+    | ConstrainedLevenbergMarquardtResult
+    | AdjointGradientDescentResult,
   options?: ResultFormatterOptions
 ): void {
   console.log(formatResult(result, options));
