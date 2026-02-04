@@ -599,3 +599,142 @@ export interface ConstrainedLevenbergMarquardtResult extends ConstrainedGaussNew
   finalLambda: number;
 }
 
+/**
+ * Options for CMA-ES (Covariance Matrix Adaptation Evolution Strategy).
+ *
+ * This implementation follows the vanilla CMA-ES default parameter formulas and
+ * core termination criteria used by libcmaes (CMAES_DEFAULT).
+ */
+export interface CmaEsOptions extends CommonOptimizationOptions {
+  /**
+   * Population size (λ), number of candidate solutions sampled per generation.
+   *
+   * If not provided, uses libcmaes default:
+   * λ = 4 + floor(3 * log(dim))
+   */
+  populationSize?: number;
+
+  /**
+   * Initial distribution step size σ₀ (sigma0 in libcmaes).
+   *
+   * This strongly affects performance; the optimum is ideally within
+   * [x0 - σ0, x0 + σ0] (per dimension) in a reasonable scaling of parameters.
+   *
+   * If not provided (or non-positive), falls back to 1 / dim (libcmaes behavior).
+   */
+  initialStepSize?: number;
+
+  /**
+   * Random seed for reproducible results.
+   *
+   * libcmaes semantics:
+   * - seed > 0: deterministic stream
+   * - seed == 0 or unspecified: auto-generated seed (non-deterministic)
+   */
+  randomSeed?: number;
+
+  /**
+   * Maximum number of objective function evaluations (MAXFEVALS in libcmaes).
+   * If specified, CMA-ES stops when the evaluation budget is reached.
+   */
+  maxFunctionEvaluations?: number;
+
+  /**
+   * Objective function target value (FTARGET in libcmaes).
+   * If specified, CMA-ES stops successfully when best cost <= targetCost.
+   */
+  targetCost?: number;
+
+  /**
+   * Function value tolerance for TolHistFun termination criterion.
+   * Stops successfully when the range of recent best costs becomes small enough.
+   *
+   * Default: 1e-12 (libcmaes)
+   */
+  functionTolerance?: number;
+
+  /**
+   * Parameter tolerance for TolX termination criterion.
+   * Stops (partial success) when the distribution becomes sufficiently narrow.
+   *
+   * Default: 1e-12 (libcmaes)
+   */
+  parameterTolerance?: number;
+
+  /**
+   * Initial diagonal regularization applied when covariance Cholesky fails.
+   * Increase this if you observe repeated numerical failures.
+   *
+   * Default: 1e-12
+   */
+  covarianceRegularization?: number;
+
+  /**
+   * Maximum size of the best-cost history buffer used by termination criteria.
+   * If not provided (or non-positive), defaults to:
+   * 10 + ceil(30 * dim / λ) (libcmaes)
+   */
+  maxHistorySize?: number;
+
+  /**
+   * Restart strategy for CMA-ES.
+   * - "none": single run (default)
+   * - "ipop": increasing population size restarts (λ doubles each restart)
+   */
+  restartStrategy?: 'none' | 'ipop';
+
+  /**
+   * Maximum number of restarts for IPOP.
+   * If not provided, defaults to 9 (libcmaes).
+   */
+  maxRestarts?: number;
+
+  /**
+   * Enable lightweight profiling of CMA-ES internal timings.
+   * When true, timing breakdown is returned in the result.
+   */
+  profiling?: boolean;
+}
+
+/**
+ * Result returned by CMA-ES optimization.
+ */
+export interface CmaEsResult extends OptimizationResult {
+  /**
+   * Population size (λ) used during optimization.
+   */
+  populationSize: number;
+
+  /**
+   * Total number of objective function evaluations performed.
+   */
+  functionEvaluations: number;
+
+  /**
+   * Final step size σ.
+   */
+  finalStepSize: number;
+
+  /**
+   * Maximum standard deviation across coordinates: max_i sqrt(C_ii) * σ.
+   * Useful for assessing the final search radius.
+   */
+  finalMaxStdDev: number;
+
+  /**
+   * Stop reason for the overall optimization run.
+   */
+  stopReason?: 'MAXITER' | 'MAXFEVALS' | 'FTARGET' | 'TOLHISTFUN' | 'TOLX' | 'IPOP_MAX_RESTARTS';
+
+  /**
+   * Optional profiling breakdown (milliseconds).
+   */
+  profiling?: {
+    totalMs: number;
+    costMs: number;
+    choleskyMs: number;
+    samplingMs: number;
+    updateMs: number;
+  };
+}
+
