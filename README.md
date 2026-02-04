@@ -14,6 +14,7 @@ A flexible numerical optimization library for JavaScript/TypeScript that works s
 - **Strong Wolfe Line Search**: Robust line search satisfying Strong Wolfe conditions (recommended for quasi-Newton methods)
 - **BFGS**: Quasi-Newton method that updates a dense inverse Hessian approximation (unconstrained smooth optimization)
 - **L-BFGS**: Memory-efficient quasi-Newton method (two-loop recursion) for larger parameter counts
+- **CMA-ES**: Derivative-free black-box optimization using a covariance-adapting search distribution (unconstrained)
 - **Gauss-Newton Method**: Efficient method for nonlinear least squares problems
 - **Levenberg-Marquardt Algorithm**: Robust algorithm combining Gauss-Newton with damping
 - **Constrained Gauss-Newton**: Efficient constrained nonlinear least squares using effective Jacobian
@@ -39,6 +40,7 @@ npm install numopt-js
 
 - **Minimize a scalar cost** (smooth unconstrained optimization): use **Gradient Descent** (`cost: (p) => number`, `grad: (p) => Float64Array`). Start at [Gradient Descent](#gradient-descent).
 - **Minimize a scalar cost (faster than GD for many problems)**: use **BFGS** or **L-BFGS** (`cost: (p) => number`, `grad: (p) => Float64Array`). Start at [BFGS / L-BFGS](#bfgs--l-bfgs).
+- **Minimize a scalar cost (black-box, no gradient)**: use **CMA-ES** (`cost: (p) => number`). Start at [CMA-ES](#cma-es-black-box-optimization).
 - **Fit a model with residuals** (nonlinear least squares): use **Levenberg–Marquardt** or **Gauss–Newton** (`residual: (p) => Float64Array`, optional `jacobian: (p) => Matrix`). Start at [Levenberg-Marquardt](#levenberg-marquardt-nonlinear-least-squares).
 - **Equality-constrained problems** \(c(p, x) = 0\): use **Adjoint** / **Constrained GN/LM** (`constraint: (p, x) => Float64Array`). Start at [Adjoint Method](#adjoint-method-constrained-optimization).
 - **Browser usage**: start at [Browser Usage](#browser-usage).
@@ -57,6 +59,7 @@ Most algorithms return a `result` with these fields:
 - **Common (all algorithms)**: `finalParameters`, `converged`, `iterations`, `finalCost`
 - **Gradient Descent**: `finalGradientNorm`, `usedLineSearch`
 - **BFGS / L-BFGS**: `finalGradientNorm`
+- **CMA-ES**: `functionEvaluations`, `finalStepSize`, `finalMaxStdDev`
 - **Gauss-Newton / Levenberg–Marquardt**: `finalResidualNorm` (and LM also has `finalLambda`)
 - **Constrained algorithms / Adjoint**: `finalStates`, `finalConstraintNorm`
 
@@ -138,6 +141,30 @@ Run:
 
 ```bash
 node quick.cjs
+```
+
+## CMA-ES (Black-box Optimization)
+
+Use CMA-ES when your cost function is a **black box** and you **don’t have a gradient**.
+
+Two important inputs:
+- `initialStepSize` (sigma0): your initial error guess / search radius
+- `randomSeed`: set this for reproducible runs (recommended for testing and debugging)
+
+```js
+import { cmaEs } from 'numopt-js';
+
+const sphere = (params) => params.reduce((sum, v) => sum + v * v, 0);
+
+const result = cmaEs(new Float64Array([10, -7, 3, 5]), sphere, {
+  maxIterations: 200,
+  populationSize: 20,
+  initialStepSize: 2.0,
+  randomSeed: 123456,
+  targetCost: 1e-10,
+});
+
+console.log(result.finalParameters, result.finalCost);
 ```
 
 ## Node Usage (ESM + CommonJS)
