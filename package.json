@@ -1,6 +1,6 @@
 {
   "name": "numopt-js",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "type": "module",
   "description": "A flexible numerical optimization library for JavaScript/TypeScript that works smoothly in browsers",
   "main": "dist/index.cjs",
