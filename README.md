@@ -150,7 +150,8 @@ Use CMA-ES when your cost function is a **black box** and you **don’t have a g
 Two important inputs:
 - `initialStepSize` (sigma0): your initial error guess / search radius
 - `randomSeed`: set this for reproducible runs (recommended for testing and debugging)
- - `restartStrategy`: use `"ipop"` for multi-modal problems (λ doubles per restart)
+- `restartStrategy`: use `"ipop"` for multi-modal problems (λ doubles per restart)
+- `profiling`: enable lightweight timing breakdown in the result
 
 ```js
 import { cmaEs } from 'numopt-js';
@@ -164,9 +165,10 @@ const result = cmaEs(new Float64Array([10, -7, 3, 5]), sphere, {
   randomSeed: 123456,
   targetCost: 1e-10,
   restartStrategy: "none",
+  profiling: true,
 });
 
-console.log(result.finalParameters, result.finalCost);
+console.log(result.finalParameters, result.finalCost, result.stopReason, result.profiling);
 ```
 
 ### IPOP (Restart Strategy)
