@@ -96,12 +96,28 @@ type RunContext = {
   nextStandardNormal: () => number;
   onIteration: CmaEsOptions['onIteration'] | undefined;
   counters: RunCounters;
+  profiling: Profiling | undefined;
 };
 
 type RunResult = {
   stop: StopResult;
   state: CmaEsState;
 };
+
+type Profiling = {
+  totalMs: number;
+  costMs: number;
+  choleskyMs: number;
+  samplingMs: number;
+  updateMs: number;
+};
+
+function nowMs(): number {
+  if (typeof performance !== 'undefined' && typeof performance.now === 'function') {
+    return performance.now();
+  }
+  return Date.now();
+}
 
 function assertValidDimension(dimension: number): void {
   // Guard: CMA-ES requires at least one parameter dimension.
@@ -549,10 +565,13 @@ function initializeState(
   initialParameters: Float64Array,
   sigmaInit: number,
   costFunction: CostFn,
-  counters: RunCounters
+  counters: RunCounters,
+  profiling: Profiling | undefined
 ): CmaEsState {
   const mean = new Float64Array(initialParameters);
+  const costStart = profiling ? nowMs() : 0;
   const bestCost = sanitizeCost(costFunction(mean));
+  if (profiling) profiling.costMs += nowMs() - costStart;
   counters.functionEvaluations += 1;
   return {
     mean,
@@ -584,7 +603,8 @@ function buildResult(
   iterations: number,
   converged: boolean,
   stopReason?: CmaEsResult['stopReason'],
-  functionEvaluations?: number
+  functionEvaluations?: number,
+  profiling?: Profiling
 ): CmaEsResult {
   const finalMaxStdDev = state.sigma * Math.sqrt(Math.max(0.0, computeMaxDiagonalElement(state.covariance)));
   return {
@@ -597,17 +617,35 @@ function buildResult(
     functionEvaluations: functionEvaluations ?? 0,
     finalStepSize: state.sigma,
     finalMaxStdDev,
-    stopReason
+    stopReason,
+    profiling
   };
 }
 
 function runOneGeneration(context: RunContext, state: CmaEsState): { candidates: Candidate[]; lowerTriangular: Matrix } {
-  const lowerTriangular = computeCholeskyLowerOrRegularize(state.covariance, context.covarianceRegularizationBase, context.logger);
+  const choleskyStart = context.profiling ? nowMs() : 0;
+  const lowerTriangular = computeCholeskyLowerOrRegularize(
+    state.covariance,
+    context.covarianceRegularizationBase,
+    context.logger
+  );
+  if (context.profiling) {
+    context.profiling.choleskyMs += nowMs() - choleskyStart;
+  }
   const candidates: Candidate[] = [];
 
   for (let sampleIndex = 0; sampleIndex < context.defaults.populationSize; sampleIndex++) {
+    const sampleStart = context.profiling ? nowMs() : 0;
     const sampled = sampleCandidate(state.mean, state.sigma, lowerTriangular, context.nextStandardNormal);
+    if (context.profiling) {
+      context.profiling.samplingMs += nowMs() - sampleStart;
+    }
+
+    const costStart = context.profiling ? nowMs() : 0;
     const cost = sanitizeCost(context.costFunction(sampled.parameters));
+    if (context.profiling) {
+      context.profiling.costMs += nowMs() - costStart;
+    }
     context.counters.functionEvaluations += 1;
     candidates.push({ parameters: sampled.parameters, normalizedStep: sampled.normalizedStep, cost });
 
@@ -630,6 +668,7 @@ function updateDistributionParameters(
   lowerTriangular: Matrix,
   iteration: number
 ): void {
+  const updateStart = context.profiling ? nowMs() : 0;
   const parentCount = Math.min(context.defaults.parentCount, candidates.length);
   const xmean = computeWeightedMean(candidates, context.defaults.weights, parentCount);
 
@@ -665,6 +704,9 @@ function updateDistributionParameters(
   state.sigma *= Math.exp(sigmaExponent);
 
   state.mean = xmean;
+  if (context.profiling) {
+    context.profiling.updateMs += nowMs() - updateStart;
+  }
 }
 
 function runSingleCmaEs(context: RunContext, state: CmaEsState): RunResult {
@@ -757,6 +799,10 @@ export function cmaEs(
 
   const seededRandom = createSeededRandom(options.randomSeed);
   const counters: RunCounters = { iterations: 0, functionEvaluations: 0 };
+  const profiling: Profiling | undefined = options.profiling
+    ? { totalMs: 0, costMs: 0, choleskyMs: 0, samplingMs: 0, updateMs: 0 }
+    : undefined;
+  const totalStart = profiling ? nowMs() : 0;
 
   let populationSize = normalizePopulationSize(dimension, options.populationSize, logger);
   let defaults = computeLibcmaesDefaults(dimension, populationSize);
@@ -786,7 +832,7 @@ export function cmaEs(
         ? options.maxHistorySize
         : computeDefaultMaxHistorySize(dimension, defaults.populationSize);
 
-    const state = initializeState(initialParameters, sigmaInit, costFunction, counters);
+    const state = initializeState(initialParameters, sigmaInit, costFunction, counters, profiling);
     const context: RunContext = {
       dimension,
       defaults,
@@ -801,7 +847,8 @@ export function cmaEs(
       logger,
       nextStandardNormal: seededRandom.nextStandardNormal,
       onIteration,
-      counters
+      counters,
+      profiling
     };
 
     const runResult = runSingleCmaEs(context, state);
@@ -824,7 +871,7 @@ export function cmaEs(
     }
 
     if (restartStrategy !== 'ipop') {
-      globalStopReason = runResult.stop.reason;
+      globalStopReason = runResult.stop.reason === 'CONT' ? undefined : runResult.stop.reason;
       globalConverged = runResult.stop.converged;
       break;
     }
@@ -840,19 +887,22 @@ export function cmaEs(
 
   if (!globalState) {
     const fallbackDefaults = computeLibcmaesDefaults(dimension, populationSize);
-    const fallbackState = initializeState(initialParameters, sigmaInit, costFunction, counters);
+    const fallbackState = initializeState(initialParameters, sigmaInit, costFunction, counters, profiling);
+    if (profiling) profiling.totalMs = nowMs() - totalStart;
     return buildResult(
       fallbackState,
       fallbackDefaults,
       counters.iterations,
       false,
       globalStopReason,
-      counters.functionEvaluations
+      counters.functionEvaluations,
+      profiling
     );
   }
 
   globalState.bestCost = globalBestCost;
   globalState.bestParameters = globalBestParameters;
+  if (profiling) profiling.totalMs = nowMs() - totalStart;
 
   return buildResult(
     globalState,
@@ -860,7 +910,8 @@ export function cmaEs(
     counters.iterations,
     globalConverged,
     globalStopReason,
-    counters.functionEvaluations
+    counters.functionEvaluations,
+    profiling
   );
 }
 

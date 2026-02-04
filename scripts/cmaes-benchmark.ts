@@ -195,7 +195,8 @@ function evaluateCase(caseConfig: BenchmarkCase): {
     initialStepSize: caseConfig.initialStepSize,
     randomSeed: caseConfig.randomSeed,
     targetCost: caseConfig.targetCost,
-    restartStrategy: caseConfig.restartStrategy
+    restartStrategy: caseConfig.restartStrategy,
+    profiling: true
   });
   const elapsedMs = Date.now() - startMs;
 
@@ -210,7 +211,8 @@ function evaluateCase(caseConfig: BenchmarkCase): {
     functionEvaluations: result.functionEvaluations,
     finalStepSize: result.finalStepSize,
     status,
-    elapsedMs
+    elapsedMs,
+    profiling: result.profiling
   };
 }
 
@@ -226,6 +228,15 @@ function printResults(results: Array<ReturnType<typeof evaluateCase>>): void {
         ` | sigma=${result.finalStepSize.toExponential(3)}` +
         ` | time=${result.elapsedMs}ms`
     );
+    if (result.profiling) {
+      console.log(
+        `  profile(ms): total=${result.profiling.totalMs.toFixed(2)}, ` +
+          `cost=${result.profiling.costMs.toFixed(2)}, ` +
+          `cholesky=${result.profiling.choleskyMs.toFixed(2)}, ` +
+          `sampling=${result.profiling.samplingMs.toFixed(2)}, ` +
+          `update=${result.profiling.updateMs.toFixed(2)}`
+      );
+    }
   }
 }
 

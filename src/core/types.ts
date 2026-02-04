@@ -688,6 +688,12 @@ export interface CmaEsOptions extends CommonOptimizationOptions {
    * If not provided, defaults to 9 (libcmaes).
    */
   maxRestarts?: number;
+
+  /**
+   * Enable lightweight profiling of CMA-ES internal timings.
+   * When true, timing breakdown is returned in the result.
+   */
+  profiling?: boolean;
 }
 
 /**
@@ -719,5 +725,16 @@ export interface CmaEsResult extends OptimizationResult {
    * Stop reason for the overall optimization run.
    */
   stopReason?: 'MAXITER' | 'MAXFEVALS' | 'FTARGET' | 'TOLHISTFUN' | 'TOLX' | 'IPOP_MAX_RESTARTS';
+
+  /**
+   * Optional profiling breakdown (milliseconds).
+   */
+  profiling?: {
+    totalMs: number;
+    costMs: number;
+    choleskyMs: number;
+    samplingMs: number;
+    updateMs: number;
+  };
 }
 
