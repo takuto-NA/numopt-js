@@ -255,6 +255,15 @@ export function formatCmaEsResult(
   if (result.stopReason) {
     extraLines.push(`  Stop reason: ${result.stopReason}`);
   }
+  if (result.profiling) {
+    extraLines.push(
+      `  Profiling (ms): total=${formatNumberWithPrecision(result.profiling.totalMs, 2)}, ` +
+        `cost=${formatNumberWithPrecision(result.profiling.costMs, 2)}, ` +
+        `cholesky=${formatNumberWithPrecision(result.profiling.choleskyMs, 2)}, ` +
+        `sampling=${formatNumberWithPrecision(result.profiling.samplingMs, 2)}, ` +
+        `update=${formatNumberWithPrecision(result.profiling.updateMs, 2)}`
+    );
+  }
 
   if (insertionIndex >= 0) {
     lines.splice(insertionIndex + 1, 0, ...extraLines);
