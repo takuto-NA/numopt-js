@@ -4,7 +4,7 @@ A flexible numerical optimization library for JavaScript/TypeScript that works s
 
 ## Documentation
 
-- **API Reference (GitHub Pages)**: https://takuto-na.github.io/numopt-js/
+- **API Reference (GitHub Pages, generated from TypeDoc on `main`)**: https://takuto-na.github.io/numopt-js/
 - **Source Repository**: https://github.com/takuto-NA/numopt-js
 
 ## Features
@@ -618,268 +618,17 @@ const result = constrainedGaussNewton(
 );
 ```
 
-### API Signatures
+## API Reference
 
-#### Gradient Descent
+Signatures, option types, and result formatters live in the [TypeDoc API reference](https://takuto-na.github.io/numopt-js/). Do not treat this README as the option catalog.
 
-```typescript
-function gradientDescent(
-  initialParameters: Float64Array,
-  costFunction: CostFn,
-  gradientFunction: GradientFn,
-  options?: GradientDescentOptions
-): GradientDescentResult
-```
-
-#### BFGS / L-BFGS
-
-```typescript
-function bfgs(
-  initialParameters: Float64Array,
-  costFunction: CostFn,
-  gradientFunction: GradientFn,
-  options?: BfgsOptions
-): OptimizationResult
-
-function lbfgs(
-  initialParameters: Float64Array,
-  costFunction: CostFn,
-  gradientFunction: GradientFn,
-  options?: LbfgsOptions
-): OptimizationResult
-```
-
-#### CMA-ES
-
-```typescript
-function cmaEs(
-  initialParameters: Float64Array,
-  costFunction: CostFn,
-  options?: CmaEsOptions
-): CmaEsResult
-```
-
-#### Gauss-Newton
-
-```typescript
-function gaussNewton(
-  initialParameters: Float64Array,
-  residualFunction: ResidualFn,
-  options?: GaussNewtonOptions
-): OptimizationResult
-```
-
-#### Levenberg-Marquardt
-
-```typescript
-function levenbergMarquardt(
-  initialParameters: Float64Array,
-  residualFunction: ResidualFn,
-  options?: LevenbergMarquardtOptions
-): LevenbergMarquardtResult
-```
-
-#### Line Search
-
-```typescript
-function backtrackingLineSearch(
-  costFunction: CostFn,
-  gradientFunction: GradientFn,
-  currentParameters: Float64Array,
-  searchDirection: Float64Array,
-  options?: LineSearchOptions
-): number
-
-function strongWolfeLineSearch(
-  costFunction: CostFn,
-  gradientFunction: GradientFn,
-  currentParameters: Float64Array,
-  searchDirection: Float64Array,
-  options?: StrongWolfeLineSearchOptions
-): number
-```
-
-#### Adjoint Gradient Descent
-
-```typescript
-function adjointGradientDescent(
-  initialParameters: Float64Array,
-  initialStates: Float64Array,
-  costFunction: ConstrainedCostFn | ConstrainedResidualFn,
-  constraintFunction: ConstraintFn,
-  options?: AdjointGradientDescentOptions
-): AdjointGradientDescentResult
-```
-
-#### Constrained Gauss-Newton
-
-```typescript
-function constrainedGaussNewton(
-  initialParameters: Float64Array,
-  initialStates: Float64Array,
-  residualFunction: ConstrainedResidualFn,
-  constraintFunction: ConstraintFn,
-  options?: ConstrainedGaussNewtonOptions
-): ConstrainedGaussNewtonResult
-```
-
-#### Constrained Levenberg-Marquardt
-
-```typescript
-function constrainedLevenbergMarquardt(
-  initialParameters: Float64Array,
-  initialStates: Float64Array,
-  residualFunction: ConstrainedResidualFn,
-  constraintFunction: ConstraintFn,
-  options?: ConstrainedLevenbergMarquardtOptions
-): ConstrainedLevenbergMarquardtResult
-```
-
-### Options
-
-Shared monitoring options used by most solvers:
-
-- `maxIterations?: number` - Maximum number of iterations (default: 1000)
-- `onIteration?: (iteration: number, cost: number, params: Float64Array) => void` - Progress callback
-- `verbose?: boolean` / `logLevel?: 'DEBUG' | 'INFO' | 'WARN' | 'ERROR'` - Logging controls
-
-Convergence knobs differ by algorithm family:
+Quick convergence map:
 
 - **Gradient Descent / BFGS / L-BFGS / Gauss-Newton / Constrained Gauss-Newton / Adjoint**: `tolerance`
 - **Levenberg–Marquardt / Constrained Levenberg–Marquardt**: `tolGradient`, `tolStep`, `tolResidual`
 - **CMA-ES**: `functionTolerance`, `parameterTolerance`, `targetCost`, `maxFunctionEvaluations`
 
-#### Gradient Descent Options
-
-- `stepSize?: number` - Fixed step size (learning rate). If not provided, line search is used (default: undefined, uses line search)
-- `useLineSearch?: boolean` - Use line search to determine optimal step size (default: true)
-
-#### Levenberg-Marquardt Options
-
-- `jacobian?: JacobianFn` - Analytical Jacobian function (if provided, used instead of numerical differentiation)
-- `useNumericJacobian?: boolean` - Use numerical differentiation for Jacobian (default: true)
-- `jacobianStep?: number` - Step size for numerical Jacobian computation (default: 1e-6)
-- `lambdaInitial?: number` - Initial damping parameter (default: 1e-3)
-- `lambdaFactor?: number` - Factor for updating lambda (default: 10.0)
-- `tolGradient?: number` - Tolerance for gradient norm convergence (default: 1e-6)
-- `tolStep?: number` - Tolerance for step size convergence (default: 1e-6)
-- `tolResidual?: number` - Tolerance for residual norm convergence (default: 1e-6)
-
-**Levenberg-Marquardt References**
-
-- Moré, J. J., "The Levenberg-Marquardt Algorithm: Implementation and Theory," in *Numerical Analysis*, Lecture Notes in Mathematics 630, 1978. DOI: https://doi.org/10.1007/BFb0067700
-- Lourakis, M. I. A., "A Brief Description of the Levenberg-Marquardt Algorithm," 2005 tutorial. PDF: https://users.ics.forth.gr/lourakis/levmar/levmar.pdf
-
-#### Gauss-Newton Options
-
-- `jacobian?: JacobianFn` - Analytical Jacobian function (if provided, used instead of numerical differentiation)
-- `useNumericJacobian?: boolean` - Use numerical differentiation for Jacobian (default: true)
-- `jacobianStep?: number` - Step size for numerical Jacobian computation (default: 1e-6)
-
-#### Adjoint Gradient Descent Options
-
-- `dfdp?: (p: Float64Array, x: Float64Array) => Float64Array` - Analytical partial derivative ∂f/∂p (optional)
-- `dfdx?: (p: Float64Array, x: Float64Array) => Float64Array` - Analytical partial derivative ∂f/∂x (optional)
-- `dcdp?: (p: Float64Array, x: Float64Array) => Matrix` - Analytical partial derivative ∂c/∂p (optional)
-- `dcdx?: (p: Float64Array, x: Float64Array) => Matrix` - Analytical partial derivative ∂c/∂x (optional)
-- `stepSizeP?: number` - Step size for numerical differentiation w.r.t. parameters (default: 1e-6)
-- `stepSizeX?: number` - Step size for numerical differentiation w.r.t. states (default: 1e-6)
-- `constraintTolerance?: number` - Tolerance for constraint satisfaction check (default: 1e-6)
-
-#### Constrained Gauss-Newton Options
-
-- `drdp?: (p: Float64Array, x: Float64Array) => Matrix` - Analytical partial derivative ∂r/∂p (optional)
-- `drdx?: (p: Float64Array, x: Float64Array) => Matrix` - Analytical partial derivative ∂r/∂x (optional)
-- `dcdp?: (p: Float64Array, x: Float64Array) => Matrix` - Analytical partial derivative ∂c/∂p (optional)
-- `dcdx?: (p: Float64Array, x: Float64Array) => Matrix` - Analytical partial derivative ∂c/∂x (optional)
-- `stepSizeP?: number` - Step size for numerical differentiation w.r.t. parameters (default: 1e-6)
-- `stepSizeX?: number` - Step size for numerical differentiation w.r.t. states (default: 1e-6)
-- `constraintTolerance?: number` - Tolerance for constraint satisfaction check (default: 1e-6)
-
-#### Constrained Levenberg-Marquardt Options
-
-Extends `ConstrainedGaussNewtonOptions` with:
-- `lambdaInitial?: number` - Initial damping parameter (default: 1e-3)
-- `lambdaFactor?: number` - Factor for updating lambda (default: 10.0)
-- `tolGradient?: number` - Tolerance for gradient norm convergence (default: 1e-6)
-- `tolStep?: number` - Tolerance for step size convergence (default: 1e-6)
-- `tolResidual?: number` - Tolerance for residual norm convergence (default: 1e-6)
-
-**Note**: The constraint function `c(p, x)` does not need to return a vector with the same length as the state vector `x`. The constrained solvers support both square and non-square constraint Jacobians (overdetermined and underdetermined systems) by solving the relevant linear systems in a least-squares sense (with regularization when needed). If you see instability, try scaling/normalizing your states/constraints.
-
-#### Numerical Differentiation Options
-
-- `stepSize?: number` - Step size for finite difference approximation (default: 1e-6)
-
-## Result Formatting
-
-The library provides helper functions for formatting and displaying optimization results in a consistent, user-friendly manner. These functions replace repetitive `console.log` statements and provide better readability.
-
-### Basic Usage
-
-```typescript
-import { gradientDescent, printGradientDescentResult } from 'numopt-js';
-
-const result = gradientDescent(initialParams, costFunction, gradientFunction, {
-  maxIterations: 1000,
-  tolerance: 1e-6
-});
-
-// Print formatted result
-printGradientDescentResult(result);
-```
-
-### Available Formatters
-
-- `printOptimizationResult()` - For basic `OptimizationResult`
-- `printGradientDescentResult()` - For `GradientDescentResult` (includes line search info)
-- `printLevenbergMarquardtResult()` - For `LevenbergMarquardtResult` (includes lambda)
-- `printCmaEsResult()` - For `CmaEsResult` (includes evaluations / step size)
-- `printConstrainedGaussNewtonResult()` - For constrained optimization results
-- `printConstrainedLevenbergMarquardtResult()` - For constrained LM results
-- `printAdjointGradientDescentResult()` - For adjoint method results
-- `printResult()` - Type-safe overloaded function that works with any result type
-- Matching `format*` helpers return the same text without printing
-
-### Customization Options
-
-All formatters accept an optional `ResultFormatterOptions` object:
-
-```typescript
-import { printOptimizationResult } from 'numopt-js';
-
-const startTime = performance.now();
-const result = /* ... optimization ... */;
-const elapsedTime = performance.now() - startTime;
-
-printOptimizationResult(result, {
-  showSectionHeaders: true,      // Show "=== Optimization Results ===" header
-  showExecutionTime: true,        // Include execution time
-  elapsedTimeMs: elapsedTime,    // Execution time in milliseconds
-  maxParametersToShow: 10,        // Max parameters to display before truncating
-  parameterPrecision: 6,         // Decimal places for parameters
-  costPrecision: 8,              // Decimal places for cost/norms
-  constraintPrecision: 10        // Decimal places for constraint violations
-});
-```
-
-### Formatting Strings Instead of Printing
-
-If you need the formatted string instead of printing to console:
-
-```typescript
-import { formatOptimizationResult } from 'numopt-js';
-
-const formattedString = formatOptimizationResult(result);
-// Use formattedString as needed (e.g., save to file, send to API, etc.)
-```
-
-### Automatic Parameter Formatting
-
-The formatters automatically handle parameter arrays:
-- **Small arrays (≤3 elements)**: Displayed individually with labels (`p = 1.0, x = 2.0`)
-- **Medium arrays (4-10 elements)**: Displayed as array (`[1.0, 2.0, 3.0, ...]`)
-- **Large arrays (>10 elements)**: Truncated with "... and N more" (`[1.0, 2.0, ..., ... and 15 more]`)
+Result printing: `printResult` / `formatResult` (and typed variants) — see TypeDoc.
 
 ## References
 
@@ -987,9 +736,9 @@ const matrix = new Matrix([[1, 2], [3, 4]]);
 
 **Solutions**:
 1. Check that `∂c/∂x` is well-conditioned (if square) or has full rank (if non-square)
-3. Verify initial states satisfy the constraint approximately (`c(p₀, x₀) ≈ 0`)
-4. Try different initial values that don't make `∂c/∂x` singular
-5. For nonlinear constraints, ensure initial values are on the constraint manifold
+2. Verify initial states satisfy the constraint approximately (`c(p₀, x₀) ≈ 0`)
+3. Try different initial values that don't make `∂c/∂x` singular
+4. For nonlinear constraints, ensure initial values are on the constraint manifold
 
 #### Results don't match expectations
 

@@ -40,7 +40,7 @@ Use the `publish` workflow’s `workflow_dispatch` input `publish_ref` with a ta
 ```bash
 npm test
 npm run smoke:pack
-npm run docs:check
+npm run docs
 ```
 
-`docs:check` regenerates TypeDoc and fails if `docs/` would change. Commit any intentional doc updates before tagging.
+TypeDoc HTML is generated in CI and deployed by `.github/workflows/docs.yml` on `main`. Do not commit `docs/`.

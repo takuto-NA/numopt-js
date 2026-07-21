@@ -47,8 +47,7 @@
     "example:constrained-lm": "tsx examples/constrained-levenberg-marquardt-example.ts",
     "benchmark:constrained": "tsx scripts/constrained-benchmark.ts",
     "benchmark:curve-bending": "tsx scripts/curve-bending-benchmark.ts",
-    "docs": "typedoc",
-    "docs:check": "npm run docs && node scripts/check-docs-clean.mjs"
+    "docs": "typedoc"
   },
   "keywords": [
     "optimization",
