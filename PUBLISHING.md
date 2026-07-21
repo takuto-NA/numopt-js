@@ -44,3 +44,13 @@ npm run docs
 ```
 
 TypeDoc HTML is generated in CI and deployed by `.github/workflows/docs.yml` on `main`. Do not commit `docs/`.
+
+## GitHub Pages (one-time)
+
+API docs are served from GitHub Actions (not the legacy `main` `/docs` folder).
+
+1. Repo **Settings → Pages → Build and deployment → Source**: choose **GitHub Actions**.
+2. Merge this branch (or push `docs.yml` to `main`), then confirm the **Deploy docs** workflow succeeds.
+3. Verify https://takuto-na.github.io/numopt-js/ shows current TypeDoc output.
+
+If Pages is still on legacy `/docs`, deleting committed `docs/` will blank the site until the source is switched.
