@@ -1,3 +1,2 @@
-# Keep generated docs deterministic across Windows/Linux checkouts.
-docs/** text eol=lf
-*.html text eol=lf
+# Normalize text files; generated docs/ are not tracked.
+* text=auto eol=lf
