@@ -49,7 +49,7 @@ npm install numopt-js
 
 ## Cost Function vs Residual Function (Important)
 
-- **Cost function**: `cost(p) -> number` (used by `gradientDescent`)
+- **Cost function**: `cost(p) -> number` (used by `gradientDescent`, `bfgs`, `lbfgs`, and `cmaEs`)
 - **Residual function**: `residual(p) -> Float64Array` (used by `gaussNewton` / `levenbergMarquardt`), where the library minimizes \(f(p) = 1/2 \|r(p)\|^2\)
 
 ## Result Object (What to Look At)
@@ -737,12 +737,17 @@ function constrainedLevenbergMarquardt(
 
 ### Options
 
-All algorithms support common options:
+Shared monitoring options used by most solvers:
 
 - `maxIterations?: number` - Maximum number of iterations (default: 1000)
-- `tolerance?: number` - Convergence tolerance (default: 1e-6)
 - `onIteration?: (iteration: number, cost: number, params: Float64Array) => void` - Progress callback
-- `verbose?: boolean` - Enable verbose logging (default: false)
+- `verbose?: boolean` / `logLevel?: 'DEBUG' | 'INFO' | 'WARN' | 'ERROR'` - Logging controls
+
+Convergence knobs differ by algorithm family:
+
+- **Gradient Descent / BFGS / L-BFGS / Gauss-Newton / Constrained Gauss-Newton / Adjoint**: `tolerance`
+- **Levenberg–Marquardt / Constrained Levenberg–Marquardt**: `tolGradient`, `tolStep`, `tolResidual`
+- **CMA-ES**: `functionTolerance`, `parameterTolerance`, `targetCost`, `maxFunctionEvaluations`
 
 #### Gradient Descent Options
 
