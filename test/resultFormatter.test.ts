@@ -6,6 +6,7 @@ import {
   formatOptimizationResult,
   formatGradientDescentResult,
   formatLevenbergMarquardtResult,
+  formatCmaEsResult,
   formatConstrainedGaussNewtonResult,
   formatConstrainedLevenbergMarquardtResult,
   formatAdjointGradientDescentResult,
@@ -16,6 +17,7 @@ import type {
   OptimizationResult,
   GradientDescentResult,
   LevenbergMarquardtResult,
+  CmaEsResult,
   ConstrainedGaussNewtonResult,
   ConstrainedLevenbergMarquardtResult,
   AdjointGradientDescentResult
@@ -109,6 +111,45 @@ describe('ResultFormatter', () => {
       const formatted = formatLevenbergMarquardtResult(result);
       expect(formatted).toContain('Final lambda');
       expect(formatted).toContain('0.001');
+    });
+  });
+
+  describe('formatCmaEsResult', () => {
+    it('should format CMA-ES result with evaluation and step-size fields', () => {
+      const result: CmaEsResult = {
+        finalParameters: new Float64Array([0.1, -0.2]),
+        parameters: new Float64Array([0.1, -0.2]),
+        iterations: 40,
+        converged: true,
+        finalCost: 0.05,
+        functionEvaluations: 800,
+        finalStepSize: 0.01,
+        finalMaxStdDev: 0.02,
+        stopReason: 'targetCost'
+      };
+
+      const formatted = formatCmaEsResult(result);
+      expect(formatted).toContain('Function evaluations');
+      expect(formatted).toContain('800');
+      expect(formatted).toContain('Final step size');
+    });
+  });
+
+  describe('printResult', () => {
+    it('should print a formatted result via console.log', () => {
+      const result: OptimizationResult = {
+        finalParameters: new Float64Array([1.0]),
+        parameters: new Float64Array([1.0]),
+        iterations: 3,
+        converged: true,
+        finalCost: 0.0
+      };
+
+      const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+      printResult(result);
+      expect(logSpy).toHaveBeenCalledTimes(1);
+      expect(String(logSpy.mock.calls[0][0])).toContain('Optimization Results');
+      logSpy.mockRestore();
     });
   });
 

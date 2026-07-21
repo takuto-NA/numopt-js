@@ -1,12 +1,4 @@
-import { webcrypto } from 'node:crypto';
 import { defineConfig } from 'vitest/config';
-
-type GlobalWithCrypto = typeof globalThis & { crypto?: typeof webcrypto };
-const globalScope = globalThis as GlobalWithCrypto;
-
-if (!globalScope.crypto) {
-  globalScope.crypto = webcrypto;
-}
 
 export default defineConfig({
   test: {
@@ -26,4 +18,3 @@ export default defineConfig({
     }
   }
 });
-
