@@ -19,8 +19,7 @@ vitest.config.ts
 *.swo
 *~
 
-# Documentation (keep README.md and CODING_RULES.md)
-# README.md and CODING_RULES.md are explicitly included in package.json files
+# Documentation (README.md is included via package.json files)
 
 # Build artifacts (keep dist/)
 *.tsbuildinfo

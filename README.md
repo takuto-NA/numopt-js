@@ -4,7 +4,7 @@ A flexible numerical optimization library for JavaScript/TypeScript that works s
 
 ## Documentation
 
-- **API Reference (GitHub Pages)**: https://takuto-na.github.io/numopt-js/
+- **API Reference (GitHub Pages, generated from TypeDoc on `main`)**: https://takuto-na.github.io/numopt-js/
 - **Source Repository**: https://github.com/takuto-NA/numopt-js
 
 ## Features
@@ -49,7 +49,7 @@ npm install numopt-js
 
 ## Cost Function vs Residual Function (Important)
 
-- **Cost function**: `cost(p) -> number` (used by `gradientDescent`)
+- **Cost function**: `cost(p) -> number` (used by `gradientDescent`, `bfgs`, `lbfgs`, and `cmaEs`)
 - **Residual function**: `residual(p) -> Float64Array` (used by `gaussNewton` / `levenbergMarquardt`), where the library minimizes \(f(p) = 1/2 \|r(p)\|^2\)
 
 ## Result Object (What to Look At)
@@ -88,30 +88,6 @@ const result = gradientDescent(new Float64Array([5, -3]), cost, grad, {
 console.log(result.finalParameters);
 ```
 
-## BFGS / L-BFGS
-
-Use these for smooth unconstrained problems when you can provide a gradient.
-
-```js
-import { bfgs, lbfgs } from 'numopt-js';
-
-const cost = (params) => (params[0] - 1) ** 2 + (params[1] + 2) ** 2;
-const grad = (params) => new Float64Array([2 * (params[0] - 1), 2 * (params[1] + 2)]);
-
-const bfgsResult = bfgs(new Float64Array([10, 10]), cost, grad, {
-  maxIterations: 200,
-  tolerance: 1e-8
-});
-
-const lbfgsResult = lbfgs(new Float64Array([10, 10]), cost, grad, {
-  maxIterations: 200,
-  tolerance: 1e-8,
-  historySize: 10
-});
-
-console.log(bfgsResult.finalParameters, lbfgsResult.finalParameters);
-```
-
 Run:
 
 ```bash
@@ -141,6 +117,30 @@ Run:
 
 ```bash
 node quick.cjs
+```
+
+## BFGS / L-BFGS
+
+Use these for smooth unconstrained problems when you can provide a gradient.
+
+```js
+import { bfgs, lbfgs } from 'numopt-js';
+
+const cost = (params) => (params[0] - 1) ** 2 + (params[1] + 2) ** 2;
+const grad = (params) => new Float64Array([2 * (params[0] - 1), 2 * (params[1] + 2)]);
+
+const bfgsResult = bfgs(new Float64Array([10, 10]), cost, grad, {
+  maxIterations: 200,
+  tolerance: 1e-8
+});
+
+const lbfgsResult = lbfgs(new Float64Array([10, 10]), cost, grad, {
+  maxIterations: 200,
+  tolerance: 1e-8,
+  historySize: 10
+});
+
+console.log(bfgsResult.finalParameters, lbfgsResult.finalParameters);
 ```
 
 ## CMA-ES (Black-box Optimization)
@@ -269,32 +269,20 @@ Import the browser bundle by path. (In this mode, you **cannot** use the bare sp
 
 ## Examples
 
-After installing dependencies with `npm install`, you can run the example scripts with `npm run <script>`:
+After `npm install`, run examples with `npm run <script>`. Recommended order:
 
-- `npm run example:gradient` — basic gradient descent on a quadratic bowl
-- `npm run example:rosenbrock` — Rosenbrock optimization with line search
-- `npm run example:lm` — Levenberg–Marquardt curve fitting
-- `npm run example:gauss-newton` — nonlinear least squares with Gauss-Newton
-- `npm run example:adjoint` — simple adjoint-based constrained optimization
-- `npm run example:adjoint-advanced` — adjoint method with custom Jacobians
-- `npm run example:constrained-gauss-newton` — constrained least squares via effective Jacobian
-- `npm run example:constrained-lm` — constrained Levenberg–Marquardt
+1. `npm run example:gradient` — scalar cost + gradient
+2. `npm run example:rosenbrock` — line search on a classic non-convex problem
+3. `npm run example:lm` — residual-based least squares
+4. `npm run example:gauss-newton` — nonlinear least squares without damping
+5. `npm run example:cma-es` — derivative-free black-box optimization
+6. `npm run example:constrained-gauss-newton` — equality-constrained least squares
+7. `npm run example:constrained-lm` — damped constrained least squares
+8. `npm run example:adjoint` — constrained optimization with states \(x\) and parameters \(p\)
 
-**Start with these (recommended reading order):**
+Also available: `example:line-search`, `example:layout-toy`, `example:adjoint-advanced`.
 
-- `npm run example:gradient` — smallest end-to-end example (scalar cost + gradient)
-- `npm run example:rosenbrock` — shows why line search matters on a classic non-convex problem
-- `npm run example:lm` — first least-squares example (residuals, optional numeric Jacobian)
-- `npm run example:constrained-gauss-newton` — first constrained least-squares example
-- `npm run example:constrained-lm` — robust constrained least-squares (damping)
-- `npm run example:adjoint` — constrained optimization with states \(x\) and parameters \(p\)
-
-**Pick an algorithm:**
-
-- Gradient Descent — stable first choice for smooth problems (see below)
-- Gauss-Newton — efficient for nonlinear least squares when residuals are available
-- Levenberg–Marquardt — robust least-squares solver with damping
-- Constrained methods & Adjoint — enforce constraints with effective Jacobians or adjoint variables
+Optional manual benchmarks (not CI): `npm run benchmark:constrained`, `npm run benchmark:curve-bending`.
 
 ### Gradient Descent
 
@@ -630,231 +618,17 @@ const result = constrainedGaussNewton(
 );
 ```
 
-### Gradient Descent
+## API Reference
 
-```typescript
-function gradientDescent(
-  initialParameters: Float64Array,
-  costFunction: CostFn,
-  gradientFunction: GradientFn,
-  options?: GradientDescentOptions
-): GradientDescentResult
-```
+Signatures, option types, and result formatters live in the [TypeDoc API reference](https://takuto-na.github.io/numopt-js/). Do not treat this README as the option catalog.
 
-### Levenberg-Marquardt
+Quick convergence map:
 
-```typescript
-function levenbergMarquardt(
-  initialParameters: Float64Array,
-  residualFunction: ResidualFn,
-  options?: LevenbergMarquardtOptions
-): LevenbergMarquardtResult
-```
+- **Gradient Descent / BFGS / L-BFGS / Gauss-Newton / Constrained Gauss-Newton / Adjoint**: `tolerance`
+- **Levenberg–Marquardt / Constrained Levenberg–Marquardt**: `tolGradient`, `tolStep`, `tolResidual`
+- **CMA-ES**: `functionTolerance`, `parameterTolerance`, `targetCost`, `maxFunctionEvaluations`
 
-### Adjoint Gradient Descent
-
-```typescript
-function adjointGradientDescent(
-  initialParameters: Float64Array,
-  initialStates: Float64Array,
-  costFunction: ConstrainedCostFn | ConstrainedResidualFn,
-  constraintFunction: ConstraintFn,
-  options?: AdjointGradientDescentOptions
-): AdjointGradientDescentResult
-```
-
-### Constrained Gauss-Newton
-
-```typescript
-function constrainedGaussNewton(
-  initialParameters: Float64Array,
-  initialStates: Float64Array,
-  residualFunction: ConstrainedResidualFn,
-  constraintFunction: ConstraintFn,
-  options?: ConstrainedGaussNewtonOptions
-): ConstrainedGaussNewtonResult
-```
-
-### Constrained Levenberg-Marquardt
-
-```typescript
-function constrainedLevenbergMarquardt(
-  initialParameters: Float64Array,
-  initialStates: Float64Array,
-  residualFunction: ConstrainedResidualFn,
-  constraintFunction: ConstraintFn,
-  options?: ConstrainedLevenbergMarquardtOptions
-): ConstrainedLevenbergMarquardtResult
-```
-
-### Options
-
-All algorithms support common options:
-
-- `maxIterations?: number` - Maximum number of iterations (default: 1000)
-- `tolerance?: number` - Convergence tolerance (default: 1e-6)
-- `onIteration?: (iteration: number, cost: number, params: Float64Array) => void` - Progress callback
-- `verbose?: boolean` - Enable verbose logging (default: false)
-
-#### Gradient Descent Options
-
-- `stepSize?: number` - Fixed step size (learning rate). If not provided, line search is used (default: undefined, uses line search)
-- `useLineSearch?: boolean` - Use line search to determine optimal step size (default: true)
-
-#### Levenberg-Marquardt Options
-
-- `jacobian?: JacobianFn` - Analytical Jacobian function (if provided, used instead of numerical differentiation)
-- `useNumericJacobian?: boolean` - Use numerical differentiation for Jacobian (default: true)
-- `jacobianStep?: number` - Step size for numerical Jacobian computation (default: 1e-6)
-- `lambdaInitial?: number` - Initial damping parameter (default: 1e-3)
-- `lambdaFactor?: number` - Factor for updating lambda (default: 10.0)
-- `tolGradient?: number` - Tolerance for gradient norm convergence (default: 1e-6)
-- `tolStep?: number` - Tolerance for step size convergence (default: 1e-6)
-- `tolResidual?: number` - Tolerance for residual norm convergence (default: 1e-6)
-
-**Levenberg-Marquardt References**
-
-- Moré, J. J., "The Levenberg-Marquardt Algorithm: Implementation and Theory," in *Numerical Analysis*, Lecture Notes in Mathematics 630, 1978. DOI: https://doi.org/10.1007/BFb0067700
-- Lourakis, M. I. A., "A Brief Description of the Levenberg-Marquardt Algorithm," 2005 tutorial. PDF: https://users.ics.forth.gr/lourakis/levmar/levmar.pdf
-
-#### Gauss-Newton Options
-
-- `jacobian?: JacobianFn` - Analytical Jacobian function (if provided, used instead of numerical differentiation)
-- `useNumericJacobian?: boolean` - Use numerical differentiation for Jacobian (default: true)
-- `jacobianStep?: number` - Step size for numerical Jacobian computation (default: 1e-6)
-
-#### Adjoint Gradient Descent Options
-
-- `dfdp?: (p: Float64Array, x: Float64Array) => Float64Array` - Analytical partial derivative ∂f/∂p (optional)
-- `dfdx?: (p: Float64Array, x: Float64Array) => Float64Array` - Analytical partial derivative ∂f/∂x (optional)
-- `dcdp?: (p: Float64Array, x: Float64Array) => Matrix` - Analytical partial derivative ∂c/∂p (optional)
-- `dcdx?: (p: Float64Array, x: Float64Array) => Matrix` - Analytical partial derivative ∂c/∂x (optional)
-- `stepSizeP?: number` - Step size for numerical differentiation w.r.t. parameters (default: 1e-6)
-- `stepSizeX?: number` - Step size for numerical differentiation w.r.t. states (default: 1e-6)
-- `constraintTolerance?: number` - Tolerance for constraint satisfaction check (default: 1e-6)
-
-#### Constrained Gauss-Newton Options
-
-- `drdp?: (p: Float64Array, x: Float64Array) => Matrix` - Analytical partial derivative ∂r/∂p (optional)
-- `drdx?: (p: Float64Array, x: Float64Array) => Matrix` - Analytical partial derivative ∂r/∂x (optional)
-- `dcdp?: (p: Float64Array, x: Float64Array) => Matrix` - Analytical partial derivative ∂c/∂p (optional)
-- `dcdx?: (p: Float64Array, x: Float64Array) => Matrix` - Analytical partial derivative ∂c/∂x (optional)
-- `stepSizeP?: number` - Step size for numerical differentiation w.r.t. parameters (default: 1e-6)
-- `stepSizeX?: number` - Step size for numerical differentiation w.r.t. states (default: 1e-6)
-- `constraintTolerance?: number` - Tolerance for constraint satisfaction check (default: 1e-6)
-
-#### Constrained Levenberg-Marquardt Options
-
-Extends `ConstrainedGaussNewtonOptions` with:
-- `lambdaInitial?: number` - Initial damping parameter (default: 1e-3)
-- `lambdaFactor?: number` - Factor for updating lambda (default: 10.0)
-- `tolGradient?: number` - Tolerance for gradient norm convergence (default: 1e-6)
-- `tolStep?: number` - Tolerance for step size convergence (default: 1e-6)
-- `tolResidual?: number` - Tolerance for residual norm convergence (default: 1e-6)
-
-**Note**: The constraint function `c(p, x)` does not need to return a vector with the same length as the state vector `x`. The constrained solvers support both square and non-square constraint Jacobians (overdetermined and underdetermined systems) by solving the relevant linear systems in a least-squares sense (with regularization when needed). If you see instability, try scaling/normalizing your states/constraints.
-
-#### Numerical Differentiation Options
-
-- `stepSize?: number` - Step size for finite difference approximation (default: 1e-6)
-
-## Result Formatting
-
-The library provides helper functions for formatting and displaying optimization results in a consistent, user-friendly manner. These functions replace repetitive `console.log` statements and provide better readability.
-
-### Basic Usage
-
-```typescript
-import { gradientDescent, printGradientDescentResult } from 'numopt-js';
-
-const result = gradientDescent(initialParams, costFunction, gradientFunction, {
-  maxIterations: 1000,
-  tolerance: 1e-6
-});
-
-// Print formatted result
-printGradientDescentResult(result);
-```
-
-### Available Formatters
-
-- `printOptimizationResult()` - For basic `OptimizationResult`
-- `printGradientDescentResult()` - For `GradientDescentResult` (includes line search info)
-- `printLevenbergMarquardtResult()` - For `LevenbergMarquardtResult` (includes lambda)
-- `printConstrainedGaussNewtonResult()` - For constrained optimization results
-- `printConstrainedLevenbergMarquardtResult()` - For constrained LM results
-- `printAdjointGradientDescentResult()` - For adjoint method results
-- `printResult()` - Type-safe overloaded function that works with any result type
-
-### Customization Options
-
-All formatters accept an optional `ResultFormatterOptions` object:
-
-```typescript
-import { printOptimizationResult } from 'numopt-js';
-
-const startTime = performance.now();
-const result = /* ... optimization ... */;
-const elapsedTime = performance.now() - startTime;
-
-printOptimizationResult(result, {
-  showSectionHeaders: true,      // Show "=== Optimization Results ===" header
-  showExecutionTime: true,        // Include execution time
-  elapsedTimeMs: elapsedTime,    // Execution time in milliseconds
-  maxParametersToShow: 10,        // Max parameters to display before truncating
-  parameterPrecision: 6,         // Decimal places for parameters
-  costPrecision: 8,              // Decimal places for cost/norms
-  constraintPrecision: 10        // Decimal places for constraint violations
-});
-```
-
-### Formatting Strings Instead of Printing
-
-If you need the formatted string instead of printing to console:
-
-```typescript
-import { formatOptimizationResult } from 'numopt-js';
-
-const formattedString = formatOptimizationResult(result);
-// Use formattedString as needed (e.g., save to file, send to API, etc.)
-```
-
-### Automatic Parameter Formatting
-
-The formatters automatically handle parameter arrays:
-- **Small arrays (≤3 elements)**: Displayed individually with labels (`p = 1.0, x = 2.0`)
-- **Medium arrays (4-10 elements)**: Displayed as array (`[1.0, 2.0, 3.0, ...]`)
-- **Large arrays (>10 elements)**: Truncated with "... and N more" (`[1.0, 2.0, ..., ... and 15 more]`)
-
-## Example Directory
-
-See the `examples/` directory for complete working examples:
-
-- Gradient descent with Rosenbrock function
-- Curve fitting with Levenberg-Marquardt
-- Linear and nonlinear regression
-- Constrained optimization with adjoint method
-- Constrained Gauss-Newton method
-- Constrained Levenberg-Marquardt method
-
-To run the examples:
-
-```bash
-# Using npm scripts (recommended)
-npm run example:gradient
-npm run example:rosenbrock
-npm run example:lm
-npm run example:gauss-newton
-
-# Or directly with tsx
-npx tsx examples/gradient-descent-example.ts
-npx tsx examples/curve-fitting-lm.ts
-npx tsx examples/rosenbrock-optimization.ts
-npx tsx examples/adjoint-example.ts
-npx tsx examples/adjoint-advanced-example.ts
-npx tsx examples/constrained-gauss-newton-example.ts
-npx tsx examples/constrained-levenberg-marquardt-example.ts
-```
+Result printing: `printResult` / `formatResult` (and typed variants) — see TypeDoc.
 
 ## References
 
@@ -862,29 +636,13 @@ npx tsx examples/constrained-levenberg-marquardt-example.ts
 - Lourakis, M. I. A., "A Brief Description of the Levenberg-Marquardt Algorithm," 2005 tutorial. PDF: http://www.ics.forth.gr/~lourakis/publ/2005/LM.pdf
 - Nocedal, J. & Wright, S. J., "Numerical Optimization" (2nd ed.), Chapter 12 (constrained optimization), 2006
 
-## MVP Scope
-
-### Included
-
-- Gradient descent with line search
-- Gauss-Newton method
-- Levenberg-Marquardt algorithm
-- Constrained Gauss-Newton method (nonlinear least squares with equality constraints)
-- Constrained Levenberg-Marquardt method (robust constrained nonlinear least squares)
-- Adjoint method for constrained optimization (equality constraints)
-- Numerical differentiation (central difference)
-- Browser compatibility
-- TypeScript support
-
-### Not Included (Future Work)
+## Out of Scope (Current)
 
 - Automatic differentiation
-- Constraint handling (inequality constraints)
-- Global optimization guarantees
-- Evolutionary algorithms (CMA-ES, etc.)
-- Other optimization algorithms (BFGS, etc.)
-- Sparse matrix support
-- Parallel computation
+- Inequality constraints
+- Global optimality guarantees
+- Sparse matrix kernels
+- Parallel / multi-threaded solvers
 
 ## Type Definitions
 
@@ -978,9 +736,9 @@ const matrix = new Matrix([[1, 2], [3, 4]]);
 
 **Solutions**:
 1. Check that `∂c/∂x` is well-conditioned (if square) or has full rank (if non-square)
-3. Verify initial states satisfy the constraint approximately (`c(p₀, x₀) ≈ 0`)
-4. Try different initial values that don't make `∂c/∂x` singular
-5. For nonlinear constraints, ensure initial values are on the constraint manifold
+2. Verify initial states satisfy the constraint approximately (`c(p₀, x₀) ≈ 0`)
+3. Try different initial values that don't make `∂c/∂x` singular
+4. For nonlinear constraints, ensure initial values are on the constraint manifold
 
 #### Results don't match expectations
 
@@ -1006,16 +764,11 @@ const matrix = new Matrix([[1, 2], [3, 4]]);
 3. **Check convergence status**: Always check `result.converged` to see if optimization succeeded
 4. **Monitor gradient/residual norms**: Check `finalGradientNorm` or `finalResidualNorm` to understand convergence quality
 
-## Requirements
-
-- Node.js >= 18.0.0
-- Modern browsers with ES2020 support (required for running in-browser examples)
-
 ## License
 
 MIT
 
 ## Contributing
 
-Contributions are welcome! Please read `CODING_RULES.md` before submitting pull requests.
+Contributions are welcome. Follow `CODING_RULES.md` in this repository when submitting pull requests (it is a contributor guide, not part of the npm package).
 

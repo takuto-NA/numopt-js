@@ -3,6 +3,7 @@ node_modules/
 
 # Build outputs
 dist/
+docs/
 *.tsbuildinfo
 
 # Test coverage
@@ -28,4 +29,7 @@ yarn-error.log*
 # Environment
 .env
 .env.local
+
+
+*.tgz
 

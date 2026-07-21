@@ -1,0 +1,2 @@
+# Normalize text files; generated docs/ are not tracked.
+* text=auto eol=lf
