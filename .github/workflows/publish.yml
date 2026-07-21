@@ -11,7 +11,7 @@ on:
       publish_ref:
         description: 'Git ref to publish (e.g., v0.3.0)'
         required: true
-        default: 'v0.3.0'
+        default: 'v0.4.0'
 
 jobs:
   publish:
