@@ -3,5 +3,6 @@
   "out": "docs",
   "excludePrivate": true,
   "excludeInternal": true,
-  "readme": "none"
+  "readme": "none",
+  "gitRevision": "main"
 }

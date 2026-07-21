@@ -88,30 +88,6 @@ const result = gradientDescent(new Float64Array([5, -3]), cost, grad, {
 console.log(result.finalParameters);
 ```
 
-## BFGS / L-BFGS
-
-Use these for smooth unconstrained problems when you can provide a gradient.
-
-```js
-import { bfgs, lbfgs } from 'numopt-js';
-
-const cost = (params) => (params[0] - 1) ** 2 + (params[1] + 2) ** 2;
-const grad = (params) => new Float64Array([2 * (params[0] - 1), 2 * (params[1] + 2)]);
-
-const bfgsResult = bfgs(new Float64Array([10, 10]), cost, grad, {
-  maxIterations: 200,
-  tolerance: 1e-8
-});
-
-const lbfgsResult = lbfgs(new Float64Array([10, 10]), cost, grad, {
-  maxIterations: 200,
-  tolerance: 1e-8,
-  historySize: 10
-});
-
-console.log(bfgsResult.finalParameters, lbfgsResult.finalParameters);
-```
-
 Run:
 
 ```bash
@@ -141,6 +117,30 @@ Run:
 
 ```bash
 node quick.cjs
+```
+
+## BFGS / L-BFGS
+
+Use these for smooth unconstrained problems when you can provide a gradient.
+
+```js
+import { bfgs, lbfgs } from 'numopt-js';
+
+const cost = (params) => (params[0] - 1) ** 2 + (params[1] + 2) ** 2;
+const grad = (params) => new Float64Array([2 * (params[0] - 1), 2 * (params[1] + 2)]);
+
+const bfgsResult = bfgs(new Float64Array([10, 10]), cost, grad, {
+  maxIterations: 200,
+  tolerance: 1e-8
+});
+
+const lbfgsResult = lbfgs(new Float64Array([10, 10]), cost, grad, {
+  maxIterations: 200,
+  tolerance: 1e-8,
+  historySize: 10
+});
+
+console.log(bfgsResult.finalParameters, lbfgsResult.finalParameters);
 ```
 
 ## CMA-ES (Black-box Optimization)
@@ -618,7 +618,9 @@ const result = constrainedGaussNewton(
 );
 ```
 
-### Gradient Descent
+### API Signatures
+
+#### Gradient Descent
 
 ```typescript
 function gradientDescent(
@@ -629,7 +631,7 @@ function gradientDescent(
 ): GradientDescentResult
 ```
 
-### BFGS / L-BFGS
+#### BFGS / L-BFGS
 
 ```typescript
 function bfgs(
@@ -647,7 +649,7 @@ function lbfgs(
 ): OptimizationResult
 ```
 
-### CMA-ES
+#### CMA-ES
 
 ```typescript
 function cmaEs(
@@ -657,7 +659,7 @@ function cmaEs(
 ): CmaEsResult
 ```
 
-### Gauss-Newton
+#### Gauss-Newton
 
 ```typescript
 function gaussNewton(
@@ -667,7 +669,7 @@ function gaussNewton(
 ): OptimizationResult
 ```
 
-### Levenberg-Marquardt
+#### Levenberg-Marquardt
 
 ```typescript
 function levenbergMarquardt(
@@ -677,7 +679,7 @@ function levenbergMarquardt(
 ): LevenbergMarquardtResult
 ```
 
-### Line Search
+#### Line Search
 
 ```typescript
 function backtrackingLineSearch(
@@ -697,7 +699,7 @@ function strongWolfeLineSearch(
 ): number
 ```
 
-### Adjoint Gradient Descent
+#### Adjoint Gradient Descent
 
 ```typescript
 function adjointGradientDescent(
@@ -709,7 +711,7 @@ function adjointGradientDescent(
 ): AdjointGradientDescentResult
 ```
 
-### Constrained Gauss-Newton
+#### Constrained Gauss-Newton
 
 ```typescript
 function constrainedGaussNewton(
@@ -721,7 +723,7 @@ function constrainedGaussNewton(
 ): ConstrainedGaussNewtonResult
 ```
 
-### Constrained Levenberg-Marquardt
+#### Constrained Levenberg-Marquardt
 
 ```typescript
 function constrainedLevenbergMarquardt(
