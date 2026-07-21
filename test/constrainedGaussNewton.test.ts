@@ -86,8 +86,10 @@ describe('Constrained Gauss-Newton Method', () => {
       }
     );
 
-    // The algorithm should handle initial constraint violation gracefully
-    expect(result.finalConstraintNorm).toBeDefined();
+    // Algorithm should reduce constraint violation from the infeasible start.
+    const initialConstraintNorm = vectorNorm(simpleConstraint(initialP, initialX));
+    expect(result.finalConstraintNorm).toBeLessThan(initialConstraintNorm);
+    expect(result.finalConstraintNorm).toBeLessThan(1e-2);
     expect(result.finalParameters).toBeInstanceOf(Float64Array);
     expect(result.finalStates).toBeInstanceOf(Float64Array);
   });

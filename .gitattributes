@@ -1,0 +1,3 @@
+# Keep generated docs deterministic across Windows/Linux checkouts.
+docs/** text eol=lf
+*.html text eol=lf

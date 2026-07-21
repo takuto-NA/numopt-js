@@ -23,7 +23,6 @@
   "files": [
     "dist",
     "README.md",
-    "CODING_RULES.md",
     "LICENSE"
   ],
   "scripts": {
@@ -34,19 +33,23 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest --coverage",
-    "lint": "eslint src --ext .ts",
-    "clean": "rm -rf dist",
+    "typecheck": "tsc --noEmit",
+    "clean": "node --input-type=module -e \"import fs from 'node:fs'; fs.rmSync('dist', { recursive: true, force: true });\"",
     "example:gradient": "tsx examples/gradient-descent-example.ts",
     "example:rosenbrock": "tsx examples/rosenbrock-optimization.ts",
     "example:lm": "tsx examples/curve-fitting-lm.ts",
     "example:gauss-newton": "tsx examples/gauss-newton-example.ts",
+    "example:cma-es": "tsx examples/cma-es-example.ts",
+    "example:line-search": "tsx examples/line-search-example.ts",
+    "example:layout-toy": "tsx examples/layout-toy-1d.ts",
     "example:adjoint": "tsx examples/adjoint-example.ts",
     "example:adjoint-advanced": "tsx examples/adjoint-advanced-example.ts",
     "example:constrained-gauss-newton": "tsx examples/constrained-gauss-newton-example.ts",
     "example:constrained-lm": "tsx examples/constrained-levenberg-marquardt-example.ts",
-    "example:constrained-benchmark": "tsx examples/constrained-benchmark.ts",
-    "example:curve-bending-benchmark": "tsx examples/curve-bending-benchmark.ts",
-    "docs": "typedoc --out docs src"
+    "benchmark:constrained": "tsx scripts/constrained-benchmark.ts",
+    "benchmark:curve-bending": "tsx scripts/curve-bending-benchmark.ts",
+    "docs": "typedoc",
+    "docs:check": "npm run docs && node scripts/check-docs-clean.mjs"
   },
   "keywords": [
     "optimization",

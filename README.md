@@ -269,32 +269,20 @@ Import the browser bundle by path. (In this mode, you **cannot** use the bare sp
 
 ## Examples
 
-After installing dependencies with `npm install`, you can run the example scripts with `npm run <script>`:
+After `npm install`, run examples with `npm run <script>`. Recommended order:
 
-- `npm run example:gradient` — basic gradient descent on a quadratic bowl
-- `npm run example:rosenbrock` — Rosenbrock optimization with line search
-- `npm run example:lm` — Levenberg–Marquardt curve fitting
-- `npm run example:gauss-newton` — nonlinear least squares with Gauss-Newton
-- `npm run example:adjoint` — simple adjoint-based constrained optimization
-- `npm run example:adjoint-advanced` — adjoint method with custom Jacobians
-- `npm run example:constrained-gauss-newton` — constrained least squares via effective Jacobian
-- `npm run example:constrained-lm` — constrained Levenberg–Marquardt
+1. `npm run example:gradient` — scalar cost + gradient
+2. `npm run example:rosenbrock` — line search on a classic non-convex problem
+3. `npm run example:lm` — residual-based least squares
+4. `npm run example:gauss-newton` — nonlinear least squares without damping
+5. `npm run example:cma-es` — derivative-free black-box optimization
+6. `npm run example:constrained-gauss-newton` — equality-constrained least squares
+7. `npm run example:constrained-lm` — damped constrained least squares
+8. `npm run example:adjoint` — constrained optimization with states \(x\) and parameters \(p\)
 
-**Start with these (recommended reading order):**
+Also available: `example:line-search`, `example:layout-toy`, `example:adjoint-advanced`.
 
-- `npm run example:gradient` — smallest end-to-end example (scalar cost + gradient)
-- `npm run example:rosenbrock` — shows why line search matters on a classic non-convex problem
-- `npm run example:lm` — first least-squares example (residuals, optional numeric Jacobian)
-- `npm run example:constrained-gauss-newton` — first constrained least-squares example
-- `npm run example:constrained-lm` — robust constrained least-squares (damping)
-- `npm run example:adjoint` — constrained optimization with states \(x\) and parameters \(p\)
-
-**Pick an algorithm:**
-
-- Gradient Descent — stable first choice for smooth problems (see below)
-- Gauss-Newton — efficient for nonlinear least squares when residuals are available
-- Levenberg–Marquardt — robust least-squares solver with damping
-- Constrained methods & Adjoint — enforce constraints with effective Jacobians or adjoint variables
+Optional manual benchmarks (not CI): `npm run benchmark:constrained`, `npm run benchmark:curve-bending`.
 
 ### Gradient Descent
 
@@ -641,6 +629,44 @@ function gradientDescent(
 ): GradientDescentResult
 ```
 
+### BFGS / L-BFGS
+
+```typescript
+function bfgs(
+  initialParameters: Float64Array,
+  costFunction: CostFn,
+  gradientFunction: GradientFn,
+  options?: BfgsOptions
+): OptimizationResult
+
+function lbfgs(
+  initialParameters: Float64Array,
+  costFunction: CostFn,
+  gradientFunction: GradientFn,
+  options?: LbfgsOptions
+): OptimizationResult
+```
+
+### CMA-ES
+
+```typescript
+function cmaEs(
+  initialParameters: Float64Array,
+  costFunction: CostFn,
+  options?: CmaEsOptions
+): CmaEsResult
+```
+
+### Gauss-Newton
+
+```typescript
+function gaussNewton(
+  initialParameters: Float64Array,
+  residualFunction: ResidualFn,
+  options?: GaussNewtonOptions
+): OptimizationResult
+```
+
 ### Levenberg-Marquardt
 
 ```typescript
@@ -649,6 +675,26 @@ function levenbergMarquardt(
   residualFunction: ResidualFn,
   options?: LevenbergMarquardtOptions
 ): LevenbergMarquardtResult
+```
+
+### Line Search
+
+```typescript
+function backtrackingLineSearch(
+  costFunction: CostFn,
+  gradientFunction: GradientFn,
+  currentParameters: Float64Array,
+  searchDirection: Float64Array,
+  options?: LineSearchOptions
+): number
+
+function strongWolfeLineSearch(
+  costFunction: CostFn,
+  gradientFunction: GradientFn,
+  currentParameters: Float64Array,
+  searchDirection: Float64Array,
+  options?: StrongWolfeLineSearchOptions
+): number
 ```
 
 ### Adjoint Gradient Descent
@@ -781,10 +827,12 @@ printGradientDescentResult(result);
 - `printOptimizationResult()` - For basic `OptimizationResult`
 - `printGradientDescentResult()` - For `GradientDescentResult` (includes line search info)
 - `printLevenbergMarquardtResult()` - For `LevenbergMarquardtResult` (includes lambda)
+- `printCmaEsResult()` - For `CmaEsResult` (includes evaluations / step size)
 - `printConstrainedGaussNewtonResult()` - For constrained optimization results
 - `printConstrainedLevenbergMarquardtResult()` - For constrained LM results
 - `printAdjointGradientDescentResult()` - For adjoint method results
 - `printResult()` - Type-safe overloaded function that works with any result type
+- Matching `format*` helpers return the same text without printing
 
 ### Customization Options
 
@@ -826,65 +874,19 @@ The formatters automatically handle parameter arrays:
 - **Medium arrays (4-10 elements)**: Displayed as array (`[1.0, 2.0, 3.0, ...]`)
 - **Large arrays (>10 elements)**: Truncated with "... and N more" (`[1.0, 2.0, ..., ... and 15 more]`)
 
-## Example Directory
-
-See the `examples/` directory for complete working examples:
-
-- Gradient descent with Rosenbrock function
-- Curve fitting with Levenberg-Marquardt
-- Linear and nonlinear regression
-- Constrained optimization with adjoint method
-- Constrained Gauss-Newton method
-- Constrained Levenberg-Marquardt method
-
-To run the examples:
-
-```bash
-# Using npm scripts (recommended)
-npm run example:gradient
-npm run example:rosenbrock
-npm run example:lm
-npm run example:gauss-newton
-
-# Or directly with tsx
-npx tsx examples/gradient-descent-example.ts
-npx tsx examples/curve-fitting-lm.ts
-npx tsx examples/rosenbrock-optimization.ts
-npx tsx examples/adjoint-example.ts
-npx tsx examples/adjoint-advanced-example.ts
-npx tsx examples/constrained-gauss-newton-example.ts
-npx tsx examples/constrained-levenberg-marquardt-example.ts
-```
-
 ## References
 
 - Moré, J. J., "The Levenberg-Marquardt Algorithm: Implementation and Theory," in *Numerical Analysis*, Lecture Notes in Mathematics 630, 1978. DOI: https://doi.org/10.1007/BFb0067700
 - Lourakis, M. I. A., "A Brief Description of the Levenberg-Marquardt Algorithm," 2005 tutorial. PDF: http://www.ics.forth.gr/~lourakis/publ/2005/LM.pdf
 - Nocedal, J. & Wright, S. J., "Numerical Optimization" (2nd ed.), Chapter 12 (constrained optimization), 2006
 
-## MVP Scope
-
-### Included
-
-- Gradient descent with line search
-- Gauss-Newton method
-- Levenberg-Marquardt algorithm
-- Constrained Gauss-Newton method (nonlinear least squares with equality constraints)
-- Constrained Levenberg-Marquardt method (robust constrained nonlinear least squares)
-- Adjoint method for constrained optimization (equality constraints)
-- Numerical differentiation (central difference)
-- Browser compatibility
-- TypeScript support
-
-### Not Included (Future Work)
+## Out of Scope (Current)
 
 - Automatic differentiation
-- Constraint handling (inequality constraints)
-- Global optimization guarantees
-- Evolutionary algorithms (CMA-ES, etc.)
-- Other optimization algorithms (BFGS, etc.)
-- Sparse matrix support
-- Parallel computation
+- Inequality constraints
+- Global optimality guarantees
+- Sparse matrix kernels
+- Parallel / multi-threaded solvers
 
 ## Type Definitions
 
@@ -1006,16 +1008,11 @@ const matrix = new Matrix([[1, 2], [3, 4]]);
 3. **Check convergence status**: Always check `result.converged` to see if optimization succeeded
 4. **Monitor gradient/residual norms**: Check `finalGradientNorm` or `finalResidualNorm` to understand convergence quality
 
-## Requirements
-
-- Node.js >= 18.0.0
-- Modern browsers with ES2020 support (required for running in-browser examples)
-
 ## License
 
 MIT
 
 ## Contributing
 
-Contributions are welcome! Please read `CODING_RULES.md` before submitting pull requests.
+Contributions are welcome. Follow `CODING_RULES.md` in this repository when submitting pull requests (it is a contributor guide, not part of the npm package).
 
