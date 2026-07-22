@@ -1,20 +1,13 @@
 /**
- * Lean classic-problem integration suite.
- * Keeps a few high-signal end-to-end cases that unit tests for toy quadratics do not cover.
+ * High-signal integration cases that per-algorithm unit suites do not cover:
+ * Rosenbrock via gradient descent, and multi-point curve fitting via LM.
  */
 
 import { gradientDescent } from '../src/core/gradientDescent';
 import { levenbergMarquardt } from '../src/core/levenbergMarquardt';
-import { constrainedGaussNewton } from '../src/core/constrainedGaussNewton';
-import { vectorNorm } from '../src/utils/matrix';
-import type {
-  CostFn,
-  GradientFn,
-  ResidualFn,
-  ConstrainedResidualFn,
-  ConstraintFn
-} from '../src/core/types';
+import type { CostFn, GradientFn, ResidualFn } from '../src/core/types';
 
+// WHY looser than BFGS unit tolerances: GD+line-search on Rosenbrock is slower / less precise.
 const ROSENBROCK_PARAMETER_TOLERANCE = 0.1;
 const ROSENBROCK_MAX_ITERATIONS = 10000;
 const ROSENBROCK_TOLERANCE = 1e-4;
@@ -28,9 +21,6 @@ const EXPECTED_EXPONENTIAL_B = 1.0;
 const LINEAR_SLOPE_TOLERANCE = 0.1;
 const LINEAR_MAX_COST = 0.1;
 const EXPECTED_LINEAR_SLOPE = 2.0;
-
-const CONSTRAINT_NORM_TOLERANCE = 1e-4;
-const CONSTRAINED_PARAMETER_TOLERANCE = 1e-2;
 
 describe('Classic problem suite', () => {
   describe('Rosenbrock via gradient descent', () => {
@@ -91,8 +81,12 @@ describe('Classic problem suite', () => {
 
       expect(result.converged).toBe(true);
       expect(result.finalCost).toBeLessThan(EXPONENTIAL_MAX_COST);
-      expect(Math.abs(result.finalParameters[0] - EXPECTED_EXPONENTIAL_A)).toBeLessThan(EXPONENTIAL_A_TOLERANCE);
-      expect(Math.abs(result.finalParameters[1] - EXPECTED_EXPONENTIAL_B)).toBeLessThan(EXPONENTIAL_B_TOLERANCE);
+      expect(Math.abs(result.finalParameters[0] - EXPECTED_EXPONENTIAL_A)).toBeLessThan(
+        EXPONENTIAL_A_TOLERANCE
+      );
+      expect(Math.abs(result.finalParameters[1] - EXPECTED_EXPONENTIAL_B)).toBeLessThan(
+        EXPONENTIAL_B_TOLERANCE
+      );
     });
 
     it('should recover approximate linear slope', () => {
@@ -116,39 +110,10 @@ describe('Classic problem suite', () => {
       });
 
       expect(result.converged).toBe(true);
-      expect(Math.abs(result.finalParameters[0] - EXPECTED_LINEAR_SLOPE)).toBeLessThan(LINEAR_SLOPE_TOLERANCE);
+      expect(Math.abs(result.finalParameters[0] - EXPECTED_LINEAR_SLOPE)).toBeLessThan(
+        LINEAR_SLOPE_TOLERANCE
+      );
       expect(result.finalCost).toBeLessThan(LINEAR_MAX_COST);
-    });
-  });
-
-  describe('Equality-constrained least squares via constrained Gauss-Newton', () => {
-    const residual: ConstrainedResidualFn = (p: Float64Array, x: Float64Array) => {
-      return new Float64Array([p[0] - 0.5, x[0] - 0.5]);
-    };
-
-    const constraint: ConstraintFn = (p: Float64Array, x: Float64Array) => {
-      return new Float64Array([p[0] + x[0] - 1.0]);
-    };
-
-    it('should converge to the constrained optimum', () => {
-      const result = constrainedGaussNewton(
-        new Float64Array([0.0]),
-        new Float64Array([1.0]),
-        residual,
-        constraint,
-        {
-          maxIterations: 100,
-          tolerance: 1e-6,
-          constraintTolerance: 1e-6
-        }
-      );
-
-      expect(result.converged).toBe(true);
-      expect(Math.abs(result.finalParameters[0] - 0.5)).toBeLessThan(CONSTRAINED_PARAMETER_TOLERANCE);
-      expect(Math.abs(result.finalStates[0] - 0.5)).toBeLessThan(CONSTRAINED_PARAMETER_TOLERANCE);
-      expect(vectorNorm(constraint(result.finalParameters, result.finalStates))).toBeLessThan(
-        CONSTRAINT_NORM_TOLERANCE
-      );
     });
   });
 });

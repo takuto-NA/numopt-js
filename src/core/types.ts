@@ -468,6 +468,13 @@ export interface AdjointGradientDescentOptions extends GradientDescentOptions {
    * Default: 1e-6
    */
   constraintTolerance?: number;
+
+  /**
+   * Base Tikhonov regularization for adjoint / least-squares solves involving ∂c/∂x.
+   * Increase for ill-conditioned constraint Jacobians (e.g. densely sampled curve constraints).
+   * Default: 0 (an automatic floor may still apply when the Jacobian is numerically singular)
+   */
+  regularization?: number;
 }
 
 /**

@@ -69,5 +69,18 @@ describe('L-BFGS', () => {
     expect(Math.abs(result.finalParameters[0] - 1.0)).toBeLessThan(1e-3);
     expect(Math.abs(result.finalParameters[1] - 1.0)).toBeLessThan(1e-3);
   });
+
+  it('should still converge on Rosenbrock with a small historySize', () => {
+    const initialParameters = new Float64Array([-1.0, 1.0]);
+    const result = lbfgs(initialParameters, rosenbrockCost, rosenbrockGradient, {
+      maxIterations: 5000,
+      tolerance: 1e-6,
+      historySize: 3
+    });
+
+    expect(result.converged).toBe(true);
+    expect(Math.abs(result.finalParameters[0] - 1.0)).toBeLessThan(1e-3);
+    expect(Math.abs(result.finalParameters[1] - 1.0)).toBeLessThan(1e-3);
+  });
 });
 

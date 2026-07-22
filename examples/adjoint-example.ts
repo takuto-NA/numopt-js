@@ -1,97 +1,78 @@
 /**
- * Example: Constrained Optimization with Adjoint Method
- * 
- * This example demonstrates solving a constrained optimization problem
- * using the adjoint gradient descent method.
- * 
+ * Equality-constrained optimization with the adjoint method.
+ *
  * Problem:
- * Minimize: f(p, x) = p² + x²
- * Subject to: c(p, x) = p + x - 1 = 0
- * 
+ *   Minimize  f(p, x) = p² + x²
+ *   Subject to  c(p, x) = p + x - 1 = 0
  * Analytical solution: p = 0.5, x = 0.5, f = 0.5
- * 
- * The adjoint method efficiently computes gradients by solving for
- * an adjoint variable λ instead of explicitly inverting matrices.
  */
 
 import { adjointGradientDescent, printAdjointGradientDescentResult } from '../src/index';
 import type { ConstrainedCostFn, ConstraintFn } from '../src/core/types';
 import { vectorNorm } from '../src/utils/matrix';
 
-// Define cost function: f(p, x) = p² + x²
-const costFunction: ConstrainedCostFn = (p: Float64Array, x: Float64Array) => {
-  return p[0] * p[0] + x[0] * x[0];
+const TARGET_PARAMETER = 0.5;
+const TARGET_STATE = 0.5;
+const TARGET_COST = 0.5;
+const SOLUTION_TOLERANCE = 1e-3;
+const MAX_ITERATIONS = 100;
+const CONVERGENCE_TOLERANCE = 1e-6;
+
+const costFunction: ConstrainedCostFn = (parameters, states) => {
+  return parameters[0] * parameters[0] + states[0] * states[0];
 };
 
-// Define constraint: c(p, x) = p + x - 1 = 0
-const constraintFunction: ConstraintFn = (p: Float64Array, x: Float64Array) => {
-  return new Float64Array([p[0] + x[0] - 1.0]);
+const constraintFunction: ConstraintFn = (parameters, states) => {
+  return new Float64Array([parameters[0] + states[0] - 1.0]);
 };
 
 console.log('=== Constrained Optimization: Adjoint Method ===\n');
-console.log('Problem:');
-console.log('  Minimize: f(p, x) = p² + x²');
-console.log('  Subject to: c(p, x) = p + x - 1 = 0\n');
-console.log('Analytical solution:');
-console.log('  p = 0.5, x = 0.5, f = 0.5\n');
+console.log('Problem: min p² + x²  s.t. p + x = 1');
+console.log(`Analytical solution: p = ${TARGET_PARAMETER}, x = ${TARGET_STATE}, f = ${TARGET_COST}\n`);
 
-// Initial guess
-const initialP = new Float64Array([2.0]);
-const initialX = new Float64Array([-1.0]); // Satisfies constraint: 2 + (-1) - 1 = 0
-
-console.log('Initial values:');
-console.log(`  p₀ = ${initialP[0]}`);
-console.log(`  x₀ = ${initialX[0]}`);
-const initialConstraint = constraintFunction(initialP, initialX);
-console.log(`  c(p₀, x₀) = ${initialConstraint[0]} (should be ≈ 0)\n`);
-
-console.log('Starting adjoint gradient descent optimization...\n');
-
-console.log('Using DEBUG log level to see detailed iteration information...\n');
+const initialParameters = new Float64Array([2.0]);
+const initialStates = new Float64Array([-1.0]);
 
 const startTime = performance.now();
 const result = adjointGradientDescent(
-  initialP,
-  initialX,
+  initialParameters,
+  initialStates,
   costFunction,
   constraintFunction,
   {
-    maxIterations: 100,
-    tolerance: 1e-6,
+    maxIterations: MAX_ITERATIONS,
+    tolerance: CONVERGENCE_TOLERANCE,
     useLineSearch: true,
-    logLevel: 'DEBUG', // Enable detailed logging for each iteration
-    onIteration: (iteration, cost, params) => {
-      // onIteration callback can be used for custom visualization
-      // Logger already provides detailed output with logLevel: 'DEBUG'
-    }
+    logLevel: 'INFO'
   }
 );
-
-const endTime = performance.now();
-const elapsedTime = endTime - startTime;
+const elapsedTimeMs = performance.now() - startTime;
 
 const finalConstraint = constraintFunction(result.finalParameters, result.finalStates);
 printAdjointGradientDescentResult(result, {
   showExecutionTime: true,
-  elapsedTimeMs: elapsedTime
+  elapsedTimeMs
 });
 console.log(`\n  c(p, x) = ${finalConstraint[0].toFixed(8)} (should be ≈ 0)`);
 
-// Verify solution
-console.log('\n=== Verification ===');
-const errorP = Math.abs(result.finalParameters[0] - 0.5);
-const errorX = Math.abs(result.finalStates[0] - 0.5);
-const errorF = Math.abs(result.finalCost - 0.5);
+const parameterError = Math.abs(result.finalParameters[0] - TARGET_PARAMETER);
+const stateError = Math.abs(result.finalStates[0] - TARGET_STATE);
+const costError = Math.abs(result.finalCost - TARGET_COST);
 const constraintNorm = vectorNorm(finalConstraint);
 
-console.log(`Parameter error: ${errorP.toFixed(6)}`);
-console.log(`State error: ${errorX.toFixed(6)}`);
-console.log(`Cost error: ${errorF.toFixed(6)}`);
+console.log('\n=== Verification ===');
+console.log(`Parameter error: ${parameterError.toFixed(6)}`);
+console.log(`State error: ${stateError.toFixed(6)}`);
+console.log(`Cost error: ${costError.toFixed(6)}`);
 console.log(`Constraint violation: ${constraintNorm.toFixed(8)}`);
 
-if (errorP < 1e-3 && errorX < 1e-3 && errorF < 1e-3 && constraintNorm < 1e-3) {
-  console.log('\n✅ Solution verified: All errors are within tolerance!');
+if (
+  parameterError < SOLUTION_TOLERANCE &&
+  stateError < SOLUTION_TOLERANCE &&
+  costError < SOLUTION_TOLERANCE &&
+  constraintNorm < SOLUTION_TOLERANCE
+) {
+  console.log('\nSolution verified within tolerance.');
 } else {
-  console.log('\n⚠️  Solution may need more iterations or different settings.');
+  console.log('\nSolution may need more iterations or different settings.');
 }
-

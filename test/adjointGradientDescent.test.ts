@@ -112,9 +112,10 @@ describe('Adjoint Gradient Descent', () => {
     expect(result.usedLineSearch).toBe(true);
   });
 
-  it('should handle constraint violation warning', () => {
-    const initialP = new Float64Array([1.0]);
-    const initialX = new Float64Array([1.0]); // Doesn't satisfy constraint: 1 + 1 - 1 = 1 ≠ 0
+  it('should reduce constraint violation from a mildly infeasible start', () => {
+    const initialP = new Float64Array([0.8]);
+    const initialX = new Float64Array([0.8]);
+    const initialConstraintNorm = vectorNorm(simpleConstraint(initialP, initialX));
 
     const result = adjointGradientDescent(
       initialP,
@@ -124,26 +125,21 @@ describe('Adjoint Gradient Descent', () => {
       {
         maxIterations: 500,
         tolerance: 1e-4,
-        constraintTolerance: 1e-6
+        constraintTolerance: 1e-6,
+        useLineSearch: true
       }
     );
 
-    // The algorithm should handle initial constraint violation gracefully
-    // Note: When initial values don't satisfy constraints, linear approximation
-    // may not perfectly satisfy constraints, but the algorithm should still run
-    expect(result.finalConstraintNorm).toBeDefined();
-    expect(result.finalParameters).toBeInstanceOf(Float64Array);
-    expect(result.finalStates).toBeInstanceOf(Float64Array);
-    
-    // The algorithm should complete without errors
-    // (Constraint satisfaction depends on the problem and initial conditions)
+    expect(result.finalConstraintNorm).toBeLessThan(initialConstraintNorm);
+    expect(Number.isFinite(result.finalCost)).toBe(true);
   });
 
-  it('should work with non-square constraint Jacobian (overdetermined)', () => {
-    // Overdetermined system: 2 constraints, 1 state
-    // Minimize: f(p, x) = p² + x²
-    // Subject to: c1(p, x) = p + x - 1 = 0, c2(p, x) = 2p + x - 1.5 = 0
-    // These constraints are consistent: solution is p = 0.5, x = 0.5
+  it('should stay near the consistent overdetermined constrained optimum', () => {
+    // Overdetermined but consistent at (0.5, 0.5): c1 = p+x-1, c2 = 2p+x-1.5
+    const OVERDETERMINED_PARAMETER_TOLERANCE = 0.15;
+    const OVERDETERMINED_COST_TOLERANCE = 0.15;
+    const EXPECTED_COST = 0.5;
+
     const overdeterminedCost: ConstrainedCostFn = (p: Float64Array, x: Float64Array) => {
       return p[0] * p[0] + x[0] * x[0];
     };
@@ -156,7 +152,7 @@ describe('Adjoint Gradient Descent', () => {
     };
 
     const initialP = new Float64Array([0.5]);
-    const initialX = new Float64Array([0.5]); // Start at solution
+    const initialX = new Float64Array([0.5]);
 
     const result = adjointGradientDescent(
       initialP,
@@ -166,13 +162,12 @@ describe('Adjoint Gradient Descent', () => {
       { maxIterations: 200, tolerance: 1e-4, constraintTolerance: 1e-2 }
     );
 
-    // Should converge (even if constraints are not perfectly satisfied due to overdetermined nature)
-    expect(result.iterations).toBeGreaterThan(0);
-    expect(result.finalCost).toBeDefined();
-    // For overdetermined systems, we verify that the algorithm runs without errors
-    // The constraint norm may not be zero due to least squares approximation
-    const finalConstraint = overdeterminedConstraint(result.finalParameters, result.finalStates);
-    expect(Number.isFinite(vectorNorm(finalConstraint))).toBe(true);
+    expect(Math.abs(result.finalCost - EXPECTED_COST)).toBeLessThan(OVERDETERMINED_COST_TOLERANCE);
+    expect(Math.abs(result.finalParameters[0] - 0.5)).toBeLessThan(OVERDETERMINED_PARAMETER_TOLERANCE);
+    expect(Math.abs(result.finalStates[0] - 0.5)).toBeLessThan(OVERDETERMINED_PARAMETER_TOLERANCE);
+    expect(
+      Number.isFinite(vectorNorm(overdeterminedConstraint(result.finalParameters, result.finalStates)))
+    ).toBe(true);
   });
 
   it('should work with non-square constraint Jacobian (underdetermined)', () => {
@@ -232,6 +227,25 @@ describe('Adjoint Gradient Descent', () => {
     expect(result.converged).toBe(true);
     expect(Math.abs(result.finalParameters[0] - 0.5)).toBeLessThan(1e-2);
     expect(Math.abs(result.finalStates[0] - 0.5)).toBeLessThan(1e-2);
+  });
+
+  it('should accept options.regularization without breaking the simple problem', () => {
+    // WHY: Locks the public regularization knob (and that square Tikhonov is not double-applied).
+    const result = adjointGradientDescent(
+      new Float64Array([2.0]),
+      new Float64Array([-1.0]),
+      simpleCost,
+      simpleConstraint,
+      {
+        maxIterations: 200,
+        tolerance: 1e-4,
+        regularization: 1e-6
+      }
+    );
+
+    expect(Math.abs(result.finalParameters[0] - 0.5)).toBeLessThan(1e-2);
+    expect(Math.abs(result.finalStates[0] - 0.5)).toBeLessThan(1e-2);
+    expect(result.finalConstraintNorm).toBeLessThan(1e-3);
   });
 
   it('should call onIteration callback if provided', () => {

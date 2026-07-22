@@ -113,8 +113,8 @@ describe('CMA-ES', () => {
     });
 
     expect(result.profiling).toBeDefined();
-    expect(result.profiling!.totalMs).toBeGreaterThanOrEqual(0);
-    expect(result.profiling!.costMs).toBeGreaterThanOrEqual(0);
+    expect(result.profiling!.totalMs).toBeGreaterThan(0);
+    expect(result.profiling!.costMs).toBeGreaterThan(0);
     expect(result.profiling!.choleskyMs).toBeGreaterThanOrEqual(0);
     expect(result.profiling!.samplingMs).toBeGreaterThanOrEqual(0);
     expect(result.profiling!.updateMs).toBeGreaterThanOrEqual(0);
