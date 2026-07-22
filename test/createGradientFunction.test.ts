@@ -1,6 +1,5 @@
 import { createFiniteDiffGradient, createFiniteDiffJacobian } from '../src/core/createGradientFunction';
 import { gradientDescent } from '../src/core/gradientDescent';
-import { gaussNewton } from '../src/core/gaussNewton';
 import type { CostFn, ResidualFn } from '../src/core/types';
 
 describe('createFiniteDiffGradient', () => {

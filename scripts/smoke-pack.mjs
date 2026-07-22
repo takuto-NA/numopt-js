@@ -35,41 +35,43 @@ assert(typeof tgzName === 'string' && tgzName.endsWith('.tgz'), 'npm pack did no
 const tgzPath = path.resolve(repoRoot, tgzName);
 assert(fs.existsSync(tgzPath), `Packed tarball not found at ${tgzPath}`);
 
-// 2) Install tarball into a temp project
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'numopt-js-pack-smoke-'));
-run('npm init -y', tmpDir);
-run(`npm install "${tgzPath}"`, tmpDir);
 
-// 3) Validate CommonJS require works
-writeFile(
-  path.join(tmpDir, 'cjs.cjs'),
-  `
+try {
+  // 2) Install tarball into a temp project
+  run('npm init -y', tmpDir);
+  run(`npm install "${tgzPath}"`, tmpDir);
+
+  // 3) Validate CommonJS require works
+  writeFile(
+    path.join(tmpDir, 'cjs.cjs'),
+    `
 const m = require('numopt-js');
 if (typeof m.gradientDescent !== 'function') {
   throw new Error('CJS: gradientDescent export missing');
 }
 console.log('CJS: ok');
 `.trimStart()
-);
-run('node cjs.cjs', tmpDir);
+  );
+  run('node cjs.cjs', tmpDir);
 
-// 4) Validate ESM import works (mjs forces ESM even in a CJS package)
-writeFile(
-  path.join(tmpDir, 'esm.mjs'),
-  `
+  // 4) Validate ESM import works (mjs forces ESM even in a CJS package)
+  writeFile(
+    path.join(tmpDir, 'esm.mjs'),
+    `
 import { gradientDescent } from 'numopt-js';
 if (typeof gradientDescent !== 'function') {
   throw new Error('ESM: gradientDescent export missing');
 }
 console.log('ESM: ok');
 `.trimStart()
-);
-run('node esm.mjs', tmpDir);
+  );
+  run('node esm.mjs', tmpDir);
 
-// 5) Validate shipped files exist in installed package
-writeFile(
-  path.join(tmpDir, 'check-files.cjs'),
-  `
+  // 5) Validate shipped files exist in installed package
+  writeFile(
+    path.join(tmpDir, 'check-files.cjs'),
+    `
 const fs = require('fs');
 const path = require('path');
 
@@ -93,8 +95,14 @@ for (const rel of requiredFiles) {
 
 console.log('FILES: ok');
 `.trimStart()
-);
-run('node check-files.cjs', tmpDir);
+  );
+  run('node check-files.cjs', tmpDir);
 
-console.log(`Pack smoke OK (temp: ${tmpDir})`);
+  console.log(`Pack smoke OK (temp: ${tmpDir})`);
+} finally {
+  // Keep the working tree clean: npm pack leaves a root .tgz otherwise.
+  if (fs.existsSync(tgzPath)) {
+    fs.unlinkSync(tgzPath);
+  }
+}
 

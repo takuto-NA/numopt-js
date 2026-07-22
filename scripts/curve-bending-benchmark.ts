@@ -1,4 +1,8 @@
-import { performance } from 'node:perf_hooks';
+/**
+ * Manual benchmark: curve bending energy with arc-length constraints (few parameters, many states).
+ * Not run in CI. Invoke via `npm run benchmark:curve-bending`.
+ */
+
 import {
   constrainedLevenbergMarquardt,
   constrainedGaussNewton,
@@ -6,292 +10,277 @@ import {
   gaussNewton,
   adjointGradientDescent
 } from '../src/index';
-import type { ConstrainedResidualFn, ConstraintFn, ResidualFn } from '../src/core/types';
+import type {
+  AdjointGradientDescentOptions,
+  ConstrainedGaussNewtonOptions,
+  ConstrainedLevenbergMarquardtOptions,
+  ConstrainedResidualFn,
+  ConstraintFn,
+  GaussNewtonOptions,
+  LevenbergMarquardtOptions
+} from '../src/core/types';
+import { createSeededRandom } from '../src/utils/random';
 import { vectorNorm } from '../src/utils/matrix';
+import {
+  buildStateOnlyPenaltyResidual,
+  timeConstrainedSolve,
+  type BenchmarkRow,
+  type BenchmarkSolver
+} from './benchmark-harness';
 
-// Problem setup:
-// - Parametric curve from A to B with many states (sampled points) but few parameters (Fourier coefficients).
-// - Objective: minimize discrete bending energy (second-difference norm).
-// - Constraint: fixed segment length |x_{i+1} - x_i| = l to enforce arc-length.
+const ADJOINT_REGULARIZATION = 1e-3;
+const RANDOM_SEED = 1234;
+const PARAMETER_NOISE_SCALE = 0.2;
+const STATE_NOISE_SCALE = 0.01;
 
 type CurveProblem = {
   name: string;
-  n: number; // number of interior points (not counting endpoints)
+  interiorPointCount: number;
   segmentLength: number;
-  parameters: number; // Fourier coefficient pairs (cos/sin)
-  A: [number, number];
-  B: [number, number];
+  parameterCount: number;
+  startPoint: [number, number];
+  endPoint: [number, number];
   penaltyWeights: number[];
   options: {
-    constrainedLM: Record<string, unknown>;
-    constrainedGN: Record<string, unknown>;
-    penaltyLM: Record<string, unknown>;
-    penaltyGN: Record<string, unknown>;
-    adjoint?: Record<string, unknown>;
+    constrainedLM: ConstrainedLevenbergMarquardtOptions;
+    constrainedGN: ConstrainedGaussNewtonOptions;
+    penaltyLM: LevenbergMarquardtOptions;
+    penaltyGN: GaussNewtonOptions;
+    adjoint: AdjointGradientDescentOptions;
   };
+  // State-only constraint view used by penalty solvers and constraint-norm reporting.
+  constraint: ConstraintFn;
 };
 
-// Generate curve from Fourier coefficients
-function generateCurve(p: Float64Array, n: number, A: [number, number], B: [number, number]): Float64Array[] {
-  const pts: Float64Array[] = [];
-  for (let i = 0; i <= n; i++) {
-    const t = i / n;
-    let x = A[0] + (B[0] - A[0]) * t;
-    let y = A[1] + (B[1] - A[1]) * t;
-    // p packed as [a1,b1,a2,b2,...] for cos/sin terms
-    for (let k = 0; k < p.length / 2; k++) {
-      const a = p[2 * k];
-      const b = p[2 * k + 1];
-      x += a * Math.cos((k + 1) * Math.PI * t) + b * Math.sin((k + 1) * Math.PI * t);
-      y += a * Math.sin((k + 1) * Math.PI * t) - b * Math.cos((k + 1) * Math.PI * t); // phase-shifted to mix
+function generateCurve(
+  parameters: Float64Array,
+  interiorPointCount: number,
+  startPoint: [number, number],
+  endPoint: [number, number]
+): Float64Array[] {
+  const points: Float64Array[] = [];
+  for (let index = 0; index <= interiorPointCount; index++) {
+    const fraction = index / interiorPointCount;
+    let x = startPoint[0] + (endPoint[0] - startPoint[0]) * fraction;
+    let y = startPoint[1] + (endPoint[1] - startPoint[1]) * fraction;
+    for (let harmonic = 0; harmonic < parameters.length / 2; harmonic++) {
+      const cosineCoefficient = parameters[2 * harmonic];
+      const sineCoefficient = parameters[2 * harmonic + 1];
+      const angle = (harmonic + 1) * Math.PI * fraction;
+      x += cosineCoefficient * Math.cos(angle) + sineCoefficient * Math.sin(angle);
+      y += cosineCoefficient * Math.sin(angle) - sineCoefficient * Math.cos(angle);
     }
-    pts.push(new Float64Array([x, y]));
+    points.push(new Float64Array([x, y]));
   }
-  return pts;
+  return points;
 }
 
-// Residual: discrete bending energy terms (second differences)
-function bendingResidualFromStates(x: Float64Array, problem: CurveProblem): Float64Array {
-  // x packed as [x0,y0,x1,y1,...]
-  const residual = new Float64Array(problem.n - 1);
-  for (let i = 1; i < problem.n; i++) {
-    const xm1x = x[2 * (i - 1)];
-    const xm1y = x[2 * (i - 1) + 1];
-    const xix = x[2 * i];
-    const xiy = x[2 * i + 1];
-    const xp1x = x[2 * (i + 1)];
-    const xp1y = x[2 * (i + 1) + 1];
-    const ddx = xp1x - 2 * xix + xm1x;
-    const ddy = xp1y - 2 * xiy + xm1y;
-    residual[i - 1] = Math.hypot(ddx, ddy);
+function bendingResidualFromStates(states: Float64Array, problem: CurveProblem): Float64Array {
+  const residual = new Float64Array(problem.interiorPointCount - 1);
+  for (let index = 1; index < problem.interiorPointCount; index++) {
+    const previousX = states[2 * (index - 1)];
+    const previousY = states[2 * (index - 1) + 1];
+    const currentX = states[2 * index];
+    const currentY = states[2 * index + 1];
+    const nextX = states[2 * (index + 1)];
+    const nextY = states[2 * (index + 1) + 1];
+    residual[index - 1] = Math.hypot(
+      nextX - 2 * currentX + previousX,
+      nextY - 2 * currentY + previousY
+    );
   }
   return residual;
 }
 
-// Constraint: |x_{i+1} - x_i| - l = 0 for all segments
-function arcLengthConstraintFromStates(x: Float64Array, problem: CurveProblem): Float64Array {
-  const c = new Float64Array(problem.n);
-  for (let i = 0; i < problem.n; i++) {
-    const dx = x[2 * (i + 1)] - x[2 * i];
-    const dy = x[2 * (i + 1) + 1] - x[2 * i + 1];
-    c[i] = Math.hypot(dx, dy) - problem.segmentLength;
+function arcLengthConstraintFromStates(states: Float64Array, problem: CurveProblem): Float64Array {
+  const constraint = new Float64Array(problem.interiorPointCount);
+  for (let index = 0; index < problem.interiorPointCount; index++) {
+    const deltaX = states[2 * (index + 1)] - states[2 * index];
+    const deltaY = states[2 * (index + 1) + 1] - states[2 * index + 1];
+    constraint[index] = Math.hypot(deltaX, deltaY) - problem.segmentLength;
   }
-  return c;
+  return constraint;
 }
 
-// Penalty residual builder using states
-function buildPenaltyResidual(problem: CurveProblem, penaltyWeight: number): ResidualFn {
-  const sqrtMu = Math.sqrt(penaltyWeight);
-  return (state: Float64Array): Float64Array => {
-    const base = bendingResidualFromStates(state, problem);
-    const c = arcLengthConstraintFromStates(state, problem);
-    const out = new Float64Array(base.length + c.length);
-    out.set(base, 0);
-    for (let i = 0; i < c.length; i++) {
-      out[base.length + i] = sqrtMu * c[i];
-    }
-    return out;
-  };
-}
-
-const problems: CurveProblem[] = [
-  {
-    name: 'Curve bending (p<<x) moderate',
-    n: 80, // 81 points (fast demo)
+function createCurveProblem(): CurveProblem {
+  const curveProblem: CurveProblem = {
+    name: 'Curve bending (few parameters, many states)',
+    interiorPointCount: 80,
     segmentLength: 0.01,
-    parameters: 4, // 2 cosine/sine pairs
-    A: [0, 0],
-    B: [2, 0.5],
+    parameterCount: 4,
+    startPoint: [0, 0],
+    endPoint: [2, 0.5],
     penaltyWeights: [1e3, 1e4],
     options: {
-      constrainedLM: { maxIterations: 150, tolGradient: 1e-6, tolStep: 1e-8, constraintTolerance: 1e-4, lambdaInitial: 1e-2, lambdaFactor: 5 },
+      constrainedLM: {
+        maxIterations: 150,
+        tolGradient: 1e-6,
+        tolStep: 1e-8,
+        constraintTolerance: 1e-4,
+        lambdaInitial: 1e-2,
+        lambdaFactor: 5
+      },
       constrainedGN: { maxIterations: 150, tolerance: 1e-6, constraintTolerance: 1e-4 },
       penaltyLM: { maxIterations: 150, tolGradient: 1e-6, tolStep: 1e-8, lambdaInitial: 1e-2 },
       penaltyGN: { maxIterations: 150, tolerance: 1e-6 },
-      adjoint: { maxIterations: 150, tolerance: 1e-4, constraintTolerance: 1e-4, useLineSearch: true }
-    }
-  }
-];
-
-type Solver = {
-  name: string;
-  run: (initial: { p: Float64Array; x: Float64Array }, problem: CurveProblem, penaltyWeight?: number) => {
-    parameters?: Float64Array;
-    finalStates?: Float64Array;
-    iterations: number | string;
-    converged: boolean;
-    finalCost: number | string;
-    constraintNorm?: number;
-  };
-};
-
-const solvers: Solver[] = [
-  {
-    name: 'Constrained LM',
-    run: (initial, problem) => {
-      const constrainedResidual: ConstrainedResidualFn = (_p: Float64Array, x: Float64Array) => bendingResidualFromStates(x, problem);
-      const constraint: ConstraintFn = (_p: Float64Array, x: Float64Array) => arcLengthConstraintFromStates(x, problem);
-      const result = constrainedLevenbergMarquardt(
-        initial.p,
-        initial.x,
-        constrainedResidual,
-        constraint,
-        problem.options.constrainedLM
-      );
-      return {
-        parameters: result.finalParameters,
-        finalStates: result.finalStates,
-        iterations: result.iterations,
-        converged: result.converged,
-        finalCost: result.finalCost,
-        constraintNorm: vectorNorm(constraint(result.finalParameters, result.finalStates ?? initial.x))
-      };
-    }
-  },
-  {
-    name: 'Constrained GN',
-    run: (initial, problem) => {
-      const constrainedResidual: ConstrainedResidualFn = (_p: Float64Array, x: Float64Array) => bendingResidualFromStates(x, problem);
-      const constraint: ConstraintFn = (_p: Float64Array, x: Float64Array) => arcLengthConstraintFromStates(x, problem);
-      const result = constrainedGaussNewton(initial.p, initial.x, constrainedResidual, constraint, problem.options.constrainedGN);
-      return {
-        parameters: result.finalParameters,
-        finalStates: result.finalStates,
-        iterations: result.iterations,
-        converged: result.converged,
-        finalCost: result.finalCost,
-        constraintNorm: vectorNorm(constraint(result.finalParameters, result.finalStates ?? initial.x))
-      };
-    }
-  },
-  {
-    name: 'Penalty LM',
-    run: (initial, problem, penaltyWeight) => {
-      const penaltyResidual = buildPenaltyResidual(problem, penaltyWeight ?? problem.penaltyWeights[0]);
-      const result = levenbergMarquardt(initial.x, penaltyResidual, problem.options.penaltyLM);
-      const constraintNorm = vectorNorm(arcLengthConstraintFromStates(result.finalParameters, problem));
-      return {
-        finalStates: result.finalParameters,
-        iterations: result.iterations,
-        converged: result.converged,
-        finalCost: result.finalCost,
-        constraintNorm
-      };
-    }
-  },
-  {
-    name: 'Penalty GN',
-    run: (initial, problem, penaltyWeight) => {
-      const penaltyResidual = buildPenaltyResidual(problem, penaltyWeight ?? problem.penaltyWeights[0]);
-      const result = gaussNewton(initial.x, penaltyResidual, problem.options.penaltyGN);
-      const constraintNorm = vectorNorm(arcLengthConstraintFromStates(result.finalParameters, problem));
-      return {
-        finalStates: result.finalParameters,
-        iterations: result.iterations,
-        converged: result.converged,
-        finalCost: result.finalCost ?? 0,
-        constraintNorm
-      };
-    }
-  },
-  {
-    name: 'Adjoint GD',
-    run: (initial, problem) => {
-      const constrainedCost: ConstrainedResidualFn = (_p: Float64Array, x: Float64Array) => bendingResidualFromStates(x, problem);
-      const constraint: ConstraintFn = (_p: Float64Array, x: Float64Array) => arcLengthConstraintFromStates(x, problem);
-      (globalThis as any).__ADJOINT_REGULARIZATION__ = 1e-3;
-      const result = adjointGradientDescent(
-        initial.p,
-        initial.x,
-        constrainedCost,
-        constraint,
-        problem.options.adjoint ?? {}
-      );
-      const constraintNorm = vectorNorm(constraint(result.finalParameters, result.finalStates ?? initial.x));
-      return {
-        parameters: result.finalParameters,
-        finalStates: result.finalStates,
-        iterations: result.iterations,
-        converged: result.converged,
-        finalCost: result.finalCost,
-        constraintNorm
-      };
-    }
-  }
-];
-
-// simple deterministic RNG
-function createRng(seed: number): () => number {
-  let s = seed >>> 0;
-  return () => {
-    s = (1664525 * s + 1013904223) % 4294967296;
-    return s / 4294967296;
-  };
-}
-
-function randomInitial(problem: CurveProblem, rng: () => number): { p: Float64Array; x: Float64Array } {
-  const p = new Float64Array(problem.parameters);
-  for (let i = 0; i < p.length; i++) {
-    p[i] = 0.2 * (rng() - 0.5);
-  }
-  const base = generateCurve(p, problem.n, problem.A, problem.B);
-  // Add noise to states to violate constraints
-  const x = new Float64Array((problem.n + 1) * 2);
-  for (let i = 0; i < base.length; i++) {
-    x[2 * i] = base[i][0] + 0.01 * (rng() - 0.5);
-    x[2 * i + 1] = base[i][1] + 0.01 * (rng() - 0.5);
-  }
-  return { p, x };
-}
-
-function runSolver(solver: Solver, problem: CurveProblem, rng: () => number, penaltyWeight?: number) {
-  const initial = randomInitial(problem, rng);
-  const start = performance.now();
-  try {
-    const result = solver.run(initial, problem, penaltyWeight);
-    const elapsed = performance.now() - start;
-    return {
-      Method: solver.name,
-      Iterations: result.iterations,
-      TimeMs: Number(elapsed.toFixed(2)),
-      Converged: result.converged,
-      FinalCost: Number(result.finalCost.toExponential(3)),
-      ConstraintNorm: result.constraintNorm !== undefined ? Number(result.constraintNorm.toExponential(3)) : undefined,
-      Error: ''
-    };
-  } catch (error) {
-    const elapsed = performance.now() - start;
-    const message = error instanceof Error ? error.message : String(error);
-    return {
-      Method: solver.name,
-      Iterations: 'error',
-      TimeMs: Number(elapsed.toFixed(2)),
-      Converged: false,
-      FinalCost: 'error',
-      ConstraintNorm: 'error',
-      Error: message
-    };
-  }
-}
-
-console.log('Benchmark: curve bending with arc-length constraints (p << x)');
-for (let idx = 0; idx < problems.length; idx++) {
-  const problem = problems[idx];
-  const rng = createRng(1234 + idx * 17);
-  console.log(`\n=== ${problem.name} (n=${problem.n}, params=${problem.parameters}) ===`);
-  const rows: any[] = [];
-  for (const solver of solvers) {
-    if (solver.name.startsWith('Penalty')) {
-      for (const mu of problem.penaltyWeights) {
-        const row = runSolver(solver, problem, rng, mu);
-        row.Penalty = mu;
-        rows.push(row);
+      adjoint: {
+        maxIterations: 150,
+        tolerance: 1e-4,
+        constraintTolerance: 1e-4,
+        useLineSearch: true,
+        regularization: ADJOINT_REGULARIZATION
       }
-    } else {
-      const row = runSolver(solver, problem, rng);
-      row.Penalty = '-';
+    },
+    constraint: (_parameters, states) => arcLengthConstraintFromStates(states, curveProblem)
+  };
+  return curveProblem;
+}
+
+const problem = createCurveProblem();
+
+function randomInitial(
+  curveProblem: CurveProblem,
+  nextUniform: () => number
+): { parameters: Float64Array; states: Float64Array } {
+  const parameters = new Float64Array(curveProblem.parameterCount);
+  for (let index = 0; index < parameters.length; index++) {
+    parameters[index] = PARAMETER_NOISE_SCALE * (nextUniform() - 0.5);
+  }
+  const baseCurve = generateCurve(
+    parameters,
+    curveProblem.interiorPointCount,
+    curveProblem.startPoint,
+    curveProblem.endPoint
+  );
+  const states = new Float64Array((curveProblem.interiorPointCount + 1) * 2);
+  for (let index = 0; index < baseCurve.length; index++) {
+    states[2 * index] = baseCurve[index][0] + STATE_NOISE_SCALE * (nextUniform() - 0.5);
+    states[2 * index + 1] = baseCurve[index][1] + STATE_NOISE_SCALE * (nextUniform() - 0.5);
+  }
+  return { parameters, states };
+}
+
+function createConstrainedResidual(curveProblem: CurveProblem): ConstrainedResidualFn {
+  return (_parameters, states) => bendingResidualFromStates(states, curveProblem);
+}
+
+function createBaseSolvers(curveProblem: CurveProblem): Array<BenchmarkSolver<CurveProblem>> {
+  const constrainedResidual = createConstrainedResidual(curveProblem);
+  return [
+    {
+      name: 'Constrained LM',
+      run: (problem, initial) =>
+        constrainedLevenbergMarquardt(
+          initial.parameters,
+          initial.states,
+          constrainedResidual,
+          problem.constraint,
+          problem.options.constrainedLM
+        )
+    },
+    {
+      name: 'Constrained GN',
+      run: (problem, initial) =>
+        constrainedGaussNewton(
+          initial.parameters,
+          initial.states,
+          constrainedResidual,
+          problem.constraint,
+          problem.options.constrainedGN
+        )
+    },
+    {
+      name: 'Adjoint GD',
+      run: (problem, initial) =>
+        adjointGradientDescent(
+          initial.parameters,
+          initial.states,
+          constrainedResidual,
+          problem.constraint,
+          problem.options.adjoint
+        )
+    }
+  ];
+}
+
+function createPenaltySolvers(
+  curveProblem: CurveProblem,
+  penaltyWeight: number
+): Array<BenchmarkSolver<CurveProblem>> {
+  return [
+    {
+      name: `Penalty LM (mu=${penaltyWeight})`,
+      run: (problem, initial) => {
+        const penaltyResidual = buildStateOnlyPenaltyResidual({
+          residual: (states) => bendingResidualFromStates(states, problem),
+          constraint: (states) => arcLengthConstraintFromStates(states, problem),
+          penaltyWeight
+        });
+        const result = levenbergMarquardt(initial.states, penaltyResidual, problem.options.penaltyLM);
+        return {
+          finalParameters: initial.parameters,
+          finalStates: result.finalParameters,
+          iterations: result.iterations,
+          converged: result.converged,
+          finalCost: result.finalCost
+        };
+      }
+    },
+    {
+      name: `Penalty GN (mu=${penaltyWeight})`,
+      run: (problem, initial) => {
+        const penaltyResidual = buildStateOnlyPenaltyResidual({
+          residual: (states) => bendingResidualFromStates(states, problem),
+          constraint: (states) => arcLengthConstraintFromStates(states, problem),
+          penaltyWeight
+        });
+        const result = gaussNewton(initial.states, penaltyResidual, problem.options.penaltyGN);
+        return {
+          finalParameters: initial.parameters,
+          finalStates: result.finalParameters,
+          iterations: result.iterations,
+          converged: result.converged,
+          finalCost: result.finalCost ?? 0
+        };
+      }
+    }
+  ];
+}
+
+function runSuite(curveProblem: CurveProblem): BenchmarkRow[] {
+  const seededRandom = createSeededRandom(RANDOM_SEED);
+  const initial = randomInitial(curveProblem, () => seededRandom.nextUniform());
+  const rows: BenchmarkRow[] = [];
+
+  for (const solver of createBaseSolvers(curveProblem)) {
+    const row = timeConstrainedSolve({
+      methodName: solver.name,
+      run: () => solver.run(curveProblem, initial),
+      constraintNorm: (result) =>
+        vectorNorm(curveProblem.constraint(result.finalParameters, result.finalStates))
+    });
+    row.Penalty = '-';
+    rows.push(row);
+  }
+
+  for (const penaltyWeight of curveProblem.penaltyWeights) {
+    for (const solver of createPenaltySolvers(curveProblem, penaltyWeight)) {
+      const row = timeConstrainedSolve({
+        methodName: solver.name,
+        run: () => solver.run(curveProblem, initial),
+        constraintNorm: (result) =>
+          vectorNorm(arcLengthConstraintFromStates(result.finalStates, curveProblem))
+      });
+      row.Penalty = penaltyWeight;
       rows.push(row);
     }
   }
-  console.table(rows);
+
+  return rows;
 }
+
+console.log('Benchmark: curve bending with arc-length constraints (few parameters, many states)');
+console.log(
+  `\n=== ${problem.name} (n=${problem.interiorPointCount}, params=${problem.parameterCount}) ===`
+);
+console.table(runSuite(problem));

@@ -95,8 +95,7 @@ describe('Effective Jacobian Computation', () => {
     expect(Math.abs(effectiveJacobian.get(1, 0) + 1.0)).toBeLessThan(1e-8);
   });
 
-  it('should work with non-square constraint Jacobian', () => {
-    // Non-square constraint Jacobian is now supported
+  it('should compute a finite effective Jacobian for non-square constraints', () => {
     const nonSquareConstraint: ConstraintFn = (p: Float64Array, x: Float64Array) => {
       return new Float64Array([p[0] + x[0] - 1.0, 2.0 * p[0] + x[0] - 1.5]);
     };
@@ -105,7 +104,6 @@ describe('Effective Jacobian Computation', () => {
     const states = new Float64Array([0.5]);
     const logger = new Logger();
 
-    // Should compute effective Jacobian without errors
     const effectiveJacobian = computeEffectiveJacobian(
       parameters,
       states,
@@ -116,9 +114,10 @@ describe('Effective Jacobian Computation', () => {
       'test'
     );
 
-    expect(effectiveJacobian).toBeDefined();
-    expect(effectiveJacobian.rows).toBeGreaterThan(0);
-    expect(effectiveJacobian.columns).toBeGreaterThan(0);
+    expect(effectiveJacobian.rows).toBe(2);
+    expect(effectiveJacobian.columns).toBe(1);
+    expect(Number.isFinite(effectiveJacobian.get(0, 0))).toBe(true);
+    expect(Number.isFinite(effectiveJacobian.get(1, 0))).toBe(true);
   });
 
   it('should handle 2D case', () => {

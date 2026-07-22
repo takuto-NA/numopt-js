@@ -157,7 +157,7 @@ function trySolveWithRegularization(
  * Fast path for square matrices using direct Cholesky/LU decomposition.
  */
 function solveSquareSystem(
-  Areg: Matrix,
+  A: Matrix,
   b: Matrix,
   regularization: number,
   logger: Logger,
@@ -165,18 +165,18 @@ function solveSquareSystem(
 ): Float64Array {
   const baseReg = regularization > 0 ? regularization : 0;
   const diagnostics =
-    Areg.rows <= MAX_DIAG_LOG_DIM && Areg.columns <= MAX_DIAG_LOG_DIM
-      ? computeRowColDiagnostics(Areg)
+    A.rows <= MAX_DIAG_LOG_DIM && A.columns <= MAX_DIAG_LOG_DIM
+      ? computeRowColDiagnostics(A)
       : undefined;
   const rhsDiagnostics = computeVectorDiagnostics(b);
 
-  const dimsOk = Areg.rows === b.rows;
-  const Afinite = checkFiniteMatrix(Areg);
+  const dimsOk = A.rows === b.rows;
+  const Afinite = checkFiniteMatrix(A);
   const bFinite = checkFiniteMatrix(b);
   if (!dimsOk || !Afinite.ok || !bFinite.ok) {
     const detailRows: Array<{ key: string; value: number | string }> = [
-      { key: 'A_rows', value: Areg.rows },
-      { key: 'A_cols', value: Areg.columns },
+      { key: 'A_rows', value: A.rows },
+      { key: 'A_cols', value: A.columns },
       { key: 'b_rows', value: b.rows },
       { key: 'b_cols', value: b.columns }
     ];
@@ -196,11 +196,11 @@ function solveSquareSystem(
   }
 
   try {
-    return trySolveWithRegularization(Areg, b, baseReg, logger, algorithmName);
+    return trySolveWithRegularization(A, b, baseReg, logger, algorithmName);
   } catch (error) {
     const detailRows: Array<{ key: string; value: number | string }> = [
-      { key: 'rows', value: Areg.rows },
-      { key: 'cols', value: Areg.columns },
+      { key: 'rows', value: A.rows },
+      { key: 'cols', value: A.columns },
       { key: 'reg_final', value: baseReg > 0 ? baseReg * Math.pow(REGULARIZATION_BASE, REGULARIZATION_MAX_EXPONENT) : Math.pow(REGULARIZATION_BASE, REGULARIZATION_FALLBACK_EXPONENT) }
     ];
     detailRows.push(
@@ -306,17 +306,13 @@ export function solveLeastSquares(
   algorithmName: string = 'constrainedOptimization',
   regularization: number = 0
 ): Float64Array {
-  const Areg =
-    regularization > 0 && A.rows === A.columns
-      ? A.add(Matrix.eye(A.rows, A.columns).mul(regularization))
-      : A;
-
-  if (Areg.rows === Areg.columns) {
-    return solveSquareSystem(Areg, b, regularization, logger, algorithmName);
+  // WHY: Do not pre-add λI here. trySolveWithRegularization already applies
+  // base regularization on attempt 0; a square pre-add would double it.
+  if (A.rows === A.columns) {
+    return solveSquareSystem(A, b, regularization, logger, algorithmName);
   }
 
-  const isOverdetermined = A.rows > A.columns;
-  if (isOverdetermined) {
+  if (A.rows > A.columns) {
     return solveOverdeterminedSystem(A, b, regularization, logger, algorithmName);
   }
 
@@ -386,7 +382,8 @@ export function updateStates(
   dcdp: Matrix,
   deltaP: Float64Array,
   logger: Logger,
-  algorithmName: string = 'constrainedOptimization'
+  algorithmName: string = 'constrainedOptimization',
+  regularization: number = 0
 ): Float64Array {
   // Compute how parameter changes affect constraints: needed to determine state updates
   const deltaPMatrix = float64ArrayToMatrix(deltaP);
@@ -398,7 +395,13 @@ export function updateStates(
   const negativeDcdpDeltaPMatrix = float64ArrayToMatrix(negativeDcdpDeltaP);
   
   // Hierarchical solver efficiently handles both square and non-square constraint Jacobians
-  const dx = solveLeastSquares(dcdx, negativeDcdpDeltaPMatrix, logger, algorithmName);
+  const dx = solveLeastSquares(
+    dcdx,
+    negativeDcdpDeltaPMatrix,
+    logger,
+    algorithmName,
+    regularization
+  );
 
   return addVectors(currentStates, dx);
 }

@@ -33,12 +33,11 @@ Every file must start with a comment explaining:
 /**
  * This file implements the Levenberg-Marquardt algorithm for solving
  * nonlinear least squares problems.
- * 
+ *
  * Role in system:
- * - Core optimization algorithm (Phase 3)
- * - Builds upon Gauss-Newton method (Phase 2)
- * - Uses numerical differentiation utilities
- * 
+ * - Core residual-based optimizer (builds on Gauss-Newton ideas)
+ * - Uses numerical differentiation utilities when Jacobians are omitted
+ *
  * For first-time readers:
  * - Start with the main function `levenbergMarquardt`
  * - Understand the lambda update strategy
@@ -95,9 +94,11 @@ const stepSize = options.stepSize ?? DEFAULT_STEP_SIZE; // Configurable
 const userProvidedParameters = initialParams; // User-provided
 ```
 
-## 6. Function Length Limit
+## 6. Function and File Size
 
-Functions must not exceed 50 lines. Break down complex functions into smaller, focused functions.
+Prefer small, focused functions. When a function grows past ~50 lines, extract named helpers with clear responsibilities.
+
+Treat files approaching or exceeding ~1000 lines as a decomposition smell by default (extract helpers/modules) unless there is a compelling structural reason to keep them together.
 
 ## 7. No Deep Nesting
 

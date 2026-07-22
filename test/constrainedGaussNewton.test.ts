@@ -1,34 +1,30 @@
 import { constrainedGaussNewton } from '../src/core/constrainedGaussNewton';
-import type { ConstrainedResidualFn, ConstraintFn } from '../src/core/types';
-import { Matrix } from 'ml-matrix';
 import { vectorNorm } from '../src/utils/matrix';
+import {
+  CONSTRAINED_LS_CONSTRAINT_TOLERANCE,
+  CONSTRAINED_LS_COST_TOLERANCE,
+  CONSTRAINED_LS_PARAMETER_TOLERANCE,
+  CONSTRAINED_LS_TARGET_PARAMETER,
+  CONSTRAINED_LS_TARGET_STATE,
+  constrainedLeastSquaresConstraint,
+  constrainedLeastSquaresResidual,
+  createConstrainedLeastSquaresAnalyticalDerivatives,
+  createConstrainedLeastSquaresInitial,
+  halfSquaredResidualNorm
+} from './fixtures/constrainedLeastSquares';
+
+const MAX_ITERATIONS_SHORT = 3;
+const STRICT_TOLERANCE = 1e-12;
 
 describe('Constrained Gauss-Newton Method', () => {
-  /**
-   * Simple constrained least squares problem:
-   * Minimize: f(p, x) = 1/2 ((p - 0.5)² + (x - 0.5)²)
-   * Subject to: c(p, x) = p + x - 1 = 0
-   * 
-   * Residual: r(p, x) = [p - 0.5, x - 0.5]
-   * Solution: p = 0.5, x = 0.5, f = 0
-   */
-  const simpleResidual: ConstrainedResidualFn = (p: Float64Array, x: Float64Array) => {
-    return new Float64Array([p[0] - 0.5, x[0] - 0.5]);
-  };
-
-  const simpleConstraint: ConstraintFn = (p: Float64Array, x: Float64Array) => {
-    return new Float64Array([p[0] + x[0] - 1.0]);
-  };
-
   it('should converge for simple constrained least squares', () => {
-    const initialP = new Float64Array([2.0]);
-    const initialX = new Float64Array([-1.0]); // p + x - 1 = 0 => x = -1
+    const initial = createConstrainedLeastSquaresInitial();
 
     const result = constrainedGaussNewton(
-      initialP,
-      initialX,
-      simpleResidual,
-      simpleConstraint,
+      initial.parameters,
+      initial.states,
+      constrainedLeastSquaresResidual,
+      constrainedLeastSquaresConstraint,
       {
         maxIterations: 100,
         tolerance: 1e-6
@@ -36,49 +32,54 @@ describe('Constrained Gauss-Newton Method', () => {
     );
 
     expect(result.converged).toBe(true);
-    expect(Math.abs(result.finalParameters[0] - 0.5)).toBeLessThan(1e-3);
-    expect(Math.abs(result.finalStates[0] - 0.5)).toBeLessThan(1e-3);
-    expect(result.finalCost).toBeLessThan(1e-5);
-    
-    // Check constraint satisfaction
-    const constraint = simpleConstraint(result.finalParameters, result.finalStates);
-    expect(vectorNorm(constraint)).toBeLessThan(1e-3);
+    expect(Math.abs(result.finalParameters[0] - CONSTRAINED_LS_TARGET_PARAMETER)).toBeLessThan(
+      CONSTRAINED_LS_PARAMETER_TOLERANCE
+    );
+    expect(Math.abs(result.finalStates[0] - CONSTRAINED_LS_TARGET_STATE)).toBeLessThan(
+      CONSTRAINED_LS_PARAMETER_TOLERANCE
+    );
+    expect(result.finalCost).toBeLessThan(CONSTRAINED_LS_COST_TOLERANCE);
+    expect(
+      vectorNorm(
+        constrainedLeastSquaresConstraint(result.finalParameters, result.finalStates)
+      )
+    ).toBeLessThan(CONSTRAINED_LS_CONSTRAINT_TOLERANCE);
   });
 
   it('should work with analytical derivatives', () => {
-    const initialP = new Float64Array([1.0]);
-    const initialX = new Float64Array([0.0]);
+    const initial = { parameters: new Float64Array([1.0]), states: new Float64Array([0.0]) };
+    const derivatives = createConstrainedLeastSquaresAnalyticalDerivatives();
 
     const result = constrainedGaussNewton(
-      initialP,
-      initialX,
-      simpleResidual,
-      simpleConstraint,
+      initial.parameters,
+      initial.states,
+      constrainedLeastSquaresResidual,
+      constrainedLeastSquaresConstraint,
       {
         maxIterations: 100,
         tolerance: 1e-6,
-        // r_p: (2×1) - derivative of [p-0.5, x-0.5] w.r.t. p
-        drdp: (p: Float64Array, x: Float64Array) => new Matrix([[1], [0]]),
-        // r_x: (2×1) - derivative of [p-0.5, x-0.5] w.r.t. x
-        drdx: (p: Float64Array, x: Float64Array) => new Matrix([[0], [1]]),
-        dcdp: (p: Float64Array, x: Float64Array) => new Matrix([[1]]),
-        dcdx: (p: Float64Array, x: Float64Array) => new Matrix([[1]])
+        ...derivatives
       }
     );
 
     expect(result.converged).toBe(true);
-    expect(Math.abs(result.finalParameters[0] - 0.5)).toBeLessThan(1e-2);
+    expect(Math.abs(result.finalParameters[0] - CONSTRAINED_LS_TARGET_PARAMETER)).toBeLessThan(
+      1e-2
+    );
   });
 
-  it('should handle constraint violation warning', () => {
-    const initialP = new Float64Array([1.0]);
-    const initialX = new Float64Array([1.0]); // Doesn't satisfy constraint: 1 + 1 - 1 = 1 ≠ 0
+  it('should reduce constraint violation from an infeasible start', () => {
+    const initialParameters = new Float64Array([1.0]);
+    const initialStates = new Float64Array([1.0]);
+    const initialConstraintNorm = vectorNorm(
+      constrainedLeastSquaresConstraint(initialParameters, initialStates)
+    );
 
     const result = constrainedGaussNewton(
-      initialP,
-      initialX,
-      simpleResidual,
-      simpleConstraint,
+      initialParameters,
+      initialStates,
+      constrainedLeastSquaresResidual,
+      constrainedLeastSquaresConstraint,
       {
         maxIterations: 200,
         tolerance: 1e-4,
@@ -86,116 +87,75 @@ describe('Constrained Gauss-Newton Method', () => {
       }
     );
 
-    // Algorithm should reduce constraint violation from the infeasible start.
-    const initialConstraintNorm = vectorNorm(simpleConstraint(initialP, initialX));
     expect(result.finalConstraintNorm).toBeLessThan(initialConstraintNorm);
     expect(result.finalConstraintNorm).toBeLessThan(1e-2);
-    expect(result.finalParameters).toBeInstanceOf(Float64Array);
-    expect(result.finalStates).toBeInstanceOf(Float64Array);
   });
 
-  it('should work with non-square constraint Jacobian', () => {
-    // Non-square constraint Jacobian is now supported
-    const nonSquareConstraint: ConstraintFn = (p: Float64Array, x: Float64Array) => {
-      // Returns 2 constraints but only 1 state (overdetermined)
-      return new Float64Array([p[0] + x[0] - 1.0, 2.0 * p[0] + x[0] - 1.5]);
-    };
-
-    const initialP = new Float64Array([0.5]);
-    const initialX = new Float64Array([0.5]);
+  it('should call onIteration for each completed iteration starting at zero', () => {
+    const initial = createConstrainedLeastSquaresInitial();
+    const iterations: number[] = [];
 
     const result = constrainedGaussNewton(
-      initialP,
-      initialX,
-      simpleResidual,
-      nonSquareConstraint,
-      { maxIterations: 100, tolerance: 1e-4, constraintTolerance: 1e-2 }
-    );
-
-    // Should run without errors (even if constraints are not perfectly satisfied due to overdetermined nature)
-    expect(result.iterations).toBeGreaterThan(0);
-    expect(result.finalCost).toBeDefined();
-  });
-
-  it('should call onIteration callback if provided', () => {
-    const initialP = new Float64Array([2.0]);
-    const initialX = new Float64Array([-1.0]);
-    let callbackCalled = false;
-    let iterationCount = 0;
-
-    constrainedGaussNewton(
-      initialP,
-      initialX,
-      simpleResidual,
-      simpleConstraint,
+      initial.parameters,
+      initial.states,
+      constrainedLeastSquaresResidual,
+      constrainedLeastSquaresConstraint,
       {
         maxIterations: 10,
         tolerance: 1e-6,
-        onIteration: (iteration, cost, params) => {
-          callbackCalled = true;
-          iterationCount = iteration;
-          expect(typeof cost).toBe('number');
-          expect(params).toBeInstanceOf(Float64Array);
+        onIteration: (iteration, cost, parameters) => {
+          iterations.push(iteration);
+          expect(cost).toBeGreaterThanOrEqual(0);
+          expect(parameters).toBeInstanceOf(Float64Array);
         }
       }
     );
 
-    expect(callbackCalled).toBe(true);
-    expect(iterationCount).toBeGreaterThanOrEqual(0);
+    const expectedIterations = Array.from({ length: result.iterations }, (_, index) => index);
+    expect(iterations).toEqual(expectedIterations);
   });
 
-  it('should handle maximum iterations gracefully', () => {
-    const initialP = new Float64Array([10.0]);
-    const initialX = new Float64Array([-9.0]);
+  it('should stop at maxIterations when tolerances are unreachable', () => {
+    const initial = { parameters: new Float64Array([10.0]), states: new Float64Array([-9.0]) };
+    const initialCost = halfSquaredResidualNorm(initial.parameters, initial.states);
 
     const result = constrainedGaussNewton(
-      initialP,
-      initialX,
-      simpleResidual,
-      simpleConstraint,
+      initial.parameters,
+      initial.states,
+      constrainedLeastSquaresResidual,
+      constrainedLeastSquaresConstraint,
       {
-        maxIterations: 3,
-        tolerance: 1e-12 // Very strict tolerance to prevent convergence
+        maxIterations: MAX_ITERATIONS_SHORT,
+        tolerance: STRICT_TOLERANCE
       }
     );
 
-    // May converge or not depending on initial conditions
-    expect(result.iterations).toBeLessThanOrEqual(3);
-    expect(result.finalParameters).toBeInstanceOf(Float64Array);
-    expect(result.finalStates).toBeInstanceOf(Float64Array);
+    expect(result.iterations).toBeLessThanOrEqual(MAX_ITERATIONS_SHORT);
+    if (!result.converged) {
+      expect(result.iterations).toBe(MAX_ITERATIONS_SHORT);
+    }
+    expect(result.finalCost).toBeLessThanOrEqual(initialCost);
   });
 
-  /**
-   * 2D problem:
-   * Residual: r(p, x) = [p₁ - 0.5, p₂ - 0.5, x₁ - 0.5, x₂ - 0.5]
-   * Subject to: c₁(p, x) = p₁ + x₁ - 1 = 0
-   *             c₂(p, x) = p₂ + x₂ - 1 = 0
-   * 
-   * Solution: p = [0.5, 0.5], x = [0.5, 0.5]
-   */
-  const residual2D: ConstrainedResidualFn = (p: Float64Array, x: Float64Array) => {
-    return new Float64Array([
-      p[0] - 0.5,
-      p[1] - 0.5,
-      x[0] - 0.5,
-      x[1] - 0.5
-    ]);
-  };
-
-  const constraint2D: ConstraintFn = (p: Float64Array, x: Float64Array) => {
-    return new Float64Array([
-      p[0] + x[0] - 1.0,
-      p[1] + x[1] - 1.0
-    ]);
-  };
-
   it('should converge for 2D constrained least squares', () => {
-    const initialP = new Float64Array([2.0, 2.0]);
-    const initialX = new Float64Array([-1.0, -1.0]);
+    const residual2D = (parameters: Float64Array, states: Float64Array) => {
+      return new Float64Array([
+        parameters[0] - 0.5,
+        parameters[1] - 0.5,
+        states[0] - 0.5,
+        states[1] - 0.5
+      ]);
+    };
+    const constraint2D = (parameters: Float64Array, states: Float64Array) => {
+      return new Float64Array([
+        parameters[0] + states[0] - 1.0,
+        parameters[1] + states[1] - 1.0
+      ]);
+    };
 
     const result = constrainedGaussNewton(
-      initialP,
-      initialX,
+      new Float64Array([2.0, 2.0]),
+      new Float64Array([-1.0, -1.0]),
       residual2D,
       constraint2D,
       {
@@ -209,10 +169,8 @@ describe('Constrained Gauss-Newton Method', () => {
     expect(Math.abs(result.finalParameters[1] - 0.5)).toBeLessThan(1e-2);
     expect(Math.abs(result.finalStates[0] - 0.5)).toBeLessThan(1e-2);
     expect(Math.abs(result.finalStates[1] - 0.5)).toBeLessThan(1e-2);
-    
-    // Check constraint satisfaction
-    const constraint = constraint2D(result.finalParameters, result.finalStates);
-    expect(vectorNorm(constraint)).toBeLessThan(1e-3);
+    expect(vectorNorm(constraint2D(result.finalParameters, result.finalStates))).toBeLessThan(
+      CONSTRAINED_LS_CONSTRAINT_TOLERANCE
+    );
   });
 });
-
