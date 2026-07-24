@@ -1,15 +1,6 @@
 /**
- * This file implements a user-friendly and trackable logging system for optimization algorithms.
- * 
- * Role in system:
- * - Provides structured logging with log levels (DEBUG, INFO, WARN, ERROR)
- * - Formats logs with timestamps, emojis, and aligned indentation
- * - Optimized for performance when logging is disabled
- * 
- * For first-time readers:
- * - Start with LogLevel enum and Logger class
- * - Understand how logLevel and verbose options work together
- * - Check formatLogMessage for formatting details
+ * Structured optimizer logging (`DEBUG`/`INFO`/`WARN`/`ERROR`) with optional verbose detail.
+ * Entry points: `LogLevel`, `Logger`.
  */
 
 import { formatNumber } from '../utils/formatting.js';

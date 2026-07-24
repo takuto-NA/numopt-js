@@ -1,19 +1,11 @@
 /**
- * This file implements the Levenberg-Marquardt algorithm for solving
- * nonlinear least squares problems, following the derivations in:
+ * Levenberg-Marquardt nonlinear least squares solver (damped Gauss-Newton).
+ *
+ * References:
  * - Moré, "The Levenberg-Marquardt Algorithm: Implementation and Theory", 1978 (Lecture Notes in Mathematics 630)
  * - Lourakis, "A Brief Description of the Levenberg-Marquardt Algorithm", 2005 tutorial
- * 
- * Role in system:
- * - Phase 3 advanced algorithm (main MVP target)
- * - Combines Gauss-Newton method with damping for robustness
- * - Handles cases where Gauss-Newton might fail (singular matrices, poor conditioning)
- * 
- * For first-time readers:
- * - Start with levenbergMarquardt function
- * - Understand lambda (damping parameter) update strategy
- * - Check convergence criteria implementation
- * - Debug features (callbacks, verbose logging) are top priority
+ *
+ * Entry point: `levenbergMarquardt`.
  */
 
 import { Matrix, solve, CholeskyDecomposition } from 'ml-matrix';

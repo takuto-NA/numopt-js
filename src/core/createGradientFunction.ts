@@ -1,16 +1,6 @@
 /**
- * This file provides helper functions for creating gradient and Jacobian functions
- * from cost and residual functions using finite differences.
- * 
- * Role in system:
- * - Simplifies the API for users who want to use numerical differentiation
- * - Prevents common mistakes with parameter ordering
- * - Provides a more intuitive interface for optimization algorithms
- * 
- * For first-time readers:
- * - Use createFiniteDiffGradient when you have a cost function and need a gradient
- * - Use createFiniteDiffJacobian when you have a residual function and need a Jacobian
- * - These are convenience wrappers around finiteDiffGradient and finiteDiffJacobian
+ * Wrappers that bind a cost/residual into GradientFn/JacobianFn via finite differences.
+ * Prefer these over calling `finiteDiffGradient`/`finiteDiffJacobian` with reversed argument order.
  */
 
 import { finiteDiffGradient, finiteDiffJacobian } from './finiteDiff.js';
@@ -39,7 +29,6 @@ import type {
  * // Define your cost function
  * const costFn = (params) => Math.pow(params[0] - 3, 2) + Math.pow(params[1] - 2, 2);
  * 
- * // Create a gradient function (no need to worry about parameter order!)
  * const gradientFn = createFiniteDiffGradient(costFn);
  * 
  * // Use it with an optimizer

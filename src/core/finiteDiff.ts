@@ -84,7 +84,7 @@ const CENTRAL_DIFFERENCE_DENOMINATOR = 2.0; // Denominator for central differenc
  * - ✅ Correct: `(params) => finiteDiffGradient(params, costFn)`
  * - ❌ Wrong: `(params) => finiteDiffGradient(costFn, params)`
  * 
- * Consider using {@link createFiniteDiffGradient} for a more intuitive API.
+ * Prefer {@link createFiniteDiffGradient}, which binds the cost function and returns a `GradientFn`.
  */
 export function finiteDiffGradient(
   parameters: Float64Array,

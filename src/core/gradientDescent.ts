@@ -1,19 +1,11 @@
 /**
- * This file implements the gradient descent optimization algorithm.
+ * Gradient descent for scalar cost minimization (optional backtracking line search).
  *
  * References:
  * - Nocedal & Wright, "Numerical Optimization" (2nd ed.), Chapter 2 (steepest descent and line search basics)
  * - Boyd & Vandenberghe, "Convex Optimization", Section 9.3 (backtracking line search with Armijo rule)
  *
- * Role in system:
- * - Phase 1 foundation algorithm (simple, testable)
- * - Establishes basic optimization framework
- * - Used as building block for more advanced methods
- *
- * For first-time readers:
- * - Start with gradientDescent function
- * - Understand how it uses line search or fixed step size
- * - Check convergence criteria implementation
+ * Entry point: `gradientDescent`.
  */
 
 import type {

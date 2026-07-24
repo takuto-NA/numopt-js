@@ -1,16 +1,5 @@
 /**
- * This file provides helper functions for formatting and displaying
- * optimization results in a consistent, user-friendly manner.
- * 
- * Role in system:
- * - Replaces repetitive console.log statements in examples
- * - Provides consistent formatting across all result types
- * - Improves UI/UX with better readability and structure
- * 
- * For first-time readers:
- * - Use printOptimizationResult() for direct console output
- * - Use formatOptimizationResult() to get formatted string
- * - Functions automatically handle different result types via overloading
+ * Format/print helpers for optimizer result objects (`print*` / `format*` overloads).
  */
 
 import type {
