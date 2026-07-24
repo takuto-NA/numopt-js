@@ -1,15 +1,6 @@
 /**
- * This file implements the Gauss-Newton method for solving nonlinear least squares problems.
- * 
- * Role in system:
- * - Phase 2 intermediate algorithm (builds on gradient descent concepts)
- * - Foundation for Levenberg-Marquardt method
- * - Specifically designed for nonlinear least squares problems
- * 
- * For first-time readers:
- * - Start with gaussNewton function
- * - Understand how it solves normal equations: (J^T J) δ = -J^T r
- * - This is a special case of Newton's method for least squares
+ * Gauss-Newton nonlinear least squares solver (undamped normal equations).
+ * Solves (J^T J) δ = -J^T r each iteration. Entry point: `gaussNewton`.
  */
 
 import { Matrix, solve, CholeskyDecomposition } from 'ml-matrix';

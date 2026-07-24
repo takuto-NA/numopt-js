@@ -23,25 +23,16 @@ if (lambda > MINIMUM_LAMBDA_THRESHOLD) {
 
 ## 2. File Header Comments
 
-Every file must start with a comment explaining:
-- What the file does
-- Its role in the overall system
-- Guidance for first-time readers
+Every file must start with a short comment stating its responsibility (what it owns). Optional bullets for main entry points or constraints are fine when they add facts a reader cannot get from the signature alone.
+
+Do not pad headers with roadmap language (Phase/MVP), marketing adjectives, or throat-clearing “for first-time readers” sections that only restate the file name.
 
 **Example:**
 ```typescript
 /**
- * This file implements the Levenberg-Marquardt algorithm for solving
- * nonlinear least squares problems.
- *
- * Role in system:
- * - Core residual-based optimizer (builds on Gauss-Newton ideas)
- * - Uses numerical differentiation utilities when Jacobians are omitted
- *
- * For first-time readers:
- * - Start with the main function `levenbergMarquardt`
- * - Understand the lambda update strategy
- * - Check convergence criteria implementation
+ * Levenberg-Marquardt nonlinear least squares solver.
+ * Uses numerical differentiation when a Jacobian is omitted.
+ * Entry point: `levenbergMarquardt`.
  */
 ```
 

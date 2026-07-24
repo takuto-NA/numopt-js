@@ -1,15 +1,5 @@
 /**
- * This file is the main entry point for the numopt-js library.
- * 
- * Role in system:
- * - Exports all public API functions and types
- * - Provides clean, focused interface for users
- * - Single import point for the entire library
- * 
- * For first-time readers:
- * - Import everything you need from this file
- * - Check individual algorithm files for detailed documentation
- * - All algorithms follow consistent patterns
+ * Public package entry: re-exports algorithms, helpers, and shared types.
  */
 
 // Core algorithms
