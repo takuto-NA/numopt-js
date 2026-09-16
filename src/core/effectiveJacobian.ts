@@ -142,9 +142,8 @@ export function computeEffectiveJacobian(
   const parameterCount = r_p.columns;
   const stateCount = c_x.columns;
 
-  // Note: Constraint Jacobian ∂c/∂x can be non-square.
-  // The adjoint method now supports both square and non-square constraint Jacobians.
-  // Dimension validation removed to allow non-square matrices.
+  // Constrained GN/LM allow a rectangular ∂c/∂x. adjointGradientDescent
+  // rejects that case at its own entry point.
 
   if (r_x.columns !== stateCount) {
     const errorMsg = `Residual Jacobian ∂r/∂x must have stateCount columns. ` +

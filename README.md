@@ -29,6 +29,8 @@ The published package ships `dist/`, this README, and the license. Runnable tuto
 | Nonlinear least squares | Gauss–Newton, Levenberg–Marquardt | `residual(p) -> Float64Array` |
 | Equality constraints \(c(p,x)=0\) | Adjoint, Constrained GN/LM | cost/residual + `constraint(p,x)` |
 
+Adjoint is a reduced-space solver: the constraint defines \(x(p)\), so the optimizer searches only \(p\). That is the point when there are few design variables and many implicit states. Constrained GN/LM use the same split; a penalty method on the concatenated \((p,x)\) does not.
+
 **Why `Float64Array`?** Predictable numeric performance. Convert with `new Float64Array([1, 2, 3])`.
 
 Least-squares solvers minimize \(f(p) = 1/2 \|r(p)\|^2\).
@@ -144,7 +146,8 @@ Recommended order:
 5. `npm run example:constrained` — Constrained LM / GN / Adjoint on one problem
 6. `npm run example:adjoint` — basic adjoint
 7. `npm run example:adjoint-advanced` — harder adjoint cases
-8. `npm run example:layout-toy` — small layout toy
+8. `npm run example:adjoint-reduced` — few parameters vs many implicit states
+9. `npm run example:layout-toy` — small layout toy
 
 Manual benchmarks (not CI): `npm run benchmark:constrained`, `npm run benchmark:curve-bending`.
 
@@ -162,6 +165,7 @@ Result printing helpers: `printResult` / `formatResult` (and typed variants) —
 ## Troubleshooting
 
 - **Does not converge**: try better initials, raise `maxIterations`, relax tolerances, enable line search for GD/Adjoint, use `logLevel: 'DEBUG'`.
+- **Adjoint rejects the start**: `∂c/∂x` must be square, and \(x(p)\) must exist near the guess. Projectable implicit-state starts only; \(|p| > \sqrt{2}\) on \(p^2+x^2=2\) has no real \(x\).
 - **Singular / ill-conditioned Jacobian**: prefer LM / Constrained LM; for Adjoint try `regularization` and feasible initials.
 - **Wrong numeric type**: pass `Float64Array`, not plain arrays.
 

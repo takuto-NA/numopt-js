@@ -54,7 +54,8 @@ export type GradientFn = (parameters: Float64Array) => Float64Array;
  * The constraint c(p, x) = 0 must be satisfied.
  * 
  * Note: The constraint vector length and state vector length can differ.
- * The adjoint method supports both square and non-square constraint Jacobians.
+ * Constrained GN/LM accept rectangular ∂c/∂x. adjointGradientDescent requires
+ * a square implicit-state Jacobian so x(p) is locally unique.
  */
 export type ConstraintFn = (parameters: Float64Array, states: Float64Array) => Float64Array;
 
@@ -441,12 +442,11 @@ export interface AdjointGradientDescentOptions extends GradientDescentOptions {
    * If provided, this will be used instead of numerical differentiation.
    * Returns a Matrix of size (constraintCount × stateCount).
    *
-   * The adjoint method supports both square and non-square constraint Jacobians:
-   * - If square, it solves (∂c/∂x)^T λ = rhs directly.
-   * - If non-square, it solves the system in a least-squares sense.
+   * Must be square: constraintCount === stateCount. This is the implicit-state
+   * contract for adjointGradientDescent (x is locally determined by p).
    *
-   * Note: Non-square (or ill-conditioned) Jacobians can be numerically sensitive.
-   * Consider scaling/normalizing your states and constraints if you see instability.
+   * Ill-conditioned Jacobians can be numerically sensitive. Consider scaling
+   * states and constraints, or raising `regularization`, if you see instability.
    */
   dcdx?: (parameters: Float64Array, states: Float64Array) => Matrix;
 
@@ -522,7 +522,7 @@ export interface ConstrainedGaussNewtonOptions extends CommonOptimizationOptions
    * If provided, this will be used instead of numerical differentiation.
    * Returns a Matrix of size (constraintCount × stateCount).
    * Supports both square (constraintCount == stateCount) and non-square matrices.
-   * For non-square matrices, the adjoint method uses normal equations with Cholesky decomposition.
+   * Non-square systems are solved in a least-squares sense.
    */
   dcdx?: (parameters: Float64Array, states: Float64Array) => Matrix;
 

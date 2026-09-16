@@ -134,12 +134,7 @@ describe('Adjoint Gradient Descent', () => {
     expect(Number.isFinite(result.finalCost)).toBe(true);
   });
 
-  it('should stay near the consistent overdetermined constrained optimum', () => {
-    // Overdetermined but consistent at (0.5, 0.5): c1 = p+x-1, c2 = 2p+x-1.5
-    const OVERDETERMINED_PARAMETER_TOLERANCE = 0.15;
-    const OVERDETERMINED_COST_TOLERANCE = 0.15;
-    const EXPECTED_COST = 0.5;
-
+  it('rejects an overdetermined constraint Jacobian', () => {
     const overdeterminedCost: ConstrainedCostFn = (p: Float64Array, x: Float64Array) => {
       return p[0] * p[0] + x[0] * x[0];
     };
@@ -151,29 +146,31 @@ describe('Adjoint Gradient Descent', () => {
       ]);
     };
 
-    const initialP = new Float64Array([0.5]);
-    const initialX = new Float64Array([0.5]);
-
-    const result = adjointGradientDescent(
-      initialP,
-      initialX,
-      overdeterminedCost,
-      overdeterminedConstraint,
-      { maxIterations: 200, tolerance: 1e-4, constraintTolerance: 1e-2 }
-    );
-
-    expect(Math.abs(result.finalCost - EXPECTED_COST)).toBeLessThan(OVERDETERMINED_COST_TOLERANCE);
-    expect(Math.abs(result.finalParameters[0] - 0.5)).toBeLessThan(OVERDETERMINED_PARAMETER_TOLERANCE);
-    expect(Math.abs(result.finalStates[0] - 0.5)).toBeLessThan(OVERDETERMINED_PARAMETER_TOLERANCE);
-    expect(
-      Number.isFinite(vectorNorm(overdeterminedConstraint(result.finalParameters, result.finalStates)))
-    ).toBe(true);
+    expect(() =>
+      adjointGradientDescent(
+        new Float64Array([0.5]),
+        new Float64Array([0.5]),
+        overdeterminedCost,
+        overdeterminedConstraint
+      )
+    ).toThrow(/square implicit-state system/);
   });
 
-  it('should work with non-square constraint Jacobian (underdetermined)', () => {
-    // Underdetermined system: 1 constraint, 2 states
-    // Minimize: f(p, x) = p² + x[0]² + x[1]²
-    // Subject to: c(p, x) = p + x[0] + x[1] - 1 = 0
+  it('rejects a non-square analytical ∂c/∂x before projecting', () => {
+    expect(() =>
+      adjointGradientDescent(
+        new Float64Array([0.5]),
+        new Float64Array([0.5]),
+        simpleCost,
+        simpleConstraint,
+        {
+          dcdx: () => new Matrix([[1, 0]])
+        }
+      )
+    ).toThrow(/square constraint Jacobian/);
+  });
+
+  it('rejects an underdetermined constraint Jacobian', () => {
     const underdeterminedCost: ConstrainedCostFn = (p: Float64Array, x: Float64Array) => {
       return p[0] * p[0] + x[0] * x[0] + x[1] * x[1];
     };
@@ -182,21 +179,14 @@ describe('Adjoint Gradient Descent', () => {
       return new Float64Array([p[0] + x[0] + x[1] - 1.0]);
     };
 
-    const initialP = new Float64Array([1.0]);
-    const initialX = new Float64Array([0.0, 0.0]);
-
-    const result = adjointGradientDescent(
-      initialP,
-      initialX,
-      underdeterminedCost,
-      underdeterminedConstraint,
-      { maxIterations: 100, tolerance: 1e-4 }
-    );
-
-    expect(result.converged).toBe(true);
-    // Constraint should be satisfied
-    const finalConstraint = underdeterminedConstraint(result.finalParameters, result.finalStates);
-    expect(vectorNorm(finalConstraint)).toBeLessThan(1e-3);
+    expect(() =>
+      adjointGradientDescent(
+        new Float64Array([1.0]),
+        new Float64Array([0.0, 0.0]),
+        underdeterminedCost,
+        underdeterminedConstraint
+      )
+    ).toThrow(/square implicit-state system/);
   });
 
   it('should work with residual function', () => {
@@ -341,6 +331,149 @@ describe('Adjoint Gradient Descent', () => {
     // Check constraint satisfaction
     const constraint = constraint2D(result.finalParameters, result.finalStates);
     expect(vectorNorm(constraint)).toBeLessThan(1e-3);
+  });
+
+  it('takes one reduced-gradient step on the linear problem', () => {
+    const result = adjointGradientDescent(
+      new Float64Array([2.0]),
+      new Float64Array([-1.0]),
+      simpleCost,
+      simpleConstraint,
+      {
+        maxIterations: 1,
+        tolerance: 0,
+        useLineSearch: false,
+        stepSize: 0.01,
+        dfdp: (p: Float64Array) => new Float64Array([2 * p[0]]),
+        dfdx: (_p: Float64Array, x: Float64Array) => new Float64Array([2 * x[0]]),
+        dcdp: () => new Matrix([[1]]),
+        dcdx: () => new Matrix([[1]])
+      }
+    );
+
+    // Reduced gradient at p=2 is 6, so p <- 2 - 0.01 * 6 = 1.94, x = 1 - p.
+    expect(result.finalParameters[0]).toBeCloseTo(1.94, 8);
+    expect(result.finalStates[0]).toBeCloseTo(-0.94, 8);
+    expect(result.finalConstraintNorm).toBeLessThan(1e-8);
+  });
+
+  it('converges on the nonlinear circle from a feasible start', () => {
+    const circleCost: ConstrainedCostFn = (p, x) => (p[0] - 1) ** 2 + (x[0] - 1) ** 2;
+    const circleConstraint: ConstraintFn = (p, x) =>
+      new Float64Array([p[0] * p[0] + x[0] * x[0] - 2.0]);
+    const initialP = 0.2;
+    const initialX = Math.sqrt(2 - initialP * initialP);
+
+    const result = adjointGradientDescent(
+      new Float64Array([initialP]),
+      new Float64Array([initialX]),
+      circleCost,
+      circleConstraint,
+      {
+        maxIterations: 300,
+        tolerance: 1e-6,
+        constraintTolerance: 1e-6,
+        useLineSearch: true
+      }
+    );
+
+    expect(result.converged).toBe(true);
+    expect(result.finalParameters[0]).toBeCloseTo(1, 2);
+    expect(result.finalStates[0]).toBeCloseTo(1, 2);
+    expect(result.finalConstraintNorm).toBeLessThan(1e-6);
+  });
+
+  it('projects a modest off-manifold guess onto the circle before optimizing', () => {
+    const circleCost: ConstrainedCostFn = (p, x) => (p[0] - 1) ** 2 + (x[0] - 1) ** 2;
+    const circleConstraint: ConstraintFn = (p, x) =>
+      new Float64Array([p[0] * p[0] + x[0] * x[0] - 2.0]);
+
+    const result = adjointGradientDescent(
+      new Float64Array([0.2]),
+      new Float64Array([1.0]),
+      circleCost,
+      circleConstraint,
+      {
+        maxIterations: 300,
+        tolerance: 1e-6,
+        constraintTolerance: 1e-6,
+        useLineSearch: true
+      }
+    );
+
+    expect(result.converged).toBe(true);
+    expect(result.finalParameters[0]).toBeCloseTo(1, 2);
+    expect(result.finalStates[0]).toBeCloseTo(1, 2);
+    expect(result.finalConstraintNorm).toBeLessThan(1e-6);
+  });
+
+  it('rejects an initial point with no real implicit state', () => {
+    const circleCost: ConstrainedCostFn = (p, x) => (p[0] - 1) ** 2 + (x[0] - 1) ** 2;
+    const circleConstraint: ConstraintFn = (p, x) =>
+      new Float64Array([p[0] * p[0] + x[0] * x[0] - 2.0]);
+
+    let thrown: unknown;
+    try {
+      adjointGradientDescent(
+        new Float64Array([1.5]),
+        new Float64Array([0.5]),
+        circleCost,
+        circleConstraint,
+        { constraintTolerance: 1e-6 }
+      );
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(Error);
+    const message = (thrown as Error).message;
+    const originalInfeasibleCircleNorm = vectorNorm(
+      circleConstraint(new Float64Array([1.5]), new Float64Array([0.5]))
+    );
+    expect(message).toMatch(/Failed to restore feasible states/);
+    const residualMatch = message.match(/\|\|c\(p,x\)\|\|=([0-9.eE+-]+)/);
+    expect(residualMatch).not.toBeNull();
+    expect(Number(residualMatch?.[1])).toBeGreaterThan(originalInfeasibleCircleNorm);
+  });
+
+  it('optimizes a short implicit chain with one parameter and many states', () => {
+    const stateCount = 8;
+    const targetEnd = 1.0;
+    const expectedParameter = targetEnd / stateCount;
+    const chainCost: ConstrainedCostFn = (_p, x) => (x[stateCount - 1] - targetEnd) ** 2;
+    const chainConstraint: ConstraintFn = (p, x) => {
+      const constraint = new Float64Array(stateCount);
+      constraint[0] = x[0] - p[0];
+      for (let index = 1; index < stateCount; index++) {
+        constraint[index] = x[index] - x[index - 1] - p[0];
+      }
+      return constraint;
+    };
+
+    const initialParameter = 0.4;
+    const initialStates = new Float64Array(stateCount);
+    for (let index = 0; index < stateCount; index++) {
+      initialStates[index] = (index + 1) * initialParameter;
+    }
+
+    const result = adjointGradientDescent(
+      new Float64Array([initialParameter]),
+      initialStates,
+      chainCost,
+      chainConstraint,
+      {
+        maxIterations: 200,
+        tolerance: 1e-8,
+        constraintTolerance: 1e-8,
+        useLineSearch: true
+      }
+    );
+
+    expect(result.converged).toBe(true);
+    expect(result.finalParameters[0]).toBeCloseTo(expectedParameter, 3);
+    expect(result.finalParameters.length).toBe(1);
+    expect(result.finalStates.length).toBe(stateCount);
+    expect(result.finalConstraintNorm).toBeLessThan(1e-6);
   });
 });
 

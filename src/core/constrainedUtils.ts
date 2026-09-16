@@ -420,9 +420,14 @@ export function projectStatesToConstraints(
   constraintTolerance: number,
   logger: Logger,
   algorithmName: string = 'constrainedOptimization',
-  maxIterations: number = 3
+  maxIterations: number = 3,
+  projectionOptions: {
+    dcdx?: (parameters: Float64Array, states: Float64Array) => Matrix;
+    regularization?: number;
+  } = {}
 ): Float64Array {
   let projectedStates = new Float64Array(states);
+  const regularization = projectionOptions.regularization ?? 0;
 
   for (let i = 0; i < maxIterations; i++) {
     const constraint = constraintFunction(parameters, projectedStates);
@@ -431,12 +436,20 @@ export function projectStatesToConstraints(
       break;
     }
 
-    const dcdx = finiteDiffConstraintPartialX(parameters, projectedStates, constraintFunction, { stepSize: stepSizeX });
+    const dcdx = projectionOptions.dcdx
+      ? projectionOptions.dcdx(parameters, projectedStates)
+      : finiteDiffConstraintPartialX(parameters, projectedStates, constraintFunction, { stepSize: stepSizeX });
     const negativeConstraint = scaleVector(constraint, NEGATIVE_COEFFICIENT);
     const negativeConstraintMatrix = float64ArrayToMatrix(negativeConstraint);
 
     try {
-      const deltaX = solveLeastSquares(dcdx, negativeConstraintMatrix, logger, algorithmName);
+      const deltaX = solveLeastSquares(
+        dcdx,
+        negativeConstraintMatrix,
+        logger,
+        algorithmName,
+        regularization
+      );
       const updatedStates = addVectors(projectedStates, deltaX);
       projectedStates = new Float64Array(updatedStates);
     } catch (error) {
@@ -482,7 +495,7 @@ export function validateInitialConditions(
     ]);
   }
 
-  // Note: Constraint count and state count no longer need to match.
-  // The adjoint method now supports non-square constraint Jacobians.
+  // Constrained GN/LM allow rectangular Jacobians. adjointGradientDescent
+  // enforces a square implicit-state system at its own entry point.
 }
 

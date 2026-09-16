@@ -1,35 +1,9 @@
 /**
- * This file implements the adjoint method for constrained optimization problems.
- * 
- * The adjoint method efficiently computes gradients for constrained optimization
- * by solving for an adjoint variable λ instead of explicitly inverting matrices.
- * 
- * Mathematical background:
- * - For constraint c(p, x) = 0, the implicit function theorem gives:
- *   df/dp = ∂f/∂p - ∂f/∂x (∂c/∂x)^-1 ∂c/∂p
- * - Instead of computing (∂c/∂x)^-1 ∂c/∂p explicitly, we solve:
- *   (∂c/∂x)^T λ = (∂f/∂x)^T
- *   Then: df/dp = ∂f/∂p - λ^T ∂c/∂p
- * - This requires solving only one linear system per iteration instead of
- *   paramCount systems, making it much more efficient.
- * 
- * For residual functions r(p, x) where f = 1/2 r^T r:
- * - Solve: (∂c/∂x)^T λ = r^T ∂r/∂x
- * - Then: df/dp = r^T ∂r/∂p - λ^T ∂c/∂p
- * 
- * References:
- * - Nocedal & Wright, "Numerical Optimization" (2nd ed.), Chapter 12 (constrained optimization)
- * - Adjoint method is widely used in optimal control and shape optimization
- * 
- * Role in system:
- * - Equality-constrained gradient descent via the adjoint method
- * - Supports scalar cost or residual objectives (residual → f = 1/2 ||r||²)
- * - Uses finite differences or analytical derivatives; linear solves live in constrainedUtils
- *
- * For first-time readers:
- * - Start with adjointGradientDescent
- * - Objective kind is resolved once at entry, then threaded through helpers
- * - States are updated with a first-order constraint correction after each parameter step
+ * Equality-constrained gradient descent via the adjoint method.
+ * Solves (∂c/∂x)^T λ = (∂f/∂x)^T and uses df/dp = ∂f/∂p - λ^T ∂c/∂p
+ * so the search is only over p. States stay on c(p,x)=0 by tangent
+ * prediction plus Newton projection.
+ * Entry point: `adjointGradientDescent`.
  */
 
 import { Matrix } from 'ml-matrix';
@@ -54,6 +28,7 @@ import { checkGradientConvergence, checkStepSizeConvergence } from './convergenc
 import { Logger } from './logger.js';
 import { float64ArrayToMatrix } from '../utils/matrix.js';
 import {
+  projectStatesToConstraints,
   solveAdjointEquation,
   updateStates,
   validateInitialConditions
@@ -74,6 +49,9 @@ const NEGATIVE_GRADIENT_DIRECTION = -1.0;
 const RESIDUAL_COST_COEFFICIENT = 0.5; // Coefficient for residual cost: f = 1/2 r^T r
 const MAX_DIMENSION_FOR_DETAILED_LOGGING = 3; // Maximum dimension for detailed parameter/state logging
 const FLOATING_POINT_EQUALITY_TOLERANCE = 1e-15; // Tolerance for floating point equality comparisons
+const INITIAL_PROJECTION_ITERATIONS = 8; // Cold start needs more Newton steps than a tangent predictor
+const TRIAL_PROJECTION_ITERATIONS = 3; // Predictor–corrector along the current linearization
+const UNPROJECTABLE_TRIAL_COST = Number.POSITIVE_INFINITY;
 
 /**
  * Entry defaults resolved once. Internals must not re-default these fields.
@@ -122,6 +100,116 @@ function computeAdjointGradient(
 ): Float64Array {
   const lambdaTdcdp = float64ArrayToMatrix(lambda).transpose().mmul(dcdp);
   return subtractVectors(dfdp, rowVectorToFloat64Array(lambdaTdcdp));
+}
+
+function assertSquareImplicitStateSystem(
+  constraintCount: number,
+  stateCount: number,
+  parameterCount: number
+): void {
+  if (constraintCount !== stateCount) {
+    throw new Error(
+      `adjointGradientDescent requires a square implicit-state system: ` +
+        `constraintCount must equal stateCount so that x(p) is locally unique. ` +
+        `Got constraintCount=${constraintCount}, stateCount=${stateCount}, parameterCount=${parameterCount}.`
+    );
+  }
+}
+
+function assertSquareConstraintJacobians(
+  dcdx: Matrix,
+  dcdp: Matrix,
+  parameters: Float64Array,
+  states: Float64Array
+): void {
+  if (dcdx.rows !== states.length || dcdx.columns !== states.length) {
+    throw new Error(
+      `adjointGradientDescent requires a square constraint Jacobian ∂c/∂x ` +
+        `(constraintCount === stateCount). ` +
+        `Got ∂c/∂x as ${dcdx.rows} × ${dcdx.columns} with stateCount=${states.length}.`
+    );
+  }
+  if (dcdp.rows !== states.length || dcdp.columns !== parameters.length) {
+    throw new Error(
+      `adjointGradientDescent expected ∂c/∂p to be ${states.length} × ${parameters.length}. ` +
+        `Got ${dcdp.rows} × ${dcdp.columns}.`
+    );
+  }
+}
+
+function resolveConstraintJacobians(
+  parameters: Float64Array,
+  states: Float64Array,
+  constraintFunction: ConstraintFn,
+  options: AdjointRuntimeSettings
+): { dcdp: Matrix; dcdx: Matrix } {
+  const dcdp = options.dcdp
+    ? options.dcdp(parameters, states)
+    : finiteDiffConstraintPartialP(parameters, states, constraintFunction, { stepSize: options.stepSizeP });
+  const dcdx = options.dcdx
+    ? options.dcdx(parameters, states)
+    : finiteDiffConstraintPartialX(parameters, states, constraintFunction, { stepSize: options.stepSizeX });
+  assertSquareConstraintJacobians(dcdx, dcdp, parameters, states);
+  return { dcdp, dcdx };
+}
+
+function projectAndVerify(
+  parameters: Float64Array,
+  states: Float64Array,
+  constraintFunction: ConstraintFn,
+  options: AdjointRuntimeSettings,
+  logger: Logger,
+  maxIterations: number
+): { projectedStates: Float64Array | undefined; constraintNorm: number } {
+  const projectedStates = projectStatesToConstraints(
+    parameters,
+    states,
+    constraintFunction,
+    options.stepSizeX,
+    options.constraintTolerance,
+    logger,
+    ADJOINT_ALGORITHM_NAME,
+    maxIterations,
+    {
+      dcdx: options.dcdx,
+      regularization: options.regularization
+    }
+  );
+  const constraintNorm = vectorNorm(constraintFunction(parameters, projectedStates));
+  if (constraintNorm > options.constraintTolerance) {
+    return { projectedStates: undefined, constraintNorm };
+  }
+  return { projectedStates, constraintNorm };
+}
+
+function restoreFeasibleStates(
+  currentParameters: Float64Array,
+  currentStates: Float64Array,
+  nextParameters: Float64Array,
+  dcdx: Matrix,
+  dcdp: Matrix,
+  constraintFunction: ConstraintFn,
+  options: AdjointRuntimeSettings,
+  logger: Logger
+): Float64Array | undefined {
+  const deltaP = subtractVectors(nextParameters, currentParameters);
+  const predictedStates = updateStates(
+    currentStates,
+    dcdx,
+    dcdp,
+    deltaP,
+    logger,
+    ADJOINT_ALGORITHM_NAME,
+    options.regularization
+  );
+  return projectAndVerify(
+    nextParameters,
+    predictedStates,
+    constraintFunction,
+    options,
+    logger,
+    TRIAL_PROJECTION_ITERATIONS
+  ).projectedStates;
 }
 
 
@@ -260,29 +348,21 @@ function computePartialDerivatives(
   dcdp: Matrix;
   dcdx: Matrix;
 } {
-  const stepSizeP = options.stepSizeP;
-  const stepSizeX = options.stepSizeX;
-  
   const dfdp = computeDfdp(parameters, states, costFunction, options, objectiveKind);
   const dfdx = computeDfdx(parameters, states, costFunction, options, objectiveKind);
-
-  // Compute ∂c/∂p: needed for adjoint gradient computation (df/dp = ∂f/∂p - λ^T ∂c/∂p)
-  const dcdp = options.dcdp
-    ? options.dcdp(parameters, states)
-    : finiteDiffConstraintPartialP(parameters, states, constraintFunction, { stepSize: stepSizeP });
-
-  // Compute ∂c/∂x: needed to solve adjoint equation (∂c/∂x)^T λ = (∂f/∂x)^T
-  const dcdx = options.dcdx
-    ? options.dcdx(parameters, states)
-    : finiteDiffConstraintPartialX(parameters, states, constraintFunction, { stepSize: stepSizeX });
+  const { dcdp, dcdx } = resolveConstraintJacobians(
+    parameters,
+    states,
+    constraintFunction,
+    options
+  );
 
   return { dfdp, dfdx, dcdp, dcdx };
 }
 
 
 /**
- * Creates a cost function wrapper for line search that updates states using linear approximation.
- * Partial derivatives are pre-computed and cached to avoid recomputation during line search.
+ * Line-search cost on the restored manifold, not the tangent predictor alone.
  */
 function createCostFunctionWrapper(
   currentParameters: Float64Array,
@@ -305,17 +385,20 @@ function createCostFunctionWrapper(
   const { dcdx, dcdp } = partials;
 
   return (params: Float64Array): number => {
-    const deltaP = subtractVectors(params, currentParameters);
-    const newStates = updateStates(
+    const trialStates = restoreFeasibleStates(
+      currentParameters,
       currentStates,
+      params,
       dcdx,
       dcdp,
-      deltaP,
-      logger,
-      ADJOINT_ALGORITHM_NAME,
-      options.regularization
+      constraintFunction,
+      options,
+      logger
     );
-    return computeCost(costFunction, params, newStates, objectiveKind);
+    if (trialStates === undefined) {
+      return UNPROJECTABLE_TRIAL_COST;
+    }
+    return computeCost(costFunction, params, trialStates, objectiveKind);
   };
 }
 
@@ -372,19 +455,20 @@ function createGradientFunctionWrapper(
       return new Float64Array(currentGradient);
     }
     
-    // For different trial parameters, update states to maintain constraints and compute gradient.
-    // We use linear approximation for efficiency: solving full nonlinear constraints for each trial would be too slow.
-    const deltaP = subtractVectors(trialParams, currentParameters);
-    const trialStates = updateStates(
+    const trialStates = restoreFeasibleStates(
+      currentParameters,
       currentStates,
+      trialParams,
       currentDcdx,
       currentDcdp,
-      deltaP,
-      logger,
-      ADJOINT_ALGORITHM_NAME,
-      options.regularization
+      constraintFunction,
+      options,
+      logger
     );
-    
+    if (trialStates === undefined) {
+      return new Float64Array(currentGradient);
+    }
+
     // Compute gradient at trial point to evaluate search direction quality in line search.
     const trialPartials = computePartialDerivatives(
       trialParams,
@@ -577,8 +661,34 @@ export function adjointGradientDescent(
     ADJOINT_ALGORITHM_NAME
   );
 
+  const initialConstraint = constraintFunction(initialParameters, initialStates);
+  assertSquareImplicitStateSystem(
+    initialConstraint.length,
+    initialStates.length,
+    initialParameters.length
+  );
+  // WHY: Reject a malformed analytical Jacobian before Newton projection can explode.
+  resolveConstraintJacobians(initialParameters, initialStates, constraintFunction, settings);
+
+  const restoreAttempt = projectAndVerify(
+    initialParameters,
+    initialStates,
+    constraintFunction,
+    settings,
+    logger,
+    INITIAL_PROJECTION_ITERATIONS
+  );
+  if (restoreAttempt.projectedStates === undefined) {
+    throw new Error(
+      `Failed to restore feasible states for adjointGradientDescent: ` +
+        `||c(p,x)||=${restoreAttempt.constraintNorm}, tolerance=${settings.constraintTolerance}, ` +
+        `parameterCount=${initialParameters.length}, stateCount=${initialStates.length}. ` +
+        `Provide a projectable implicit-state guess with a locally unique x(p).`
+    );
+  }
+
   let currentParameters = new Float64Array(initialParameters);
-  let currentStates = new Float64Array(initialStates);
+  let currentStates = new Float64Array(restoreAttempt.projectedStates);
   const objectiveKind = resolveObjectiveKind(costFunction, currentParameters, currentStates);
   let currentCost = computeCost(costFunction, currentParameters, currentStates, objectiveKind);
   let usedLineSearch = false;
@@ -673,15 +783,33 @@ export function adjointGradientDescent(
       NEGATIVE_GRADIENT_DIRECTION * stepSizeResult.stepSize
     );
     const newParameters = addVectors(currentParameters, parameterStep);
-    const newStates = updateStates(
+    const newStates = restoreFeasibleStates(
+      currentParameters,
       currentStates,
+      newParameters,
       partials.dcdx,
       partials.dcdp,
-      parameterStep,
-      logger,
-      ADJOINT_ALGORITHM_NAME,
-      settings.regularization
+      constraintFunction,
+      settings,
+      logger
     );
+    if (newStates === undefined) {
+      logger.warn('adjointGradientDescent', iteration, 'Failed to restore feasible states after the trial step', [
+        { key: 'Cost:', value: currentCost },
+        { key: 'Gradient norm:', value: gradientNorm },
+        { key: 'Step size:', value: stepSizeResult.stepSize }
+      ]);
+      return buildConstrainedResult(
+        currentParameters,
+        currentStates,
+        iteration,
+        false,
+        currentCost,
+        gradientNorm,
+        constraintNorm,
+        usedLineSearch
+      );
+    }
     const newCost = computeCost(costFunction, newParameters, newStates, objectiveKind);
     const stepNorm = vectorNorm(parameterStep);
 
