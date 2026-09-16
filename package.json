@@ -41,6 +41,7 @@
     "example:layout-toy": "tsx examples/layout-toy-1d.ts",
     "example:adjoint": "tsx examples/adjoint-example.ts",
     "example:adjoint-advanced": "tsx examples/adjoint-advanced-example.ts",
+    "example:adjoint-reduced": "tsx examples/adjoint-reduced-space.ts",
     "example:constrained": "tsx examples/constrained-compare.ts",
     "benchmark:constrained": "tsx scripts/constrained-benchmark.ts",
     "benchmark:curve-bending": "tsx scripts/curve-bending-benchmark.ts",
