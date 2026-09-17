@@ -27,9 +27,9 @@ The published package ships `dist/`, this README, and the license. Runnable tuto
 | Minimize a scalar cost | Gradient Descent, BFGS, L-BFGS | `cost(p) -> number`, `grad(p) -> Float64Array` |
 | Black-box scalar cost | CMA-ES | `cost(p) -> number` |
 | Nonlinear least squares | Gauss–Newton, Levenberg–Marquardt | `residual(p) -> Float64Array` |
-| Equality constraints \(c(p,x)=0\) | Adjoint, Constrained GN/LM | cost/residual + `constraint(p,x)` |
+| Equality constraints \(c(p,x)=0\) | Adjoint GD, Adjoint BFGS, Constrained GN/LM | cost/residual + `constraint(p,x)` |
 
-Adjoint is a reduced-space solver: the constraint defines \(x(p)\), so the optimizer searches only \(p\). That is the point when there are few design variables and many implicit states. Constrained GN/LM use the same split; a penalty method on the concatenated \((p,x)\) does not.
+Adjoint is a reduced-space solver: the constraint defines \(x(p)\), so the optimizer searches only \(p\). That is the point when there are few design variables and many implicit states. Adjoint BFGS is standard dense BFGS on that reduced cost; the gradient is the adjoint. Constrained GN/LM use the same split and are usually better for small-residual least squares. A penalty method on the concatenated \((p,x)\) does not.
 
 **Why `Float64Array`?** Predictable numeric performance. Convert with `new Float64Array([1, 2, 3])`.
 
@@ -42,7 +42,7 @@ Common fields: `finalParameters`, `converged`, `iterations`, `finalCost`.
 - Gradient / BFGS / L-BFGS: `finalGradientNorm`
 - CMA-ES: `functionEvaluations`, `finalStepSize`, `stopReason`, optional `profiling`
 - GN / LM: `finalResidualNorm` (LM also has `finalLambda`)
-- Constrained / Adjoint: `finalStates`, `finalConstraintNorm`
+- Constrained / Adjoint GD / Adjoint BFGS: `finalStates`, `finalConstraintNorm`
 
 `result.parameters` is a deprecated alias of `result.finalParameters`.
 
@@ -102,6 +102,24 @@ const lbfgsResult = lbfgs(new Float64Array([10, 10]), cost, grad, {
 });
 ```
 
+## Adjoint BFGS
+
+Same inputs as adjoint gradient descent: design parameters \(p\), implicit states \(x\), and \(c(p,x)=0\). The search stays in \(p\); Strong Wolfe is on by default.
+
+```js
+import { adjointBfgs } from 'numopt-js';
+
+const cost = (p, x) => p[0] * p[0] + x[0] * x[0];
+const constraint = (p, x) => new Float64Array([p[0] + x[0] - 1]);
+
+const result = adjointBfgs(new Float64Array([2]), new Float64Array([-1]), cost, constraint, {
+  maxIterations: 100,
+  tolerance: 1e-6
+});
+
+console.log(result.finalParameters, result.finalStates, result.finalConstraintNorm);
+```
+
 ## CMA-ES
 
 ```js
@@ -143,22 +161,22 @@ Recommended order:
 2. `npm run example:lm` — residual least squares
 3. `npm run example:gauss-newton` — undamped NLS
 4. `npm run example:cma-es` — derivative-free
-5. `npm run example:constrained` — Constrained LM / GN / Adjoint on one problem
-6. `npm run example:adjoint` — basic adjoint
-7. `npm run example:adjoint-advanced` — harder adjoint cases
+5. `npm run example:constrained` — Constrained LM / GN / Adjoint GD / Adjoint BFGS on one problem
+6. `npm run example:adjoint` — basic adjoint (GD and BFGS)
+7. `npm run example:adjoint-advanced` — harder adjoint cases (GD and BFGS)
 8. `npm run example:adjoint-reduced` — few parameters vs many implicit states
 9. `npm run example:layout-toy` — small layout toy
 
 Manual benchmarks (not CI):
 
-- `npm run benchmark:paper` — paper-grade comparison of every public solver class. Warmup 1 run is discarded; deterministic solvers repeat 7 times (median and IQR); CMA-ES uses 5 seeds (warmup seed 1, timed seeds 1–5). Success is parameter error (and constraint norm when constrained), never `result.converged`. GD / BFGS / L-BFGS / Adjoint use analytical derivatives; GN / LM / Constrained / Penalty use numeric Jacobians. Rosenbrock CMA-ES uses IPOP; Rosenbrock GD may hit a 10000-iteration cap and still succeed on parameter error. Primary metrics are evaluation counts and success; wall-clock is secondary and machine-dependent. Writes `benchmark-results/paper-benchmark.md` and `.json` (gitignored). Hypothesis failures set exit code 1; do not commit the generated numbers.
+- `npm run benchmark:paper` — paper-grade comparison of every public solver class. Warmup 1 run is discarded; deterministic solvers repeat 7 times (median and IQR); CMA-ES uses 5 seeds (warmup seed 1, timed seeds 1–5). Success is parameter error (and constraint norm when constrained), never `result.converged`. GD / BFGS / L-BFGS / Adjoint GD / Adjoint BFGS use analytical derivatives; GN / LM / Constrained / Penalty use numeric Jacobians. Rosenbrock CMA-ES uses IPOP; Rosenbrock GD may hit a 10000-iteration cap and still succeed on parameter error. Primary metrics are evaluation counts and success; wall-clock is secondary and machine-dependent. Writes `benchmark-results/paper-benchmark.md` and `.json` (gitignored). Hypothesis failures set exit code 1; do not commit the generated numbers.
 - `npm run benchmark:constrained`, `npm run benchmark:curve-bending` — informal single-run smokes.
 
 Full signatures and options: [TypeDoc API reference](https://takuto-na.github.io/numopt-js/).
 
 ## Convergence Options (quick map)
 
-- **GD / BFGS / L-BFGS / GN / Constrained GN / Adjoint**: `tolerance`
+- **GD / BFGS / L-BFGS / GN / Constrained GN / Adjoint GD / Adjoint BFGS**: `tolerance`
 - **LM / Constrained LM**: `tolGradient`, `tolStep`, `tolResidual`
 - **CMA-ES**: `functionTolerance`, `parameterTolerance`, `targetCost`, `maxFunctionEvaluations`
 - **Adjoint (ill-conditioned ∂c/∂x)**: `regularization`

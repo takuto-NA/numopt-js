@@ -90,5 +90,69 @@ describe('Strong Wolfe Line Search', () => {
     ]);
     expect(quadratic2DCost(newParameters)).toBeLessThan(quadratic2DCost(currentParameters));
   });
+
+  it('does not evaluate the gradient where the reduced cost is undefined', () => {
+    const domainLowerBound = 0.0;
+    const currentParameters = new Float64Array([0.5]);
+    const searchDirection = new Float64Array([-1.0]);
+    const gradientEvaluationLocations: number[] = [];
+
+    const domainLimitedCost: CostFn = (parameters) => {
+      if (parameters[0] < domainLowerBound) {
+        return Number.POSITIVE_INFINITY;
+      }
+      return parameters[0] * parameters[0];
+    };
+
+    const domainLimitedGradient: GradientFn = (parameters) => {
+      gradientEvaluationLocations.push(parameters[0]);
+      if (parameters[0] < domainLowerBound) {
+        throw new Error(`Gradient evaluated outside the reduced-space domain at ${parameters[0]}`);
+      }
+      return new Float64Array([2 * parameters[0]]);
+    };
+
+    const stepSize = strongWolfeLineSearch(
+      domainLimitedCost,
+      domainLimitedGradient,
+      currentParameters,
+      searchDirection
+    );
+
+    expect(stepSize).toBeGreaterThan(0);
+    expect(currentParameters[0] + stepSize * searchDirection[0]).toBeGreaterThanOrEqual(domainLowerBound);
+    expect(gradientEvaluationLocations.every((location) => location >= domainLowerBound)).toBe(true);
+  });
+
+  it('returns zero when every positive trial step is undefined', () => {
+    const currentParameters = new Float64Array([1.0]);
+    const searchDirection = new Float64Array([-1.0]);
+    let gradientCallsAwayFromStart = 0;
+
+    const onlyDefinedAtStart: CostFn = (parameters) => {
+      if (Math.abs(parameters[0] - currentParameters[0]) > 1e-15) {
+        return Number.POSITIVE_INFINITY;
+      }
+      return parameters[0] * parameters[0];
+    };
+
+    const onlyDefinedAtStartGradient: GradientFn = (parameters) => {
+      if (Math.abs(parameters[0] - currentParameters[0]) > 1e-15) {
+        gradientCallsAwayFromStart += 1;
+        throw new Error('Gradient evaluated where the reduced cost is undefined');
+      }
+      return new Float64Array([2 * parameters[0]]);
+    };
+
+    const stepSize = strongWolfeLineSearch(
+      onlyDefinedAtStart,
+      onlyDefinedAtStartGradient,
+      currentParameters,
+      searchDirection
+    );
+
+    expect(stepSize).toBe(0.0);
+    expect(gradientCallsAwayFromStart).toBe(0);
+  });
 });
 

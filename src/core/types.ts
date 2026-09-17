@@ -54,7 +54,7 @@ export type GradientFn = (parameters: Float64Array) => Float64Array;
  * The constraint c(p, x) = 0 must be satisfied.
  * 
  * Note: The constraint vector length and state vector length can differ.
- * Constrained GN/LM accept rectangular ∂c/∂x. adjointGradientDescent requires
+ * Constrained GN/LM accept rectangular ∂c/∂x. Adjoint solvers require
  * a square implicit-state Jacobian so x(p) is locally unique.
  */
 export type ConstraintFn = (parameters: Float64Array, states: Float64Array) => Float64Array;
@@ -413,69 +413,65 @@ export interface GradientDescentResult extends OptimizationResult {
 }
 
 /**
- * Options for adjoint gradient descent algorithm.
+ * Analytical or finite-difference knobs shared by reduced-space adjoint solvers.
+ * ∂c/∂x must be square so that x(p) is locally unique.
  */
-export interface AdjointGradientDescentOptions extends GradientDescentOptions {
+export interface AdjointDerivativeOptions {
   /**
-   * Analytical partial derivative of cost function with respect to parameters.
-   * If provided, this will be used instead of numerical differentiation.
-   * Function signature: (p: Float64Array, x: Float64Array) => Float64Array
+   * Analytical ∂f/∂p. Used instead of finite differences when provided.
    */
   dfdp?: (parameters: Float64Array, states: Float64Array) => Float64Array;
 
   /**
-   * Analytical partial derivative of cost function with respect to states.
-   * If provided, this will be used instead of numerical differentiation.
-   * Function signature: (p: Float64Array, x: Float64Array) => Float64Array
+   * Analytical ∂f/∂x. Used instead of finite differences when provided.
    */
   dfdx?: (parameters: Float64Array, states: Float64Array) => Float64Array;
 
   /**
-   * Analytical partial derivative of constraint function with respect to parameters.
-   * If provided, this will be used instead of numerical differentiation.
-   * Returns a Matrix of size (constraintCount × parameterCount).
+   * Analytical ∂c/∂p. Size constraintCount × parameterCount.
    */
   dcdp?: (parameters: Float64Array, states: Float64Array) => Matrix;
 
   /**
-   * Analytical partial derivative of constraint function with respect to states.
-   * If provided, this will be used instead of numerical differentiation.
-   * Returns a Matrix of size (constraintCount × stateCount).
-   *
-   * Must be square: constraintCount === stateCount. This is the implicit-state
-   * contract for adjointGradientDescent (x is locally determined by p).
-   *
-   * Ill-conditioned Jacobians can be numerically sensitive. Consider scaling
-   * states and constraints, or raising `regularization`, if you see instability.
+   * Analytical ∂c/∂x. Must be square (constraintCount === stateCount).
+   * Ill-conditioned Jacobians can be sensitive; raise `regularization` if needed.
    */
   dcdx?: (parameters: Float64Array, states: Float64Array) => Matrix;
 
   /**
-   * Step size for numerical differentiation with respect to parameters.
+   * Finite-difference step for derivatives with respect to parameters.
    * Default: 1e-6
    */
   stepSizeP?: number;
 
   /**
-   * Step size for numerical differentiation with respect to states.
+   * Finite-difference step for derivatives with respect to states.
    * Default: 1e-6
    */
   stepSizeX?: number;
 
   /**
-   * Tolerance for checking constraint satisfaction c(p, x) = 0.
-   * If ||c(p, x)|| exceeds this value, a warning will be issued.
+   * Tolerance for ||c(p, x)|| = 0.
    * Default: 1e-6
    */
   constraintTolerance?: number;
 
   /**
-   * Base Tikhonov regularization for adjoint / least-squares solves involving ∂c/∂x.
-   * Increase for ill-conditioned constraint Jacobians (e.g. densely sampled curve constraints).
-   * Default: 0 (an automatic floor may still apply when the Jacobian is numerically singular)
+   * Base Tikhonov regularization for solves involving ∂c/∂x.
+   * Default: 0 (an automatic floor may still apply when the Jacobian is singular)
    */
   regularization?: number;
 }
+
+/**
+ * Options for adjoint gradient descent.
+ */
+export interface AdjointGradientDescentOptions extends GradientDescentOptions, AdjointDerivativeOptions {}
+
+/**
+ * Options for reduced-space BFGS. Line search matches unconstrained BFGS (Strong Wolfe).
+ */
+export interface AdjointBfgsOptions extends BfgsOptions, AdjointDerivativeOptions {}
 
 /**
  * Result returned by adjoint gradient descent algorithm.
@@ -491,6 +487,11 @@ export interface AdjointGradientDescentResult extends GradientDescentResult {
    */
   finalConstraintNorm?: number;
 }
+
+/**
+ * Result returned by reduced-space BFGS. Same fields as adjoint gradient descent.
+ */
+export type AdjointBfgsResult = AdjointGradientDescentResult;
 
 /**
  * Options for constrained Gauss-Newton method.

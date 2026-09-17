@@ -18,12 +18,16 @@ describe('BFGS', () => {
     const initialParameters = new Float64Array([5.0]);
     const result = bfgs(initialParameters, quadraticCost, quadraticGradient, {
       maxIterations: 200,
-      tolerance: 1e-10
+      tolerance: 1e-10,
+      lineSearchOptions: { initialStepSize: 1.0 }
     });
 
     expect(result.converged).toBe(true);
     expect(Math.abs(result.finalParameters[0])).toBeLessThan(1e-6);
     expect(result.finalCost).toBeLessThan(1e-12);
+    // WHY: A 1-D quadratic must finish after the first BFGS update. Aliased
+    // I-ρsyᵀ / I-ρysᵀ factors leave H ≈ I and take dozens of steepest-descent steps.
+    expect(result.iterations).toBeLessThan(5);
   });
 
   it('should converge immediately when starting at the optimum (zero gradient)', () => {
@@ -68,6 +72,33 @@ describe('BFGS', () => {
     expect(result.converged).toBe(true);
     expect(Math.abs(result.finalParameters[0] - 1.0)).toBeLessThan(1e-3);
     expect(Math.abs(result.finalParameters[1] - 1.0)).toBeLessThan(1e-3);
+  });
+
+  it('does not take a step when every trial cost is undefined', () => {
+    const start = 1.0;
+    const onlyDefinedAtStart: CostFn = (parameters) => {
+      if (Math.abs(parameters[0] - start) > 1e-15) {
+        return Number.POSITIVE_INFINITY;
+      }
+      return parameters[0] * parameters[0];
+    };
+    const onlyDefinedAtStartGradient: GradientFn = (parameters) => {
+      if (Math.abs(parameters[0] - start) > 1e-15) {
+        throw new Error('Gradient evaluated where the cost is undefined');
+      }
+      return new Float64Array([2 * parameters[0]]);
+    };
+
+    const result = bfgs(
+      new Float64Array([start]),
+      onlyDefinedAtStart,
+      onlyDefinedAtStartGradient,
+      { maxIterations: 10, tolerance: 1e-12 }
+    );
+
+    expect(result.converged).toBe(false);
+    expect(result.finalParameters[0]).toBe(start);
+    expect(result.iterations).toBeLessThan(10);
   });
 });
 

@@ -32,6 +32,7 @@ export const METHOD_CMA_ES = 'CMA-ES';
 export const METHOD_GAUSS_NEWTON = 'Gauss-Newton';
 export const METHOD_LEVENBERG_MARQUARDT = 'Levenberg-Marquardt';
 export const METHOD_ADJOINT_GD = 'Adjoint GD';
+export const METHOD_ADJOINT_BFGS = 'Adjoint BFGS';
 export const METHOD_CONSTRAINED_GN = 'Constrained GN';
 export const METHOD_CONSTRAINED_LM = 'Constrained LM';
 export const METHOD_PENALTY_GN = 'Penalty GN';

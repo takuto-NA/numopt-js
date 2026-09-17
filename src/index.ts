@@ -11,6 +11,7 @@ export { bfgs } from './core/bfgs.js';
 export { lbfgs } from './core/lbfgs.js';
 export { cmaEs } from './core/cmaEs.js';
 export { adjointGradientDescent } from './core/adjointGradientDescent.js';
+export { adjointBfgs } from './core/adjointBfgs.js';
 export { constrainedGaussNewton } from './core/constrainedGaussNewton.js';
 export { constrainedLevenbergMarquardt } from './core/constrainedLevenbergMarquardt.js';
 
@@ -46,7 +47,9 @@ export type {
   BfgsOptions,
   LbfgsOptions,
   CmaEsOptions,
+  AdjointDerivativeOptions,
   AdjointGradientDescentOptions,
+  AdjointBfgsOptions,
   ConstrainedGaussNewtonOptions,
   ConstrainedLevenbergMarquardtOptions,
   OptimizationResult,
@@ -54,6 +57,7 @@ export type {
   GradientDescentResult,
   CmaEsResult,
   AdjointGradientDescentResult,
+  AdjointBfgsResult,
   ConstrainedGaussNewtonResult,
   ConstrainedLevenbergMarquardtResult
 } from './core/types.js';
@@ -79,6 +83,7 @@ export {
   formatConstrainedGaussNewtonResult,
   formatConstrainedLevenbergMarquardtResult,
   formatAdjointGradientDescentResult,
+  formatAdjointBfgsResult,
   formatResult,
   printOptimizationResult,
   printGradientDescentResult,
@@ -87,6 +92,7 @@ export {
   printConstrainedGaussNewtonResult,
   printConstrainedLevenbergMarquardtResult,
   printAdjointGradientDescentResult,
+  printAdjointBfgsResult,
   printResult,
   type ResultFormatterOptions
 } from './utils/resultFormatter.js';

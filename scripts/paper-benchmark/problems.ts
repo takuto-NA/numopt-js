@@ -5,6 +5,7 @@
 
 import { Matrix } from 'ml-matrix';
 import {
+  adjointBfgs,
   adjointGradientDescent,
   bfgs,
   cmaEs,
@@ -43,6 +44,7 @@ import {
   DEFAULT_MAX_ITERATIONS,
   DETERMINISTIC_REPEAT_COUNT,
   EXPONENTIAL_SUCCESS_PARAMETER_TOLERANCE,
+  METHOD_ADJOINT_BFGS,
   METHOD_ADJOINT_GD,
   METHOD_BFGS,
   METHOD_CMA_ES,
@@ -371,10 +373,13 @@ function createLeastSquaresCase(
   };
 }
 
-function createCircleAdjointCase(): PaperCase {
+function createCircleAdjointCase(
+  methodName: string,
+  solve: typeof adjointGradientDescent | typeof adjointBfgs
+): PaperCase {
   return {
     problemName: PROBLEM_CIRCLE,
-    methodName: METHOD_ADJOINT_GD,
+    methodName,
     parameterTolerance: SUCCESS_PARAMETER_TOLERANCE,
     constraintTolerance: SUCCESS_CONSTRAINT_TOLERANCE,
     repeatCount: DETERMINISTIC_REPEAT_COUNT,
@@ -382,7 +387,7 @@ function createCircleAdjointCase(): PaperCase {
       timePaperTrial((counters) => {
         const initialParameters = new Float64Array([CIRCLE_INITIAL_PARAMETER]);
         const initialStates = circleInitialStates();
-        const result = adjointGradientDescent(
+        const result = solve(
           initialParameters,
           initialStates,
           wrapConstrainedResidualFunction(circleResidual, counters),
@@ -434,16 +439,19 @@ function createCircleConstrainedCase(
   };
 }
 
-function createChainAdjointCase(): PaperCase {
+function createChainAdjointCase(
+  methodName: string,
+  solve: typeof adjointGradientDescent | typeof adjointBfgs
+): PaperCase {
   return {
     problemName: PROBLEM_CHAIN,
-    methodName: METHOD_ADJOINT_GD,
+    methodName,
     parameterTolerance: SUCCESS_PARAMETER_TOLERANCE,
     constraintTolerance: SUCCESS_CONSTRAINT_TOLERANCE,
     repeatCount: DETERMINISTIC_REPEAT_COUNT,
     runTrial: () =>
       timePaperTrial((counters) => {
-        const result = adjointGradientDescent(
+        const result = solve(
           new Float64Array([CHAIN_INITIAL_PARAMETER]),
           chainInitialStates(),
           wrapConstrainedCostFunction(chainCost, counters),
@@ -636,10 +644,12 @@ export function createAllCases(): PaperCase[] {
     ...createSphereCases(),
     ...createRosenbrockCases(),
     ...createLeastSquaresCases(),
-    createCircleAdjointCase(),
+    createCircleAdjointCase(METHOD_ADJOINT_GD, adjointGradientDescent),
+    createCircleAdjointCase(METHOD_ADJOINT_BFGS, adjointBfgs),
     createCircleConstrainedCase(METHOD_CONSTRAINED_GN, constrainedGaussNewton),
     createCircleConstrainedCase(METHOD_CONSTRAINED_LM, constrainedLevenbergMarquardt),
-    createChainAdjointCase(),
+    createChainAdjointCase(METHOD_ADJOINT_GD, adjointGradientDescent),
+    createChainAdjointCase(METHOD_ADJOINT_BFGS, adjointBfgs),
     createChainPenaltyCase(METHOD_PENALTY_GN, gaussNewton),
     createChainPenaltyCase(METHOD_PENALTY_LM, levenbergMarquardt)
   ];

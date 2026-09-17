@@ -19,6 +19,7 @@ import {
 import {
   CHAIN_ADJOINT_DECISION_VARIABLE_COUNT,
   CHAIN_PENALTY_DECISION_VARIABLE_COUNT,
+  METHOD_ADJOINT_BFGS,
   METHOD_ADJOINT_GD,
   METHOD_BFGS,
   METHOD_CMA_ES,
@@ -99,11 +100,18 @@ function passingRows(): PaperRow[] {
     paperRow(PROBLEM_EXPONENTIAL_FIT, METHOD_GAUSS_NEWTON),
     paperRow(PROBLEM_EXPONENTIAL_FIT, METHOD_LEVENBERG_MARQUARDT),
     paperRow(PROBLEM_CIRCLE, METHOD_ADJOINT_GD, { iterations: summary(14) }),
+    paperRow(PROBLEM_CIRCLE, METHOD_ADJOINT_BFGS, { iterations: summary(6) }),
     paperRow(PROBLEM_CIRCLE, METHOD_CONSTRAINED_GN, { iterations: summary(4) }),
     paperRow(PROBLEM_CIRCLE, METHOD_CONSTRAINED_LM, { iterations: summary(4) }),
     paperRow(PROBLEM_CHAIN, METHOD_ADJOINT_GD, {
       decisionVariableCount: CHAIN_ADJOINT_DECISION_VARIABLE_COUNT,
-      timeMs: summary(25)
+      timeMs: summary(25),
+      iterations: summary(20)
+    }),
+    paperRow(PROBLEM_CHAIN, METHOD_ADJOINT_BFGS, {
+      decisionVariableCount: CHAIN_ADJOINT_DECISION_VARIABLE_COUNT,
+      timeMs: summary(15),
+      iterations: summary(8)
     }),
     paperRow(PROBLEM_CHAIN, METHOD_PENALTY_GN, {
       decisionVariableCount: CHAIN_PENALTY_DECISION_VARIABLE_COUNT,
@@ -352,6 +360,18 @@ describe('paper benchmark protocol', () => {
         (result) => result.id === 'sphere-quasi-newton-fewer-iterations'
       );
       expect(sphere?.passed).toBe(false);
+    });
+
+    it('fails when Adjoint BFGS does not use fewer Circle iterations than Adjoint GD', () => {
+      const rows = passingRows().map((row) =>
+        row.problemName === PROBLEM_CIRCLE && row.methodName === METHOD_ADJOINT_BFGS
+          ? { ...row, iterations: summary(20) }
+          : row
+      );
+      const hypothesis = evaluateHypotheses(rows).find(
+        (result) => result.id === 'circle-adjoint-bfgs-fewer-iterations-than-gd'
+      );
+      expect(hypothesis?.passed).toBe(false);
     });
 
     it('fails when the chain adjoint does not stay one-dimensional', () => {

@@ -5,6 +5,7 @@
  */
 
 import {
+  adjointBfgs,
   adjointGradientDescent,
   finiteDiffGradient,
   gradientDescent
@@ -83,6 +84,22 @@ const adjointResult = adjointGradientDescent(
 );
 const adjointElapsedMs = performance.now() - adjointStart;
 
+const adjointBfgsStart = performance.now();
+const adjointBfgsResult = adjointBfgs(
+  new Float64Array([initialParameter]),
+  new Float64Array(initialStates),
+  chainCost,
+  chainConstraint,
+  {
+    maxIterations: 200,
+    tolerance: 1e-8,
+    constraintTolerance: 1e-8,
+    useLineSearch: true,
+    logLevel: 'WARN'
+  }
+);
+const adjointBfgsElapsedMs = performance.now() - adjointBfgsStart;
+
 const penaltyStart = performance.now();
 const penaltyResult = gradientDescent(
   initialCombined,
@@ -103,6 +120,9 @@ const penaltyConstraintNorm = vectorNorm(
 const adjointConstraintNorm =
   adjointResult.finalConstraintNorm ??
   vectorNorm(chainConstraint(adjointResult.finalParameters, adjointResult.finalStates));
+const adjointBfgsConstraintNorm =
+  adjointBfgsResult.finalConstraintNorm ??
+  vectorNorm(chainConstraint(adjointBfgsResult.finalParameters, adjointBfgsResult.finalStates));
 
 console.log('Adjoint GD');
 console.log(`  decision vars: ${ADJOINT_DECISION_VARIABLE_COUNT}`);
@@ -112,6 +132,15 @@ console.log(`  ||c||         = ${adjointConstraintNorm.toExponential(3)}`);
 console.log(`  iterations    = ${adjointResult.iterations}`);
 console.log(`  time          = ${adjointElapsedMs.toFixed(2)} ms`);
 console.log(`  converged     = ${adjointResult.converged}\n`);
+
+console.log('Adjoint BFGS');
+console.log(`  decision vars: ${ADJOINT_DECISION_VARIABLE_COUNT}`);
+console.log(`  p             = ${adjointBfgsResult.finalParameters[0].toFixed(8)}`);
+console.log(`  f             = ${adjointBfgsResult.finalCost.toExponential(3)}`);
+console.log(`  ||c||         = ${adjointBfgsConstraintNorm.toExponential(3)}`);
+console.log(`  iterations    = ${adjointBfgsResult.iterations}`);
+console.log(`  time          = ${adjointBfgsElapsedMs.toFixed(2)} ms`);
+console.log(`  converged     = ${adjointBfgsResult.converged}\n`);
 
 console.log('Penalty GD on (p, x)');
 console.log(`  decision vars: ${PENALTY_DECISION_VARIABLE_COUNT}`);
@@ -124,13 +153,29 @@ console.log(`  converged     = ${penaltyResult.converged}\n`);
 
 const adjointHitsTarget = Math.abs(adjointResult.finalParameters[0] - EXPECTED_PARAMETER) < SOLUTION_TOLERANCE;
 const adjointFeasible = adjointConstraintNorm < ADJOINT_FEASIBILITY_TOLERANCE;
+const adjointBfgsHitsTarget =
+  Math.abs(adjointBfgsResult.finalParameters[0] - EXPECTED_PARAMETER) < SOLUTION_TOLERANCE;
+const adjointBfgsFeasible = adjointBfgsConstraintNorm < ADJOINT_FEASIBILITY_TOLERANCE;
 if (!adjointResult.converged || !adjointHitsTarget || !adjointFeasible) {
   console.error('Adjoint reduced-space solve missed the feasible analytical parameter.');
   process.exit(1);
 }
+if (!adjointBfgsResult.converged || !adjointBfgsHitsTarget || !adjointBfgsFeasible) {
+  console.error('Adjoint BFGS reduced-space solve missed the feasible analytical parameter.');
+  process.exit(1);
+}
+if (adjointBfgsResult.iterations >= adjointResult.iterations) {
+  console.error(
+    `Adjoint BFGS should use fewer iterations than Adjoint GD (BFGS ${adjointBfgsResult.iterations} vs GD ${adjointResult.iterations}).`
+  );
+  process.exit(1);
+}
 
 console.log(
-  `Adjoint searched ${ADJOINT_DECISION_VARIABLE_COUNT} parameter instead of ${PENALTY_DECISION_VARIABLE_COUNT} and recovered the same implicit-chain optimum.`
+  `Adjoint GD and Adjoint BFGS searched ${ADJOINT_DECISION_VARIABLE_COUNT} parameter instead of ${PENALTY_DECISION_VARIABLE_COUNT} and recovered the same implicit-chain optimum.`
+);
+console.log(
+  `Iterations: Adjoint BFGS ${adjointBfgsResult.iterations} vs Adjoint GD ${adjointResult.iterations}.`
 );
 if (adjointElapsedMs < penaltyElapsedMs) {
   console.log(

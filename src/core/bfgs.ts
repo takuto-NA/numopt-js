@@ -1,115 +1,27 @@
 /**
- * This file implements the (dense) BFGS algorithm for unconstrained smooth optimization.
- *
- * Role in system:
- * - Quasi-Newton optimizer for scalar cost functions with user-provided gradients
- * - Uses Strong Wolfe line search to encourage curvature conditions needed for stable updates
- * - Dense method: stores a full inverse Hessian approximation (O(n^2) memory)
- *
- * For first-time readers:
- * - Start with `bfgs` (main entry point)
- * - Then read `updateInverseHessianApproximation` (core BFGS update)
- * - Finally, check safeguard helpers (descent direction / curvature checks)
+ * Dense BFGS for unconstrained smooth optimization.
+ * Uses Strong Wolfe line search and a full inverse Hessian approximation.
+ * Entry point: `bfgs`.
  */
 
-import { Matrix } from 'ml-matrix';
 import type { BfgsOptions, CostFn, GradientFn, OptimizationResult } from './types.js';
 import { strongWolfeLineSearch } from './lineSearch.js';
 import { Logger } from './logger.js';
 import { checkGradientConvergence, createConvergenceResult } from './convergence.js';
-import { addVectors, dotProduct, scaleVector, subtractVectors, vectorNorm } from '../utils/matrix.js';
+import { addVectors, scaleVector, subtractVectors, vectorNorm } from '../utils/matrix.js';
+import {
+  computeBfgsSearchDirection,
+  createIdentityInverseHessian,
+  ensureDescentDirectionOrFallback,
+  updateInverseHessianApproximation
+} from './bfgsUpdate.js';
 
 const DEFAULT_MAX_ITERATIONS = 1000;
 const DEFAULT_TOLERANCE = 1e-6;
 const DEFAULT_USE_LINE_SEARCH = true;
 const DEFAULT_FIXED_STEP_SIZE = 1.0;
 const INVALID_STEP_SIZE = 0.0;
-const NEGATIVE_GRADIENT_DIRECTION = -1.0;
-const MINIMUM_CURVATURE_THRESHOLD = 1e-10;
-
-function createIdentityMatrix(dimension: number): Matrix {
-  // NOTE: Provide both dimensions to stay compatible with our (older) local typing history
-  // and with ml-matrix's API where `columns` is optional.
-  return Matrix.eye(dimension, dimension);
-}
-
-function multiplyMatrixVector(matrix: Matrix, vector: Float64Array): Float64Array {
-  const result = new Float64Array(vector.length);
-  for (let rowIndex = 0; rowIndex < matrix.rows; rowIndex++) {
-    let sum = 0.0;
-    for (let columnIndex = 0; columnIndex < matrix.columns; columnIndex++) {
-      sum += matrix.get(rowIndex, columnIndex) * vector[columnIndex];
-    }
-    result[rowIndex] = sum;
-  }
-  return result;
-}
-
-function computeBfgsSearchDirection(inverseHessianApproximation: Matrix, currentGradient: Float64Array): Float64Array {
-  const approximateNewtonDirection = multiplyMatrixVector(inverseHessianApproximation, currentGradient);
-  return scaleVector(approximateNewtonDirection, NEGATIVE_GRADIENT_DIRECTION);
-}
-
-function ensureDescentDirectionOrFallback(
-  currentGradient: Float64Array,
-  proposedSearchDirection: Float64Array,
-  currentInverseHessianApproximation: Matrix,
-  logger: Logger,
-  iteration: number,
-  currentCost: number
-): { searchDirection: Float64Array; inverseHessianApproximation: Matrix } {
-  const directionalDerivative = dotProduct(currentGradient, proposedSearchDirection);
-  const isDescentDirection = directionalDerivative < 0.0;
-  if (isDescentDirection) {
-    return { searchDirection: proposedSearchDirection, inverseHessianApproximation: currentInverseHessianApproximation };
-  }
-
-  // WHY: If numerical issues yield a non-descent direction, reset H to identity and fall back to -g.
-  logger.warn('bfgs', iteration, 'Non-descent direction detected; resetting inverse Hessian and using negative gradient.', [
-    { key: 'Cost:', value: currentCost },
-    { key: 'Directional derivative:', value: directionalDerivative }
-  ]);
-  return {
-    searchDirection: scaleVector(currentGradient, NEGATIVE_GRADIENT_DIRECTION),
-    inverseHessianApproximation: createIdentityMatrix(currentGradient.length)
-  };
-}
-
-function updateInverseHessianApproximation(
-  inverseHessianApproximation: Matrix,
-  stepVector: Float64Array,
-  gradientChangeVector: Float64Array,
-  logger: Logger,
-  iteration: number,
-  currentCost: number
-): Matrix {
-  const stepDotGradientChange = dotProduct(stepVector, gradientChangeVector);
-  const curvatureIsTooWeak = stepDotGradientChange <= MINIMUM_CURVATURE_THRESHOLD;
-  if (curvatureIsTooWeak) {
-    // WHY: If curvature is weak/negative, the BFGS update can break positive definiteness.
-    logger.warn('bfgs', iteration, 'Curvature condition too weak; resetting inverse Hessian approximation.', [
-      { key: 'Cost:', value: currentCost },
-      { key: 'stepDotGradientChange:', value: stepDotGradientChange }
-    ]);
-    return createIdentityMatrix(stepVector.length);
-  }
-
-  const curvatureScaling = 1.0 / stepDotGradientChange;
-  const stepMatrix = Matrix.columnVector(Array.from(stepVector));
-  const gradientChangeMatrix = Matrix.columnVector(Array.from(gradientChangeVector));
-
-  const identityMatrix = createIdentityMatrix(stepVector.length);
-  const stepGradientOuterProduct = stepMatrix.mmul(gradientChangeMatrix.transpose()).mul(curvatureScaling);
-  const gradientStepOuterProduct = gradientChangeMatrix.mmul(stepMatrix.transpose()).mul(curvatureScaling);
-
-  const leftFactor = identityMatrix.sub(stepGradientOuterProduct);
-  const rightFactor = identityMatrix.sub(gradientStepOuterProduct);
-
-  const rankTwoPart = leftFactor.mmul(inverseHessianApproximation).mmul(rightFactor);
-  const rankOnePart = stepMatrix.mmul(stepMatrix.transpose()).mul(curvatureScaling);
-
-  return rankTwoPart.add(rankOnePart);
-}
+const BFGS_ALGORITHM_NAME = 'bfgs';
 
 function computeNextParameters(
   currentParameters: Float64Array,
@@ -156,7 +68,7 @@ export function bfgs(
 
   let currentParameters = new Float64Array(initialParameters);
   let currentCost = costFunction(currentParameters);
-  let inverseHessianApproximation = createIdentityMatrix(currentParameters.length);
+  let inverseHessianApproximation = createIdentityInverseHessian(currentParameters.length);
 
   for (let iteration = 0; iteration < maxIterations; iteration++) {
     const currentGradient = gradientFunction(currentParameters);
@@ -179,7 +91,8 @@ export function bfgs(
       inverseHessianApproximation,
       logger,
       iteration,
-      currentCost
+      currentCost,
+      BFGS_ALGORITHM_NAME
     );
     const searchDirection = descentResult.searchDirection;
     inverseHessianApproximation = descentResult.inverseHessianApproximation;
@@ -206,7 +119,8 @@ export function bfgs(
       gradientChangeVector,
       logger,
       iteration,
-      newCost
+      newCost,
+      BFGS_ALGORITHM_NAME
     );
 
     logger.debug('bfgs', iteration, 'Progress', [
