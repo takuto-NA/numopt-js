@@ -33,7 +33,7 @@ npm view numopt-js version
 
 ## Manual publish (workflow_dispatch)
 
-Use the `publish` workflow’s `workflow_dispatch` input `publish_ref` with a tag such as `v0.4.0`. The ref’s version must match `package.json`.
+Use the `publish` workflow’s `workflow_dispatch` input `publish_ref` with a tag such as `v0.5.0`. The ref’s version must match `package.json`.
 
 ## Local verification before tagging
 
