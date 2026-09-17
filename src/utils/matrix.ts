@@ -1,16 +1,5 @@
 /**
- * This file provides utility functions for converting between Float64Array
- * and ml-matrix Matrix types, and for vector operations.
- * 
- * Role in system:
- * - Bridges the gap between native JavaScript arrays and ml-matrix library
- * - Provides efficient conversion utilities used throughout the codebase
- * - Implements common vector operations needed by optimization algorithms
- * 
- * For first-time readers:
- * - These are helper functions used by core algorithms
- * - Focus on understanding the conversion functions first
- * - Vector norm computation is used for convergence checks
+ * Float64Array ↔ ml-matrix conversions and vector primitives used by solvers.
  */
 
 import { Matrix } from 'ml-matrix';

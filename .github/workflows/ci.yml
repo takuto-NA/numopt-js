@@ -29,6 +29,9 @@ jobs:
     - name: Work around npm optional dependency bug for Rollup natives
       run: npm install --no-save --no-package-lock @rollup/rollup-linux-x64-gnu
 
+    - name: Check file headers
+      run: npm run lint:headers
+
     - name: Typecheck
       run: npm run typecheck
 

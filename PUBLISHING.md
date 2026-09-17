@@ -10,7 +10,7 @@ Release runbook for `numopt-js` (already published on npm).
 
 ## Release steps
 
-1. Bump version in `package.json` (and keep README / docs consistent if needed).
+1. Bump version in `package.json` (and keep README / docs consistent if needed). Update `CHANGELOG.md` before tagging.
 2. Commit the version bump.
 3. Create and push an annotated tag:
 

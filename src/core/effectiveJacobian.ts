@@ -1,26 +1,6 @@
 /**
- * This file implements the effective Jacobian computation for constrained optimization.
- * 
- * The effective Jacobian J_eff = dr/dp = r_p - r_x C_x^+ C_p captures all constraint
- * effects, allowing constrained least squares problems to be solved using the same
- * structure as unconstrained problems.
- * 
- * Mathematical background:
- * - For constrained residual r(p, x) where c(p, x) = 0, the implicit function
- *   theorem gives: dr/dp = r_p - r_x C_x^+ C_p
- * - We compute this efficiently by solving C_x dx = (C_p)_j for each parameter j,
- *   then (J_eff)_j = (r_p)_j - r_x dx
- * - This reuses the C_x decomposition across all columns for efficiency.
- * 
- * Role in system:
- * - Core component for constrained Gauss-Newton and Levenberg-Marquardt methods
- * - Enables efficient constrained least squares optimization
- * - Uses direct linear solve to avoid explicit matrix inversion
- * 
- * For first-time readers:
- * - Start with computeEffectiveJacobian function
- * - Understand how each column is computed efficiently
- * - Note the reuse of C_x decomposition for performance
+ * Effective residual Jacobian J_eff = r_p - r_x C_x^+ C_p for constrained NLS.
+ * Reuses one C_x factorization across parameter columns.
  */
 
 import { Matrix } from 'ml-matrix';

@@ -1,15 +1,6 @@
 /**
- * This file implements line search algorithms for determining step sizes.
- *
- * Role in system:
- * - Provides step size selection for gradient-based optimizers
- * - Backtracking Armijo: simple and robust default (used by gradient descent)
- * - Strong Wolfe: preferred for quasi-Newton methods (BFGS / L-BFGS) to help satisfy
- *   the curvature condition \(s^T y > 0\), improving Hessian approximation stability
- *
- * For first-time readers:
- * - Start with `backtrackingLineSearch` (simpler)
- * - Then read `strongWolfeLineSearch` and `zoom` (more subtle but more powerful)
+ * Armijo backtracking and Strong Wolfe line search.
+ * Strong Wolfe is the default for BFGS / L-BFGS so \(s^T y > 0\) is typical.
  */
 
 import type { CostFn, GradientFn, LineSearchOptions, StrongWolfeLineSearchOptions } from './types.js';

@@ -1,153 +1,33 @@
-/**
- * This file implements the constrained Gauss-Newton method for solving
- * nonlinear least squares problems with constraints.
- * 
- * The constrained Gauss-Newton method uses the effective Jacobian concept:
- * J_eff = r_p - r_x C_x^+ C_p, which captures all constraint effects.
- * This allows the algorithm to use the same structure as unconstrained
- * Gauss-Newton: (J_eff^T J_eff) δ = -J_eff^T r
- * 
- * Role in system:
- * - Constrained version of Gauss-Newton method
- * - Uses effective Jacobian computed via adjoint method
- * - Updates both parameters and states to maintain constraint satisfaction
- * - Foundation for constrained Levenberg-Marquardt method
- * 
- * For first-time readers:
- * - Start with constrainedGaussNewton function
- * - Understand how effective Jacobian replaces regular Jacobian
- * - Check how states are updated using linear approximation
+﻿/**
+ * Constrained Gauss-Newton: (J_eff^T J_eff) δ = -J_eff^T r with state projection.
+ * Entry point: `constrainedGaussNewton`.
  */
 
-import { Matrix, solve, CholeskyDecomposition } from 'ml-matrix';
+import { Matrix } from 'ml-matrix';
 import type {
   ConstrainedResidualFn,
   ConstraintFn,
   ConstrainedGaussNewtonOptions,
   ConstrainedGaussNewtonResult
 } from './types.js';
-import { float64ArrayToMatrix, matrixToFloat64Array, vectorNorm, computeSumOfSquaredResiduals } from '../utils/matrix.js';
+import { vectorNorm, computeSumOfSquaredResiduals } from '../utils/matrix.js';
 import { checkStepSizeConvergence, checkResidualConvergence, createConvergenceResult } from './convergence.js';
 import { computeEffectiveJacobian, type EffectiveJacobianOptions } from './effectiveJacobian.js';
-import { updateStates, validateInitialConditions, projectStatesToConstraints } from './constrainedUtils.js';
+import { validateInitialConditions } from './constrainedUtils.js';
 import { Logger } from './logger.js';
 import {
-  finiteDiffConstraintPartialP,
-  finiteDiffConstraintPartialX
-} from './finiteDiff.js';
+  applyConstrainedParameterStep,
+  computeNormalEquationsMatrices,
+  evaluateConstrainedIterationMetrics,
+  solveUndampedNormalEquations
+} from './constrainedNormalEquations.js';
 
 const DEFAULT_MAX_ITERATIONS = 1000;
 const DEFAULT_TOLERANCE = 1e-6;
 const DEFAULT_CONSTRAINT_TOLERANCE = 1e-6;
 const DEFAULT_STEP_SIZE_P = 1e-6;
 const DEFAULT_STEP_SIZE_X = 1e-6;
-const NEGATIVE_COEFFICIENT = -1.0; // Coefficient for negative right-hand side in normal equations: (J_eff^T J_eff) δ = -J_eff^T r
-const DEFAULT_RIDGE_REGULARIZATION = 1e-8; // Small ridge regularization to recover positive definiteness when Cholesky fails
-
-/**
- * Checks constraint violation and logs warning if needed.
- */
-function checkConstraintViolation(
-  currentParameters: Float64Array,
-  currentStates: Float64Array,
-  constraintFunction: ConstraintFn,
-  constraintTolerance: number,
-  iteration: number,
-  logger: Logger
-): { constraint: Float64Array; constraintNorm: number } {
-  const constraint = constraintFunction(currentParameters, currentStates);
-  const constraintNorm = vectorNorm(constraint);
-  if (constraintNorm > constraintTolerance) {
-    logger.warn('constrainedGaussNewton', iteration, 'Constraint violation detected', [
-      { key: '||c(p,x)||:', value: constraintNorm },
-      { key: 'Tolerance:', value: constraintTolerance }
-    ]);
-  }
-  return { constraint, constraintNorm };
-}
-
-/**
- * Solves normal equations for constrained Gauss-Newton: (J_eff^T J_eff) δ = -J_eff^T r
- * Returns the step vector δ, or throws if matrix is singular.
- */
-function solveNormalEquationsForConstrainedGN(
-  effectiveJacobian: Matrix,
-  residual: Float64Array
-): Float64Array {
-  const effectiveJacobianTranspose = effectiveJacobian.transpose();
-  const jacobianTransposeJacobian = effectiveJacobianTranspose.mmul(effectiveJacobian);
-  const residualMatrix = float64ArrayToMatrix(residual);
-  const jacobianTransposeResidual = effectiveJacobianTranspose.mmul(residualMatrix);
-
-  const negativeJacobianTransposeResidual = jacobianTransposeResidual.mul(NEGATIVE_COEFFICIENT);
-  const jittered = jacobianTransposeJacobian.add(Matrix.eye(jacobianTransposeJacobian.rows, jacobianTransposeJacobian.columns).mul(DEFAULT_RIDGE_REGULARIZATION));
-
-  // Try Cholesky on original matrix first
-  try {
-    const cholesky = new CholeskyDecomposition(jacobianTransposeJacobian);
-    if (cholesky.isPositiveDefinite()) {
-      return matrixToFloat64Array(cholesky.solve(negativeJacobianTransposeResidual));
-    }
-  } catch (choleskyError) {
-    // Fall through to ridge regularization
-  }
-
-  // Ridge regularization helps recover positive definiteness when matrix is near-singular
-  // This improves numerical stability by adding small diagonal terms
-  try {
-    const choleskyRidge = new CholeskyDecomposition(jittered);
-    if (choleskyRidge.isPositiveDefinite()) {
-      return matrixToFloat64Array(choleskyRidge.solve(negativeJacobianTransposeResidual));
-    }
-  } catch (ridgeError) {
-    // Fall through to general solver
-  }
-
-  // Final fallback: general solver (may fail if matrix is truly singular)
-  return matrixToFloat64Array(solve(jacobianTransposeJacobian, negativeJacobianTransposeResidual));
-}
-
-/**
- * Updates parameters and states for constrained Gauss-Newton iteration.
- * Parameters are updated directly: p_new = p_old + δ
- * States are updated using linear approximation to maintain constraint satisfaction.
- */
-function updateParametersAndStatesForConstrainedGN(
-  currentParameters: Float64Array,
-  currentStates: Float64Array,
-  step: Float64Array,
-  constraintFunction: ConstraintFn,
-  stepSizeP: number,
-  stepSizeX: number,
-  constraintTolerance: number,
-  logger: Logger,
-  dcdp?: (parameters: Float64Array, states: Float64Array) => Matrix,
-  dcdx?: (parameters: Float64Array, states: Float64Array) => Matrix
-): { newParameters: Float64Array; newStates: Float64Array } {
-  const newParameters = new Float64Array(currentParameters.length) as Float64Array;
-  for (let i = 0; i < currentParameters.length; i++) {
-    newParameters[i] = currentParameters[i] + step[i];
-  }
-
-  const constraintJacobianX = dcdx
-    ? dcdx(currentParameters, currentStates)
-    : finiteDiffConstraintPartialX(currentParameters, currentStates, constraintFunction, { stepSize: stepSizeX });
-  const constraintJacobianP = dcdp
-    ? dcdp(currentParameters, currentStates)
-    : finiteDiffConstraintPartialP(currentParameters, currentStates, constraintFunction, { stepSize: stepSizeP });
-
-  const newStates = updateStates(currentStates, constraintJacobianX, constraintJacobianP, step, logger, 'constrainedGaussNewton') as Float64Array;
-  const projectedStates = projectStatesToConstraints(
-    newParameters,
-    newStates,
-    constraintFunction,
-    stepSizeX,
-    constraintTolerance,
-    logger,
-    'constrainedGaussNewton'
-  );
-  return { newParameters, newStates: projectedStates };
-}
+const CONSTRAINED_GAUSS_NEWTON_NAME = 'constrainedGaussNewton';
 
 /**
  * Computes step vector for constrained Gauss-Newton iteration.
@@ -178,7 +58,8 @@ function computeStepForGN(
   const residual = residualFunction(currentParameters, currentStates);
   let step: Float64Array;
   try {
-    step = solveNormalEquationsForConstrainedGN(effectiveJacobian, residual);
+    const { jtj, jtr } = computeNormalEquationsMatrices(effectiveJacobian, residual);
+    step = solveUndampedNormalEquations(jtj, jtr);
   } catch (error) {
     logger.warn('constrainedGaussNewton', iteration, 'Singular matrix encountered. Consider using constrained Levenberg-Marquardt method for better robustness.', [
       { key: 'Cost:', value: cost },
@@ -295,19 +176,17 @@ function performConstrainedGaussNewtonIteration(
   newParameters?: Float64Array;
   newStates?: Float64Array;
 } {
-  const { constraintNorm } = checkConstraintViolation(
-    currentParameters,
-    currentStates,
-    constraintFunction,
-    constraintTolerance,
-    iteration,
-    logger
-  );
-
-  const residual = residualFunction(currentParameters, currentStates);
-  const residualNorm = vectorNorm(residual);
-  const cost = computeSumOfSquaredResiduals(residualNorm);
-  const constraintSatisfied = constraintNorm <= constraintTolerance;
+  const { residualNorm, cost, constraintNorm, constraintSatisfied } =
+    evaluateConstrainedIterationMetrics(
+      currentParameters,
+      currentStates,
+      residualFunction,
+      constraintFunction,
+      constraintTolerance,
+      iteration,
+      logger,
+      CONSTRAINED_GAUSS_NEWTON_NAME
+    );
 
   if (onIteration) {
     onIteration(iteration, cost, currentParameters);
@@ -353,18 +232,19 @@ function performConstrainedGaussNewtonIteration(
     };
   }
 
-  const { newParameters, newStates } = updateParametersAndStatesForConstrainedGN(
+  const { newParameters, newStates } = applyConstrainedParameterStep(
     currentParameters,
     currentStates,
     step,
-  constraintFunction,
-  stepSizeP,
-  stepSizeX,
-  constraintTolerance,
-  logger,
-  dcdp,
-  dcdx
-);
+    constraintFunction,
+    stepSizeP,
+    stepSizeX,
+    constraintTolerance,
+    logger,
+    CONSTRAINED_GAUSS_NEWTON_NAME,
+    dcdp,
+    dcdx
+  );
 
   const newResidual = residualFunction(newParameters, newStates);
   const newResidualNorm = vectorNorm(newResidual);

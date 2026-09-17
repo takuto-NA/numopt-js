@@ -1,40 +1,26 @@
 /**
- * This file implements the constrained Levenberg-Marquardt algorithm for solving
- * nonlinear least squares problems with constraints.
- * 
- * The constrained Levenberg-Marquardt method uses the effective Jacobian concept:
- * J_eff = r_p - r_x C_x^+ C_p, which captures all constraint effects.
- * This allows the algorithm to use the same structure as unconstrained
- * Levenberg-Marquardt: (J_eff^T J_eff + λI) δ = -J_eff^T r
- * 
- * Role in system:
- * - Constrained version of Levenberg-Marquardt method
- * - Uses effective Jacobian computed via adjoint method
- * - Updates both parameters and states to maintain constraint satisfaction
- * - More robust than constrained Gauss-Newton (handles singular matrices)
- * 
- * For first-time readers:
- * - Start with constrainedLevenbergMarquardt function
- * - Understand how effective Jacobian replaces regular Jacobian
- * - Check lambda update strategy and damping mechanism
+ * Constrained Levenberg-Marquardt: damped (J_eff^T J_eff + λI) δ = -J_eff^T r.
+ * Entry point: `constrainedLevenbergMarquardt`.
  */
 
-import { Matrix, CholeskyDecomposition } from 'ml-matrix';
+import { Matrix } from 'ml-matrix';
 import type {
   ConstrainedResidualFn,
   ConstraintFn,
   ConstrainedLevenbergMarquardtOptions,
   ConstrainedLevenbergMarquardtResult
 } from './types.js';
-import { float64ArrayToMatrix, matrixToFloat64Array, vectorNorm, computeSumOfSquaredResiduals } from '../utils/matrix.js';
+import { matrixToFloat64Array, vectorNorm, computeSumOfSquaredResiduals } from '../utils/matrix.js';
 import { checkGradientConvergence, checkStepSizeConvergence, checkResidualConvergence } from './convergence.js';
 import { computeEffectiveJacobian, type EffectiveJacobianOptions } from './effectiveJacobian.js';
-import { updateStates, validateInitialConditions, projectStatesToConstraints } from './constrainedUtils.js';
+import { validateInitialConditions } from './constrainedUtils.js';
 import { Logger } from './logger.js';
 import {
-  finiteDiffConstraintPartialP,
-  finiteDiffConstraintPartialX
-} from './finiteDiff.js';
+  applyConstrainedParameterStep,
+  computeNormalEquationsMatrices,
+  evaluateConstrainedIterationMetrics,
+  solveDampedNormalEquations
+} from './constrainedNormalEquations.js';
 
 const DEFAULT_MAX_ITERATIONS = 1000;
 const DEFAULT_LAMBDA_INITIAL = 1e-3;
@@ -46,22 +32,7 @@ const DEFAULT_CONSTRAINT_TOLERANCE = 1e-6;
 const DEFAULT_STEP_SIZE_P = 1e-6;
 const DEFAULT_STEP_SIZE_X = 1e-6;
 const MAXIMUM_LAMBDA_THRESHOLD = 1e10; // Maximum lambda before giving up (prevents infinite loop)
-const NEGATIVE_COEFFICIENT = -1.0; // Coefficient for negative right-hand side in damped normal equations: (J_eff^T J_eff + λI) δ = -J_eff^T r
-
-/**
- * Computes J_eff^T J_eff and J_eff^T r matrices needed for normal equations.
- * Returns both matrices for use in solving damped normal equations.
- */
-function computeNormalEquationsMatrices(
-  effectiveJacobian: Matrix,
-  residual: Float64Array
-): { jtj: Matrix; jtr: Matrix } {
-  const jacobianTranspose = effectiveJacobian.transpose();
-  const jtj = jacobianTranspose.mmul(effectiveJacobian);
-  const residualMatrix = float64ArrayToMatrix(residual);
-  const jtr = jacobianTranspose.mmul(residualMatrix);
-  return { jtj, jtr };
-}
+const CONSTRAINED_LEVENBERG_MARQUARDT_NAME = 'constrainedLevenbergMarquardt';
 
 /**
  * Creates a convergence result object for constrained Levenberg-Marquardt algorithm.
@@ -90,62 +61,6 @@ function createConvergenceResultForLM(
     finalStates: states,
     finalConstraintNorm
   };
-}
-
-/**
- * Checks constraint violation and logs warning if needed.
- */
-function checkConstraintViolation(
-  currentParameters: Float64Array,
-  currentStates: Float64Array,
-  constraintFunction: ConstraintFn,
-  constraintTolerance: number,
-  iteration: number,
-  logger: Logger
-): { constraintNorm: number } {
-  const constraint = constraintFunction(currentParameters, currentStates);
-  const constraintNorm = vectorNorm(constraint);
-  if (constraintNorm > constraintTolerance) {
-    logger.warn('constrainedLevenbergMarquardt', iteration, 'Constraint violation detected', [
-      { key: '||c(p,x)||:', value: constraintNorm },
-      { key: 'Tolerance:', value: constraintTolerance }
-    ]);
-  }
-  return { constraintNorm };
-}
-
-/**
- * Solves damped normal equations for Levenberg-Marquardt step.
- * Damping parameter lambda interpolates between Gauss-Newton (λ→0) and gradient descent (λ→∞).
- * Returns step vector or increases lambda if Cholesky decomposition fails.
- */
-function solveDampedNormalEquations(
-  jtj: Matrix,
-  jtr: Matrix,
-  currentLambda: number,
-  lambdaFactor: number
-): { step: Float64Array; stepNorm: number } | { newLambda: number } {
-  const parameterCount = jtj.rows;
-  const identity = Matrix.eye(parameterCount, parameterCount);
-  const dampedHessian = jtj.add(identity.mul(currentLambda));
-
-  const negativeJtr = jtr.mul(NEGATIVE_COEFFICIENT);
-  let stepMatrix: Matrix;
-  try {
-    const cholesky = new CholeskyDecomposition(dampedHessian);
-    if (cholesky.isPositiveDefinite()) {
-      stepMatrix = cholesky.solve(negativeJtr);
-    } else {
-      const newLambda = currentLambda * lambdaFactor;
-      return { newLambda };
-    }
-  } catch (choleskyError) {
-    const newLambda = currentLambda * lambdaFactor;
-    return { newLambda };
-  }
-  const step = matrixToFloat64Array(stepMatrix);
-  const stepNorm = vectorNorm(step);
-  return { step, stepNorm };
 }
 
 /**
@@ -234,28 +149,18 @@ function tryConstrainedLevenbergMarquardtStep(
       return { stepAccepted: false, newLambda, stepNorm };
     }
 
-    const newParameters = new Float64Array(currentParameters.length);
-    for (let i = 0; i < currentParameters.length; i++) {
-      newParameters[i] = currentParameters[i] + step[i];
-    }
-
-    const c_x = dcdx
-      ? dcdx(currentParameters, currentStates)
-      : finiteDiffConstraintPartialX(currentParameters, currentStates, constraintFunction, { stepSize: stepSizeX });
-    const c_p = dcdp
-      ? dcdp(currentParameters, currentStates)
-      : finiteDiffConstraintPartialP(currentParameters, currentStates, constraintFunction, { stepSize: stepSizeP });
-
-    const newStates = updateStates(currentStates, c_x, c_p, step, logger, 'constrainedLevenbergMarquardt') as Float64Array;
-
-    const projectedStates = projectStatesToConstraints(
-      newParameters,
-      newStates,
+    const { newParameters, newStates: projectedStates } = applyConstrainedParameterStep(
+      currentParameters,
+      currentStates,
+      step,
       constraintFunction,
+      stepSizeP,
       stepSizeX,
       constraintTolerance,
       logger,
-      'constrainedLevenbergMarquardt'
+      CONSTRAINED_LEVENBERG_MARQUARDT_NAME,
+      dcdp,
+      dcdx
     );
 
     const newResidual = residualFunction(newParameters, projectedStates);
@@ -529,18 +434,17 @@ function performConstrainedLevenbergMarquardtIteration(
   bestStates?: Float64Array;
   shouldStop?: boolean;
 } {
-  const { constraintNorm } = checkConstraintViolation(
-    currentParameters,
-    currentStates,
-    constraintFunction,
-    constraintTolerance,
-    iteration,
-    logger
-  );
-
-  const residual = residualFunction(currentParameters, currentStates);
-  const residualNorm = vectorNorm(residual);
-  const cost = computeSumOfSquaredResiduals(residualNorm);
+  const { residual, residualNorm, cost, constraintNorm, constraintSatisfied } =
+    evaluateConstrainedIterationMetrics(
+      currentParameters,
+      currentStates,
+      residualFunction,
+      constraintFunction,
+      constraintTolerance,
+      iteration,
+      logger,
+      CONSTRAINED_LEVENBERG_MARQUARDT_NAME
+    );
 
   if (onIteration) {
     onIteration(iteration, cost, currentParameters);
@@ -559,7 +463,6 @@ function performConstrainedLevenbergMarquardtIteration(
   const { jtj, jtr } = computeNormalEquationsMatrices(effectiveJacobian, residual);
   const gradientVector = matrixToFloat64Array(jtr);
   const gradientNorm = vectorNorm(gradientVector);
-  const constraintSatisfied = constraintNorm <= constraintTolerance;
 
   const gradientConvergenceResult = checkConvergenceForLM(
     gradientNorm,
@@ -859,9 +762,9 @@ export function constrainedLevenbergMarquardt(
   const maxIterations = options.maxIterations ?? DEFAULT_MAX_ITERATIONS;
   const lambdaInitial = options.lambdaInitial ?? DEFAULT_LAMBDA_INITIAL;
   const lambdaFactor = options.lambdaFactor ?? DEFAULT_LAMBDA_FACTOR;
-  const tolGradient = options.tolGradient ?? DEFAULT_TOL_GRADIENT;
-  const tolStep = options.tolStep ?? DEFAULT_TOL_STEP;
-  const tolResidual = options.tolResidual ?? DEFAULT_TOL_RESIDUAL;
+  const tolGradient = options.tolGradient ?? options.tolerance ?? DEFAULT_TOL_GRADIENT;
+  const tolStep = options.tolStep ?? options.tolerance ?? DEFAULT_TOL_STEP;
+  const tolResidual = options.tolResidual ?? options.tolerance ?? DEFAULT_TOL_RESIDUAL;
   const constraintTolerance = options.constraintTolerance ?? DEFAULT_CONSTRAINT_TOLERANCE;
   const stepSizeP = options.stepSizeP ?? DEFAULT_STEP_SIZE_P;
   const stepSizeX = options.stepSizeX ?? DEFAULT_STEP_SIZE_X;
