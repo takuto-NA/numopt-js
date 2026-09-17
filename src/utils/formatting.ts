@@ -1,16 +1,5 @@
 /**
- * This file provides number formatting utilities for consistent display
- * of optimization results across the library.
- * 
- * Role in system:
- * - Shared formatting logic used by Logger and ResultFormatter
- * - Ensures consistent number representation in console output
- * - Handles edge cases (NaN, Infinity, very small/large numbers)
- * 
- * For first-time readers:
- * - formatNumber() is the main function for formatting numbers
- * - Uses scientific notation for very small/large numbers
- * - Uses fixed notation for standard range numbers
+ * Number formatting for logger and result printer output.
  */
 
 const SCIENTIFIC_NOTATION_LOWER_THRESHOLD = 0.01;

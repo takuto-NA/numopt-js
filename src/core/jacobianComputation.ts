@@ -1,15 +1,5 @@
 /**
- * This file provides a shared function for computing Jacobian matrices
- * using analytical functions or numerical differentiation.
- * 
- * Role in system:
- * - Eliminates code duplication between Gauss-Newton and Levenberg-Marquardt
- * - Centralizes Jacobian computation logic (DRY principle)
- * - Used by both least squares optimization algorithms
- * 
- * For first-time readers:
- * - This is a utility function used internally by optimization algorithms
- * - Prefers analytical Jacobian if provided, falls back to numerical differentiation
+ * Resolves an analytical Jacobian or falls back to central differences.
  */
 
 import { Matrix } from 'ml-matrix';

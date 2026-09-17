@@ -8,7 +8,7 @@
  * Residual: r_i = desired_distance - actual_distance
  */
 
-import { levenbergMarquardt, printLevenbergMarquardtResult } from '../src/index';
+import { levenbergMarquardt, printResult } from '../src/index';
 import type { ResidualFn } from '../src/core/types';
 
 // Box widths
@@ -65,7 +65,7 @@ const result = levenbergMarquardt(initialParameters, residualFunction, {
   }
 });
 
-printLevenbergMarquardtResult(result);
+printResult(result);
 
 // Show layout
 console.log('\nLayout visualization:');

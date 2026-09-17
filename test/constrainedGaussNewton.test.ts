@@ -1,3 +1,4 @@
+import { Matrix } from 'ml-matrix';
 import { constrainedGaussNewton } from '../src/core/constrainedGaussNewton';
 import { vectorNorm } from '../src/utils/matrix';
 import {
@@ -15,6 +16,9 @@ import {
 
 const MAX_ITERATIONS_SHORT = 3;
 const STRICT_TOLERANCE = 1e-12;
+const ZERO_JACOBIAN_TOLERANCE = 1e-8;
+const ZERO_JACOBIAN_RESIDUAL_FLOOR = 1;
+const OPTIMUM_START_TOLERANCE = 1e-8;
 
 describe('Constrained Gauss-Newton Method', () => {
   it('should converge for simple constrained least squares', () => {
@@ -172,5 +176,77 @@ describe('Constrained Gauss-Newton Method', () => {
     expect(vectorNorm(constraint2D(result.finalParameters, result.finalStates))).toBeLessThan(
       CONSTRAINED_LS_CONSTRAINT_TOLERANCE
     );
+  });
+
+  it('reports step-size convergence when the effective Jacobian is zero', () => {
+    const initial = createConstrainedLeastSquaresInitial();
+    const derivatives = createConstrainedLeastSquaresAnalyticalDerivatives();
+    const zeroResidualJacobian = () => new Matrix([[0], [0]]);
+
+    const result = constrainedGaussNewton(
+      initial.parameters,
+      initial.states,
+      constrainedLeastSquaresResidual,
+      constrainedLeastSquaresConstraint,
+      {
+        maxIterations: 5,
+        tolerance: ZERO_JACOBIAN_TOLERANCE,
+        drdp: zeroResidualJacobian,
+        drdx: zeroResidualJacobian,
+        dcdp: derivatives.dcdp,
+        dcdx: derivatives.dcdx
+      }
+    );
+
+    // WHY: ridge on J^T J makes a zero Jacobian produce a ~0 step, which the
+    // solver treats as success. The public singular-catch path is not reached.
+    expect(result.converged).toBe(true);
+    expect(result.iterations).toBe(1);
+    expect(result.finalParameters[0]).toBe(initial.parameters[0]);
+    expect(result.finalResidualNorm).toBeGreaterThan(ZERO_JACOBIAN_RESIDUAL_FLOOR);
+    expect(result.finalGradientNorm).toBeUndefined();
+  });
+
+  it('converges immediately when started at the constrained least-squares optimum', () => {
+    const derivatives = createConstrainedLeastSquaresAnalyticalDerivatives();
+
+    const result = constrainedGaussNewton(
+      new Float64Array([CONSTRAINED_LS_TARGET_PARAMETER]),
+      new Float64Array([CONSTRAINED_LS_TARGET_STATE]),
+      constrainedLeastSquaresResidual,
+      constrainedLeastSquaresConstraint,
+      {
+        maxIterations: 10,
+        tolerance: OPTIMUM_START_TOLERANCE,
+        ...derivatives
+      }
+    );
+
+    expect(result.converged).toBe(true);
+    expect(result.iterations).toBe(1);
+    expect(result.finalParameters[0]).toBe(CONSTRAINED_LS_TARGET_PARAMETER);
+    expect(result.finalStates[0]).toBe(CONSTRAINED_LS_TARGET_STATE);
+    expect(result.finalCost).toBe(0);
+  });
+
+  it('throws when a residual Jacobian entry is not finite', () => {
+    const derivatives = createConstrainedLeastSquaresAnalyticalDerivatives();
+
+    expect(() =>
+      constrainedGaussNewton(
+        new Float64Array([2.0]),
+        new Float64Array([-1.0]),
+        constrainedLeastSquaresResidual,
+        constrainedLeastSquaresConstraint,
+        {
+          maxIterations: 3,
+          tolerance: ZERO_JACOBIAN_TOLERANCE,
+          drdp: () => new Matrix([[Number.NaN], [0]]),
+          drdx: () => new Matrix([[0], [1]]),
+          dcdp: derivatives.dcdp,
+          dcdx: derivatives.dcdx
+        }
+      )
+    ).toThrow(/NaN|Inf/);
   });
 });

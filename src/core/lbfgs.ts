@@ -1,16 +1,7 @@
 /**
- * This file implements the L-BFGS (Limited-memory BFGS) algorithm for unconstrained
- * smooth optimization.
- *
- * Role in system:
- * - Quasi-Newton optimizer for scalar cost functions with user-provided gradients
- * - Uses Strong Wolfe line search to obtain steps that typically satisfy curvature conditions
- * - Memory-efficient alternative to dense BFGS for medium/large parameter counts
- *
- * For first-time readers:
- * - Start with `lbfgs` (main entry point)
- * - Then read `computeLbfgsSearchDirection` (two-loop recursion)
- * - Finally, check safeguard helpers (descent direction / curvature checks)
+ * Limited-memory BFGS for unconstrained smooth optimization.
+ * Uses Strong Wolfe and two-loop recursion.
+ * Entry point: `lbfgs`.
  */
 
 import type { CostFn, GradientFn, OptimizationResult, LbfgsOptions } from './types.js';

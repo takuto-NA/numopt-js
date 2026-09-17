@@ -1,16 +1,7 @@
 /**
- * This file implements vanilla CMA-ES and IPOP-CMA-ES restart strategy
- * for unconstrained black-box optimization (no gradients required).
- *
- * Role in system:
- * - Provides a derivative-free optimizer for scalar cost functions
- * - Adds IPOP restarts (λ doubles per restart) while preserving libcmaes semantics
- * - Mirrors libcmaes default parameter formulas and core stop criteria
- *
- * For first-time readers:
- * - Start with `cmaEs()` (public entry point)
- * - `runSingleCmaEs()` executes one CMA-ES run (no restarts)
- * - Restart logic wraps `runSingleCmaEs()` when `restartStrategy: "ipop"`
+ * Vanilla CMA-ES and IPOP restarts for unconstrained black-box scalar costs.
+ * Parameter formulas and stop criteria follow libcmaes defaults.
+ * Entry point: `cmaEs`.
  */
 
 import { CholeskyDecomposition, Matrix } from 'ml-matrix';

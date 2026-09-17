@@ -1,15 +1,5 @@
 /**
- * This file provides helper functions for convergence checking across
- * different optimization algorithms.
- * 
- * Role in system:
- * - Centralizes convergence checking logic (DRY principle)
- * - Used by gradient descent, Gauss-Newton, and Levenberg-Marquardt
- * - Provides consistent convergence criteria
- * 
- * For first-time readers:
- * - These are utility functions used by optimization algorithms
- * - Each function checks a specific convergence criterion
+ * Shared gradient, step, and residual convergence checks and result factory.
  */
 
 import type { OptimizationResult } from './types.js';

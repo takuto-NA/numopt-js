@@ -18,6 +18,7 @@ import type {
 import { float64ArrayToMatrix, matrixToFloat64Array, vectorNorm, computeSumOfSquaredResiduals } from '../utils/matrix.js';
 import { checkGradientConvergence, checkStepSizeConvergence, checkResidualConvergence } from './convergence.js';
 import { computeJacobianMatrix } from './jacobianComputation.js';
+import { computeNormalEquationsMatrices } from './constrainedNormalEquations.js';
 import { Logger } from './logger.js';
 
 const DEFAULT_MAX_ITERATIONS = 1000;
@@ -30,21 +31,6 @@ const DEFAULT_USE_NUMERIC_JACOBIAN = true;
 const DEFAULT_JACOBIAN_STEP = 1e-6;
 const MAXIMUM_LAMBDA_THRESHOLD = 1e10; // Maximum lambda before giving up (prevents infinite loop)
 const NEGATIVE_COEFFICIENT = -1.0; // Coefficient for negative right-hand side in damped normal equations: (J^T J + λI) δ = -J^T r
-
-/**
- * Computes J^T J and J^T r matrices needed for normal equations.
- * Returns both matrices for use in solving damped normal equations.
- */
-function computeNormalEquationsMatrices(
-  jacobianMatrix: Matrix,
-  residual: Float64Array
-): { jtj: Matrix; jtr: Matrix } {
-  const jacobianTranspose = jacobianMatrix.transpose();
-  const jtj = jacobianTranspose.mmul(jacobianMatrix);
-  const residualMatrix = float64ArrayToMatrix(residual);
-  const jtr = jacobianTranspose.mmul(residualMatrix);
-  return { jtj, jtr };
-}
 
 /**
  * Creates a convergence result object for Levenberg-Marquardt algorithm.
@@ -202,9 +188,9 @@ export function levenbergMarquardt(
   const maxIterations = actualOptions.maxIterations ?? DEFAULT_MAX_ITERATIONS;
   const lambdaInitial = actualOptions.lambdaInitial ?? DEFAULT_LAMBDA_INITIAL;
   const lambdaFactor = actualOptions.lambdaFactor ?? DEFAULT_LAMBDA_FACTOR;
-  const tolGradient = actualOptions.tolGradient ?? DEFAULT_TOL_GRADIENT;
-  const tolStep = actualOptions.tolStep ?? DEFAULT_TOL_STEP;
-  const tolResidual = actualOptions.tolResidual ?? DEFAULT_TOL_RESIDUAL;
+  const tolGradient = actualOptions.tolGradient ?? actualOptions.tolerance ?? DEFAULT_TOL_GRADIENT;
+  const tolStep = actualOptions.tolStep ?? actualOptions.tolerance ?? DEFAULT_TOL_STEP;
+  const tolResidual = actualOptions.tolResidual ?? actualOptions.tolerance ?? DEFAULT_TOL_RESIDUAL;
   const useNumericJacobian = actualOptions.useNumericJacobian ?? DEFAULT_USE_NUMERIC_JACOBIAN;
   const jacobianStep = actualOptions.jacobianStep ?? DEFAULT_JACOBIAN_STEP;
   const onIteration = actualOptions.onIteration;

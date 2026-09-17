@@ -1,19 +1,5 @@
 /**
- * This file provides shared utility functions for constrained optimization algorithms
- * using the adjoint method.
- * 
- * Role in system:
- * - Eliminates code duplication between adjoint solvers, constrainedGaussNewton, and constrainedLevenbergMarquardt
- * - Centralizes adjoint method computation logic (DRY principle)
- * - Provides reusable functions for state updates and constraint handling
- * 
- * For first-time readers:
- * - These are utility functions used internally by constrained optimization algorithms
- * - solveAdjointEquation: Solves the adjoint equation for computing gradients
- * - updateStates: Updates states using linear approximation to maintain constraint satisfaction
- * - validateInitialConditions: Validates initial states and constraints
- * 
- * Extracted from adjointGradientDescent.ts to enable code reuse.
+ * Shared constrained-solver linear algebra: adjoint solve, state update, projection.
  */
 
 import { Matrix, solve, CholeskyDecomposition } from 'ml-matrix';

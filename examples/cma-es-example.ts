@@ -11,7 +11,7 @@
  * - `initialStepSize` (sigma0) is important for performance.
  */
 
-import { cmaEs, printCmaEsResult } from '../src/index';
+import { cmaEs, printResult } from '../src/index';
 import type { CostFn } from '../src/core/types';
 
 const sphereCost: CostFn = (parameters: Float64Array) => {
@@ -43,5 +43,5 @@ const result = cmaEs(initialParameters, sphereCost, {
   }
 });
 
-printCmaEsResult(result);
+printResult(result);
 

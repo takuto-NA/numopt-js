@@ -172,6 +172,8 @@ function formatBasicResult(
 
 /**
  * Formats a basic OptimizationResult.
+ *
+ * @deprecated Use formatResult instead.
  */
 export function formatOptimizationResult(
   result: OptimizationResult,
@@ -184,6 +186,8 @@ export function formatOptimizationResult(
 
 /**
  * Formats a GradientDescentResult.
+ *
+ * @deprecated Use formatResult instead.
  */
 export function formatGradientDescentResult(
   result: GradientDescentResult,
@@ -205,6 +209,8 @@ export function formatGradientDescentResult(
 
 /**
  * Formats a LevenbergMarquardtResult.
+ *
+ * @deprecated Use formatResult instead.
  */
 export function formatLevenbergMarquardtResult(
   result: LevenbergMarquardtResult,
@@ -226,6 +232,8 @@ export function formatLevenbergMarquardtResult(
 
 /**
  * Formats a CMA-ES result.
+ *
+ * @deprecated Use formatResult instead.
  */
 export function formatCmaEsResult(
   result: CmaEsResult,
@@ -265,6 +273,8 @@ export function formatCmaEsResult(
 
 /**
  * Formats a ConstrainedGaussNewtonResult.
+ *
+ * @deprecated Use formatResult instead.
  */
 export function formatConstrainedGaussNewtonResult(
   result: ConstrainedGaussNewtonResult,
@@ -326,6 +336,8 @@ export function formatConstrainedGaussNewtonResult(
 
 /**
  * Formats a ConstrainedLevenbergMarquardtResult.
+ *
+ * @deprecated Use formatResult instead.
  */
 export function formatConstrainedLevenbergMarquardtResult(
   result: ConstrainedLevenbergMarquardtResult,
@@ -389,6 +401,8 @@ export function formatConstrainedLevenbergMarquardtResult(
 
 /**
  * Formats an AdjointGradientDescentResult.
+ *
+ * @deprecated Use formatResult instead.
  */
 export function formatAdjointGradientDescentResult(
   result: AdjointGradientDescentResult,
@@ -512,6 +526,8 @@ export function formatResult(
 
 /**
  * Prints an optimization result directly to console.
+ *
+ * @deprecated Use printResult instead.
  */
 export function printOptimizationResult(
   result: OptimizationResult,
@@ -522,6 +538,8 @@ export function printOptimizationResult(
 
 /**
  * Prints a gradient descent result directly to console.
+ *
+ * @deprecated Use printResult instead.
  */
 export function printGradientDescentResult(
   result: GradientDescentResult,
@@ -532,6 +550,8 @@ export function printGradientDescentResult(
 
 /**
  * Prints a Levenberg-Marquardt result directly to console.
+ *
+ * @deprecated Use printResult instead.
  */
 export function printLevenbergMarquardtResult(
   result: LevenbergMarquardtResult,
@@ -542,6 +562,8 @@ export function printLevenbergMarquardtResult(
 
 /**
  * Prints a CMA-ES result directly to console.
+ *
+ * @deprecated Use printResult instead.
  */
 export function printCmaEsResult(
   result: CmaEsResult,
@@ -552,6 +574,8 @@ export function printCmaEsResult(
 
 /**
  * Prints a constrained Gauss-Newton result directly to console.
+ *
+ * @deprecated Use printResult instead.
  */
 export function printConstrainedGaussNewtonResult(
   result: ConstrainedGaussNewtonResult,
@@ -562,6 +586,8 @@ export function printConstrainedGaussNewtonResult(
 
 /**
  * Prints a constrained Levenberg-Marquardt result directly to console.
+ *
+ * @deprecated Use printResult instead.
  */
 export function printConstrainedLevenbergMarquardtResult(
   result: ConstrainedLevenbergMarquardtResult,
@@ -572,6 +598,8 @@ export function printConstrainedLevenbergMarquardtResult(
 
 /**
  * Prints an adjoint gradient descent result directly to console.
+ *
+ * @deprecated Use printResult instead.
  */
 export function printAdjointGradientDescentResult(
   result: AdjointGradientDescentResult,
@@ -582,8 +610,14 @@ export function printAdjointGradientDescentResult(
 
 /**
  * Adjoint BFGS uses the same result fields as adjoint gradient descent.
+ *
+ * @deprecated Use formatResult instead.
  */
 export const formatAdjointBfgsResult = formatAdjointGradientDescentResult;
+
+/**
+ * @deprecated Use printResult instead.
+ */
 export const printAdjointBfgsResult = printAdjointGradientDescentResult;
 
 /**

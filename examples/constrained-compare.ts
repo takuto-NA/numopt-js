@@ -14,10 +14,7 @@ import {
   constrainedGaussNewton,
   adjointGradientDescent,
   adjointBfgs,
-  printConstrainedLevenbergMarquardtResult,
-  printConstrainedGaussNewtonResult,
-  printAdjointGradientDescentResult,
-  printAdjointBfgsResult
+  printResult
 } from '../src/index';
 import type { ConstrainedResidualFn, ConstraintFn } from '../src/core/types';
 import { vectorNorm } from '../src/utils/matrix';
@@ -110,28 +107,28 @@ const adjointBfgsResult = adjointBfgs(
 const adjointBfgsElapsedMs = performance.now() - adjointBfgsStart;
 
 console.log('Constrained Levenberg-Marquardt:');
-printConstrainedLevenbergMarquardtResult(lmResult, {
+printResult(lmResult, {
   showSectionHeaders: false,
   showExecutionTime: true,
   elapsedTimeMs: lmElapsedMs
 });
 
 console.log('\nConstrained Gauss-Newton:');
-printConstrainedGaussNewtonResult(gnResult, {
+printResult(gnResult, {
   showSectionHeaders: false,
   showExecutionTime: true,
   elapsedTimeMs: gnElapsedMs
 });
 
 console.log('\nAdjoint Gradient Descent:');
-printAdjointGradientDescentResult(adjointResult, {
+printResult(adjointResult, {
   showSectionHeaders: false,
   showExecutionTime: true,
   elapsedTimeMs: adjointElapsedMs
 });
 
 console.log('\nAdjoint BFGS:');
-printAdjointBfgsResult(adjointBfgsResult, {
+printResult(adjointBfgsResult, {
   showSectionHeaders: false,
   showExecutionTime: true,
   elapsedTimeMs: adjointBfgsElapsedMs

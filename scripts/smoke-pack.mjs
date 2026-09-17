@@ -98,6 +98,39 @@ console.log('FILES: ok');
   );
   run('node check-files.cjs', tmpDir);
 
+  // 6) Execute the browser ESM bundle in Node (no DOM APIs in the library).
+  writeFile(
+    path.join(tmpDir, 'browser-smoke.mjs'),
+    `
+import { createRequire } from 'node:module';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
+
+const require = createRequire(import.meta.url);
+const entryPath = require.resolve('numopt-js');
+const pkgDir = path.resolve(path.dirname(entryPath), '..');
+const browserBundleUrl = pathToFileURL(path.join(pkgDir, 'dist/index.browser.js')).href;
+const { gradientDescent } = await import(browserBundleUrl);
+
+const cost = (parameters) => parameters[0] * parameters[0] + parameters[1] * parameters[1];
+const gradient = (parameters) => new Float64Array([2 * parameters[0], 2 * parameters[1]]);
+const result = gradientDescent(new Float64Array([5, -3]), cost, gradient, {
+  maxIterations: 200,
+  tolerance: 1e-8,
+  useLineSearch: true,
+});
+
+if (!result.converged) {
+  throw new Error('BROWSER: gradientDescent did not converge');
+}
+if (Math.abs(result.finalParameters[0]) > 1e-6 || Math.abs(result.finalParameters[1]) > 1e-6) {
+  throw new Error('BROWSER: finalParameters not near origin');
+}
+console.log('BROWSER: ok');
+`.trimStart()
+  );
+  run('node browser-smoke.mjs', tmpDir);
+
   console.log(`Pack smoke OK (temp: ${tmpDir})`);
 } finally {
   // Keep the working tree clean: npm pack leaves a root .tgz otherwise.

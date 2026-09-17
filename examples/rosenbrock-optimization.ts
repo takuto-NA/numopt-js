@@ -11,7 +11,7 @@
  * This function has a narrow, curved valley that makes optimization challenging.
  */
 
-import { gradientDescent, finiteDiffGradient, printGradientDescentResult } from '../src/index';
+import { gradientDescent, finiteDiffGradient, printResult } from '../src/index';
 import type { CostFn, GradientFn } from '../src/core/types';
 
 // Rosenbrock function parameters
@@ -62,7 +62,7 @@ const result1 = gradientDescent(initialParams1, rosenbrockFunction, rosenbrockGr
 const endTime1 = performance.now();
 const elapsedTime1 = endTime1 - startTime1;
 
-printGradientDescentResult(result1, {
+printResult(result1, {
   showSectionHeaders: false,
   showExecutionTime: true,
   elapsedTimeMs: elapsedTime1
@@ -95,7 +95,7 @@ const result2 = gradientDescent(initialParams2, rosenbrockFunction, numericalGra
 const endTime2 = performance.now();
 const elapsedTime2 = endTime2 - startTime2;
 
-printGradientDescentResult(result2, {
+printResult(result2, {
   showSectionHeaders: false,
   showExecutionTime: true,
   elapsedTimeMs: elapsedTime2

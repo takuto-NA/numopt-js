@@ -10,8 +10,7 @@
 import {
   adjointBfgs,
   adjointGradientDescent,
-  printAdjointBfgsResult,
-  printAdjointGradientDescentResult
+  printResult
 } from '../src/index';
 import type { ConstrainedCostFn, ConstraintFn } from '../src/core/types';
 import { vectorNorm } from '../src/utils/matrix';
@@ -54,7 +53,7 @@ const result = adjointGradientDescent(
 const elapsedTimeMs = performance.now() - startTime;
 
 const finalConstraint = constraintFunction(result.finalParameters, result.finalStates);
-printAdjointGradientDescentResult(result, {
+printResult(result, {
   showExecutionTime: true,
   elapsedTimeMs
 });
@@ -76,7 +75,7 @@ const bfgsResult = adjointBfgs(
 const bfgsElapsedTimeMs = performance.now() - bfgsStartTime;
 
 console.log('\n=== Adjoint BFGS ===\n');
-printAdjointBfgsResult(bfgsResult, {
+printResult(bfgsResult, {
   showExecutionTime: true,
   elapsedTimeMs: bfgsElapsedTimeMs
 });

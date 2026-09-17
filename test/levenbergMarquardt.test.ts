@@ -160,5 +160,49 @@ describe('Levenberg-Marquardt Method', () => {
       nonlinearResidual(initialParams)[0] * nonlinearResidual(initialParams)[0]
     );
   });
+
+  it('uses CommonOptimizationOptions.tolerance when LM-specific tols are omitted', () => {
+    const fallbackTolerance = 1e-6;
+    const expectedLinearParameter = 2.0;
+    const tightResidualAfterTrueSolve = 1e-6;
+    const parameterTolerance = 1e-3;
+
+    const result = levenbergMarquardt(new Float64Array([0.0]), linearResidual, {
+      useNumericJacobian: true,
+      maxIterations: 20,
+      tolerance: fallbackTolerance
+    });
+
+    expect(result.converged).toBe(true);
+    expect(Math.abs(result.finalParameters[0] - expectedLinearParameter)).toBeLessThan(
+      parameterTolerance
+    );
+    expect(result.finalResidualNorm).toBeLessThan(tightResidualAfterTrueSolve);
+  });
+
+  it('lets an explicit tolResidual win over a loose tolerance fallback', () => {
+    const looseFallbackTolerance = 10;
+    const explicitResidualTolerance = 1e-8;
+    const expectedLinearParameter = 2.0;
+    const parameterTolerance = 1e-3;
+    const tightUnspecifiedTol = 1e-12;
+
+    const result = levenbergMarquardt(new Float64Array([0.0]), linearResidual, {
+      useNumericJacobian: true,
+      maxIterations: 20,
+      tolerance: looseFallbackTolerance,
+      // WHY: unspecified tols also fall back to `tolerance`. Pin them so a
+      // loose fallback cannot stop on gradient or step before residual is tested.
+      tolGradient: tightUnspecifiedTol,
+      tolStep: tightUnspecifiedTol,
+      tolResidual: explicitResidualTolerance
+    });
+
+    expect(result.converged).toBe(true);
+    expect(Math.abs(result.finalParameters[0] - expectedLinearParameter)).toBeLessThan(
+      parameterTolerance
+    );
+    expect(result.finalResidualNorm).toBeLessThan(explicitResidualTolerance);
+  });
 });
 

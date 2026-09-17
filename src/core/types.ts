@@ -1,15 +1,5 @@
 /**
- * This file defines the core type definitions for the numopt-js library.
- * 
- * Role in system:
- * - Provides type contracts for all optimization algorithms
- * - Defines function signatures for cost functions, gradients, and Jacobians
- * - Establishes option and result interfaces for consistent API design
- * 
- * For first-time readers:
- * - Start with ResidualFn and CostFn to understand function signatures
- * - Check option interfaces to see what can be configured
- * - Review result interfaces to understand what each algorithm returns
+ * Shared function, option, and result types for public solvers.
  */
 
 import { Matrix } from 'ml-matrix';
@@ -89,6 +79,10 @@ export interface CommonOptimizationOptions {
   /**
    * Tolerance for convergence check (gradient norm, step size, etc.).
    * Default: 1e-6
+   *
+   * Levenberg-Marquardt and constrained Levenberg-Marquardt prefer
+   * `tolGradient` / `tolStep` / `tolResidual`. If those are omitted,
+   * this value is used as a common fallback.
    */
   tolerance?: number;
 
@@ -327,19 +321,19 @@ export interface LevenbergMarquardtOptions extends GaussNewtonOptions {
 
   /**
    * Tolerance for gradient norm convergence check.
-   * Default: 1e-6
+   * Preferred over `tolerance`. Default: 1e-6 (or `tolerance` if set).
    */
   tolGradient?: number;
 
   /**
    * Tolerance for step size convergence check.
-   * Default: 1e-6
+   * Preferred over `tolerance`. Default: 1e-6 (or `tolerance` if set).
    */
   tolStep?: number;
 
   /**
    * Tolerance for residual norm convergence check.
-   * Default: 1e-6
+   * Preferred over `tolerance`. Default: 1e-6 (or `tolerance` if set).
    */
   tolResidual?: number;
 }
@@ -580,19 +574,19 @@ export interface ConstrainedLevenbergMarquardtOptions extends ConstrainedGaussNe
 
   /**
    * Tolerance for gradient norm convergence check.
-   * Default: 1e-6
+   * Preferred over `tolerance`. Default: 1e-6 (or `tolerance` if set).
    */
   tolGradient?: number;
 
   /**
    * Tolerance for step size convergence check.
-   * Default: 1e-6
+   * Preferred over `tolerance`. Default: 1e-6 (or `tolerance` if set).
    */
   tolStep?: number;
 
   /**
    * Tolerance for residual norm convergence check.
-   * Default: 1e-6
+   * Preferred over `tolerance`. Default: 1e-6 (or `tolerance` if set).
    */
   tolResidual?: number;
 }
