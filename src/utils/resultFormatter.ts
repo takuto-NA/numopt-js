@@ -581,6 +581,12 @@ export function printAdjointGradientDescentResult(
 }
 
 /**
+ * Adjoint BFGS uses the same result fields as adjoint gradient descent.
+ */
+export const formatAdjointBfgsResult = formatAdjointGradientDescentResult;
+export const printAdjointBfgsResult = printAdjointGradientDescentResult;
+
+/**
  * Type-safe overloaded function for printing any optimization result.
  */
 export function printResult(

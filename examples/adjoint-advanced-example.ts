@@ -1,9 +1,15 @@
 /**
  * Harder adjoint cases: multi-variable affine constraints and a nonlinear constraint.
  * Starts from a valid implicit-state point so x(p) exists locally.
+ * Runs Adjoint GD and Adjoint BFGS on the same problems.
  */
 
-import { adjointGradientDescent, printAdjointGradientDescentResult } from '../src/index';
+import {
+  adjointBfgs,
+  adjointGradientDescent,
+  printAdjointBfgsResult,
+  printAdjointGradientDescentResult
+} from '../src/index';
 import type { ConstrainedCostFn, ConstraintFn } from '../src/core/types';
 import { vectorNorm } from '../src/utils/matrix';
 
@@ -55,22 +61,36 @@ const constraint2D: ConstraintFn = (parameters, states) => {
   ]);
 };
 
+const shared2DOptions = {
+  maxIterations: 200,
+  tolerance: 1e-6,
+  useLineSearch: true,
+  logLevel: 'WARN' as const
+};
+
 const result2D = adjointGradientDescent(
   new Float64Array([3.0, 4.0]),
   new Float64Array([-2.0, -2.0]),
   cost2D,
   constraint2D,
-  {
-    maxIterations: 200,
-    tolerance: 1e-6,
-    useLineSearch: true,
-    logLevel: 'WARN'
-  }
+  shared2DOptions
+);
+const result2DBfgs = adjointBfgs(
+  new Float64Array([3.0, 4.0]),
+  new Float64Array([-2.0, -2.0]),
+  cost2D,
+  constraint2D,
+  shared2DOptions
 );
 
 const finalConstraint2D = constraint2D(result2D.finalParameters, result2D.finalStates);
+const finalConstraint2DBfgs = constraint2D(result2DBfgs.finalParameters, result2DBfgs.finalStates);
+console.log('Adjoint GD');
 printAdjointGradientDescentResult(result2D, { showSectionHeaders: false });
 console.log(`  ||c(p, x)|| = ${vectorNorm(finalConstraint2D).toFixed(8)}`);
+console.log('\nAdjoint BFGS');
+printAdjointBfgsResult(result2DBfgs, { showSectionHeaders: false });
+console.log(`  ||c(p, x)|| = ${vectorNorm(finalConstraint2DBfgs).toFixed(8)}`);
 console.log('  Analytical: p = [1, 2], x = [0, 0], f = 0\n');
 
 console.log('\n' + '='.repeat(70) + '\n');
@@ -90,41 +110,63 @@ const constraintCircle: ConstraintFn = (parameters, states) => {
 
 const initialCircleParameter = 0.2;
 const initialCircleState = Math.sqrt(2 - initialCircleParameter * initialCircleParameter);
+const sharedCircleOptions = {
+  maxIterations: 300,
+  tolerance: 1e-6,
+  useLineSearch: true,
+  constraintTolerance: CONSTRAINT_TOLERANCE,
+  logLevel: 'WARN' as const
+};
 
 const resultCircle = adjointGradientDescent(
   new Float64Array([initialCircleParameter]),
   new Float64Array([initialCircleState]),
   costCircle,
   constraintCircle,
-  {
-    maxIterations: 300,
-    tolerance: 1e-6,
-    useLineSearch: true,
-    constraintTolerance: CONSTRAINT_TOLERANCE,
-    logLevel: 'WARN'
-  }
+  sharedCircleOptions
+);
+const resultCircleBfgs = adjointBfgs(
+  new Float64Array([initialCircleParameter]),
+  new Float64Array([initialCircleState]),
+  costCircle,
+  constraintCircle,
+  sharedCircleOptions
 );
 
 const finalConstraintCircle = constraintCircle(
   resultCircle.finalParameters,
   resultCircle.finalStates
 );
+const finalConstraintCircleBfgs = constraintCircle(
+  resultCircleBfgs.finalParameters,
+  resultCircleBfgs.finalStates
+);
+console.log('Adjoint GD');
 printAdjointGradientDescentResult(resultCircle, { showSectionHeaders: false });
 console.log(`  ||c(p, x)|| = ${vectorNorm(finalConstraintCircle).toFixed(8)}`);
+console.log('\nAdjoint BFGS');
+printAdjointBfgsResult(resultCircleBfgs, { showSectionHeaders: false });
+console.log(`  ||c(p, x)|| = ${vectorNorm(finalConstraintCircleBfgs).toFixed(8)}`);
 console.log('  Analytical: p = 1.0, x = 1.0, f = 0.0\n');
 
 console.log('\n' + '='.repeat(70) + '\n');
 console.log('Summary:');
 console.log(
-  `  Problem 1 (2D): ${result2D.converged ? 'converged' : 'did not converge'} in ${result2D.iterations} iterations`
+  `  Problem 1 GD: ${result2D.converged ? 'converged' : 'did not converge'} in ${result2D.iterations} iterations`
 );
 console.log(
-  `  Problem 2 (Nonlinear): ${resultCircle.converged ? 'converged' : 'did not converge'} in ${resultCircle.iterations} iterations`
+  `  Problem 1 BFGS: ${result2DBfgs.converged ? 'converged' : 'did not converge'} in ${result2DBfgs.iterations} iterations`
+);
+console.log(
+  `  Problem 2 GD: ${resultCircle.converged ? 'converged' : 'did not converge'} in ${resultCircle.iterations} iterations`
+);
+console.log(
+  `  Problem 2 BFGS: ${resultCircleBfgs.converged ? 'converged' : 'did not converge'} in ${resultCircleBfgs.iterations} iterations`
 );
 
 const verified =
   requireSolution(
-    'Problem 1',
+    'Problem 1 GD',
     result2D.finalParameters,
     [1, 2],
     result2D.finalStates,
@@ -132,12 +174,28 @@ const verified =
     vectorNorm(finalConstraint2D)
   ) &&
   requireSolution(
-    'Problem 2',
+    'Problem 1 BFGS',
+    result2DBfgs.finalParameters,
+    [1, 2],
+    result2DBfgs.finalStates,
+    [0, 0],
+    vectorNorm(finalConstraint2DBfgs)
+  ) &&
+  requireSolution(
+    'Problem 2 GD',
     resultCircle.finalParameters,
     [1],
     resultCircle.finalStates,
     [1],
     vectorNorm(finalConstraintCircle)
+  ) &&
+  requireSolution(
+    'Problem 2 BFGS',
+    resultCircleBfgs.finalParameters,
+    [1],
+    resultCircleBfgs.finalStates,
+    [1],
+    vectorNorm(finalConstraintCircleBfgs)
   );
 
 if (!verified) {

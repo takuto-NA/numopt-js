@@ -7,7 +7,12 @@
  * Analytical solution: p = 0.5, x = 0.5, f = 0.5
  */
 
-import { adjointGradientDescent, printAdjointGradientDescentResult } from '../src/index';
+import {
+  adjointBfgs,
+  adjointGradientDescent,
+  printAdjointBfgsResult,
+  printAdjointGradientDescentResult
+} from '../src/index';
 import type { ConstrainedCostFn, ConstraintFn } from '../src/core/types';
 import { vectorNorm } from '../src/utils/matrix';
 
@@ -55,24 +60,59 @@ printAdjointGradientDescentResult(result, {
 });
 console.log(`\n  c(p, x) = ${finalConstraint[0].toFixed(8)} (should be ≈ 0)`);
 
-const parameterError = Math.abs(result.finalParameters[0] - TARGET_PARAMETER);
-const stateError = Math.abs(result.finalStates[0] - TARGET_STATE);
-const costError = Math.abs(result.finalCost - TARGET_COST);
-const constraintNorm = vectorNorm(finalConstraint);
+const bfgsStartTime = performance.now();
+const bfgsResult = adjointBfgs(
+  initialParameters,
+  initialStates,
+  costFunction,
+  constraintFunction,
+  {
+    maxIterations: MAX_ITERATIONS,
+    tolerance: CONVERGENCE_TOLERANCE,
+    useLineSearch: true,
+    logLevel: 'INFO'
+  }
+);
+const bfgsElapsedTimeMs = performance.now() - bfgsStartTime;
 
-console.log('\n=== Verification ===');
-console.log(`Parameter error: ${parameterError.toFixed(6)}`);
-console.log(`State error: ${stateError.toFixed(6)}`);
-console.log(`Cost error: ${costError.toFixed(6)}`);
-console.log(`Constraint violation: ${constraintNorm.toFixed(8)}`);
+console.log('\n=== Adjoint BFGS ===\n');
+printAdjointBfgsResult(bfgsResult, {
+  showExecutionTime: true,
+  elapsedTimeMs: bfgsElapsedTimeMs
+});
 
-if (
-  parameterError < SOLUTION_TOLERANCE &&
-  stateError < SOLUTION_TOLERANCE &&
-  costError < SOLUTION_TOLERANCE &&
-  constraintNorm < SOLUTION_TOLERANCE
-) {
+function verifyResult(
+  label: string,
+  finalParameters: Float64Array,
+  finalStates: Float64Array,
+  finalCost: number
+): boolean {
+  const constraint = constraintFunction(finalParameters, finalStates);
+  const parameterError = Math.abs(finalParameters[0] - TARGET_PARAMETER);
+  const stateError = Math.abs(finalStates[0] - TARGET_STATE);
+  const costError = Math.abs(finalCost - TARGET_COST);
+  const constraintNorm = vectorNorm(constraint);
+
+  console.log(`\n=== ${label} verification ===`);
+  console.log(`Parameter error: ${parameterError.toFixed(6)}`);
+  console.log(`State error: ${stateError.toFixed(6)}`);
+  console.log(`Cost error: ${costError.toFixed(6)}`);
+  console.log(`Constraint violation: ${constraintNorm.toFixed(8)}`);
+  return (
+    parameterError < SOLUTION_TOLERANCE &&
+    stateError < SOLUTION_TOLERANCE &&
+    costError < SOLUTION_TOLERANCE &&
+    constraintNorm < SOLUTION_TOLERANCE
+  );
+}
+
+const verified =
+  verifyResult('Adjoint GD', result.finalParameters, result.finalStates, result.finalCost) &&
+  verifyResult('Adjoint BFGS', bfgsResult.finalParameters, bfgsResult.finalStates, bfgsResult.finalCost);
+
+if (verified) {
   console.log('\nSolution verified within tolerance.');
 } else {
-  console.log('\nSolution may need more iterations or different settings.');
+  console.error('\nSolution may need more iterations or different settings.');
+  process.exit(1);
 }

@@ -5,6 +5,7 @@
 import {
   CHAIN_ADJOINT_DECISION_VARIABLE_COUNT,
   CHAIN_PENALTY_DECISION_VARIABLE_COUNT,
+  METHOD_ADJOINT_BFGS,
   METHOD_ADJOINT_GD,
   METHOD_BFGS,
   METHOD_CMA_ES,
@@ -47,9 +48,11 @@ export function evaluateHypotheses(rows: PaperRow[]): HypothesisResult[] {
   const expGn = requireRow(rows, PROBLEM_EXPONENTIAL_FIT, METHOD_GAUSS_NEWTON);
   const expLm = requireRow(rows, PROBLEM_EXPONENTIAL_FIT, METHOD_LEVENBERG_MARQUARDT);
   const circleAdjoint = requireRow(rows, PROBLEM_CIRCLE, METHOD_ADJOINT_GD);
+  const circleAdjointBfgs = requireRow(rows, PROBLEM_CIRCLE, METHOD_ADJOINT_BFGS);
   const circleGn = requireRow(rows, PROBLEM_CIRCLE, METHOD_CONSTRAINED_GN);
   const circleLm = requireRow(rows, PROBLEM_CIRCLE, METHOD_CONSTRAINED_LM);
   const chainAdjoint = requireRow(rows, PROBLEM_CHAIN, METHOD_ADJOINT_GD);
+  const chainAdjointBfgs = requireRow(rows, PROBLEM_CHAIN, METHOD_ADJOINT_BFGS);
   const chainPenaltyGn = requireRow(rows, PROBLEM_CHAIN, METHOD_PENALTY_GN);
   const chainPenaltyLm = requireRow(rows, PROBLEM_CHAIN, METHOD_PENALTY_LM);
 
@@ -122,6 +125,28 @@ export function evaluateHypotheses(rows: PaperRow[]): HypothesisResult[] {
       detail:
         `Adjoint vars ${chainAdjoint.decisionVariableCount}, Penalty GN/LM vars ` +
         `${chainPenaltyGn.decisionVariableCount}/${chainPenaltyLm.decisionVariableCount}`
+    },
+    {
+      id: 'circle-adjoint-bfgs-fewer-iterations-than-gd',
+      description: 'Circle: Adjoint BFGS succeeds and uses fewer iterations than Adjoint GD',
+      passed:
+        circleAdjointBfgs.allTrialsSucceeded &&
+        circleAdjoint.allTrialsSucceeded &&
+        circleAdjointBfgs.iterations.median < circleAdjoint.iterations.median,
+      detail:
+        `Adjoint BFGS ${circleAdjointBfgs.iterations.median} / Adjoint GD ${circleAdjoint.iterations.median}`
+    },
+    {
+      id: 'chain-adjoint-bfgs-fewer-iterations-than-gd',
+      description:
+        'Chain: Adjoint BFGS succeeds with 1 decision variable and fewer iterations than Adjoint GD',
+      passed:
+        chainAdjointBfgs.allTrialsSucceeded &&
+        chainAdjoint.allTrialsSucceeded &&
+        chainAdjointBfgs.decisionVariableCount === CHAIN_ADJOINT_DECISION_VARIABLE_COUNT &&
+        chainAdjointBfgs.iterations.median < chainAdjoint.iterations.median,
+      detail:
+        `Adjoint BFGS ${chainAdjointBfgs.iterations.median} / Adjoint GD ${chainAdjoint.iterations.median}`
     }
   ];
 }
