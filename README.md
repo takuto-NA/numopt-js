@@ -149,7 +149,10 @@ Recommended order:
 8. `npm run example:adjoint-reduced` — few parameters vs many implicit states
 9. `npm run example:layout-toy` — small layout toy
 
-Manual benchmarks (not CI): `npm run benchmark:constrained`, `npm run benchmark:curve-bending`.
+Manual benchmarks (not CI):
+
+- `npm run benchmark:paper` — paper-grade comparison of every public solver class. Warmup 1 run is discarded; deterministic solvers repeat 7 times (median and IQR); CMA-ES uses 5 seeds (warmup seed 1, timed seeds 1–5). Success is parameter error (and constraint norm when constrained), never `result.converged`. GD / BFGS / L-BFGS / Adjoint use analytical derivatives; GN / LM / Constrained / Penalty use numeric Jacobians. Rosenbrock CMA-ES uses IPOP; Rosenbrock GD may hit a 10000-iteration cap and still succeed on parameter error. Primary metrics are evaluation counts and success; wall-clock is secondary and machine-dependent. Writes `benchmark-results/paper-benchmark.md` and `.json` (gitignored). Hypothesis failures set exit code 1; do not commit the generated numbers.
+- `npm run benchmark:constrained`, `npm run benchmark:curve-bending` — informal single-run smokes.
 
 Full signatures and options: [TypeDoc API reference](https://takuto-na.github.io/numopt-js/).
 

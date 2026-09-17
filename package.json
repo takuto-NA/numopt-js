@@ -45,6 +45,7 @@
     "example:constrained": "tsx examples/constrained-compare.ts",
     "benchmark:constrained": "tsx scripts/constrained-benchmark.ts",
     "benchmark:curve-bending": "tsx scripts/curve-bending-benchmark.ts",
+    "benchmark:paper": "tsx scripts/paper-benchmark.ts",
     "docs": "typedoc"
   },
   "keywords": [

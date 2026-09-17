@@ -30,6 +30,9 @@ yarn-error.log*
 .env
 .env.local
 
+# Generated paper-benchmark tables (machine-specific timings)
+benchmark-results/
+
 
 *.tgz
 
