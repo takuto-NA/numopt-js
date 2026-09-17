@@ -3,7 +3,7 @@
  * using the adjoint method.
  * 
  * Role in system:
- * - Eliminates code duplication between adjointGradientDescent, constrainedGaussNewton, and constrainedLevenbergMarquardt
+ * - Eliminates code duplication between adjoint solvers, constrainedGaussNewton, and constrainedLevenbergMarquardt
  * - Centralizes adjoint method computation logic (DRY principle)
  * - Provides reusable functions for state updates and constraint handling
  * 

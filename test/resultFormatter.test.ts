@@ -10,6 +10,7 @@ import {
   formatConstrainedGaussNewtonResult,
   formatConstrainedLevenbergMarquardtResult,
   formatAdjointGradientDescentResult,
+  formatAdjointBfgsResult,
   formatResult,
   printResult
 } from '../src/utils/resultFormatter.js';
@@ -209,6 +210,20 @@ describe('ResultFormatter', () => {
       const formatted = formatAdjointGradientDescentResult(result);
       expect(formatted).toContain('Used line search: true');
       expect(formatted).toContain('||c(p, x)||');
+    });
+
+    it('aliases Adjoint BFGS formatting onto the adjoint result fields', () => {
+      const result: AdjointGradientDescentResult = {
+        finalParameters: new Float64Array([0.5]),
+        parameters: new Float64Array([0.5]),
+        finalStates: new Float64Array([0.5]),
+        iterations: 4,
+        converged: true,
+        finalCost: 0.5,
+        usedLineSearch: true,
+        finalConstraintNorm: 1e-8
+      };
+      expect(formatAdjointBfgsResult(result)).toContain('Optimized states:');
     });
   });
 

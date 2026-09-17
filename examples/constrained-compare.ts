@@ -6,16 +6,18 @@
  *   Subject to  c(p, x) = p + x - 1 = 0
  * Analytical solution: p = 0.5, x = 0.5, f = 0
  *
- * Runs Constrained LM, Constrained GN, and Adjoint GD side by side.
+ * Runs Constrained LM, Constrained GN, Adjoint GD, and Adjoint BFGS side by side.
  */
 
 import {
   constrainedLevenbergMarquardt,
   constrainedGaussNewton,
   adjointGradientDescent,
+  adjointBfgs,
   printConstrainedLevenbergMarquardtResult,
   printConstrainedGaussNewtonResult,
-  printAdjointGradientDescentResult
+  printAdjointGradientDescentResult,
+  printAdjointBfgsResult
 } from '../src/index';
 import type { ConstrainedResidualFn, ConstraintFn } from '../src/core/types';
 import { vectorNorm } from '../src/utils/matrix';
@@ -92,6 +94,21 @@ const adjointResult = adjointGradientDescent(
 );
 const adjointElapsedMs = performance.now() - adjointStart;
 
+const adjointBfgsStart = performance.now();
+const adjointBfgsResult = adjointBfgs(
+  initialParameters,
+  initialStates,
+  costFunction,
+  constraintFunction,
+  {
+    maxIterations: MAX_ITERATIONS,
+    tolerance: CONVERGENCE_TOLERANCE,
+    useLineSearch: true,
+    logLevel: 'WARN'
+  }
+);
+const adjointBfgsElapsedMs = performance.now() - adjointBfgsStart;
+
 console.log('Constrained Levenberg-Marquardt:');
 printConstrainedLevenbergMarquardtResult(lmResult, {
   showSectionHeaders: false,
@@ -113,10 +130,18 @@ printAdjointGradientDescentResult(adjointResult, {
   elapsedTimeMs: adjointElapsedMs
 });
 
+console.log('\nAdjoint BFGS:');
+printAdjointBfgsResult(adjointBfgsResult, {
+  showSectionHeaders: false,
+  showExecutionTime: true,
+  elapsedTimeMs: adjointBfgsElapsedMs
+});
+
 const rankedByIterations = [
   { name: 'Constrained LM', iterations: lmResult.iterations },
   { name: 'Constrained GN', iterations: gnResult.iterations },
-  { name: 'Adjoint GD', iterations: adjointResult.iterations }
+  { name: 'Adjoint GD', iterations: adjointResult.iterations },
+  { name: 'Adjoint BFGS', iterations: adjointBfgsResult.iterations }
 ].sort((left, right) => left.iterations - right.iterations);
 
 console.log(
@@ -156,8 +181,15 @@ const allVerified =
     adjointResult.finalParameters,
     adjointResult.finalStates,
     adjointResult.finalCost
+  ) &&
+  verifySolver(
+    'Adjoint BFGS',
+    adjointBfgsResult.finalParameters,
+    adjointBfgsResult.finalStates,
+    adjointBfgsResult.finalCost
   );
 
 if (!allVerified) {
-  console.log('\nOne or more solvers need more iterations or different settings.');
+  console.error('\nOne or more solvers need more iterations or different settings.');
+  process.exit(1);
 }

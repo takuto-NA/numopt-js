@@ -40,6 +40,10 @@ type LineSearchPointEvaluation = {
   directionalDerivative: number;
 };
 
+function isDefinedLineSearchCost(cost: number): boolean {
+  return Number.isFinite(cost);
+}
+
 function clampStepSize(stepSize: number): number {
   if (!isFinite(stepSize)) return DEFAULT_INITIAL_STEP_SIZE;
   if (stepSize < MINIMUM_STEP_SIZE) return MINIMUM_STEP_SIZE;
@@ -69,6 +73,15 @@ function evaluateCostAndDirectionalDerivative(
   const clampedStepSize = clampStepSize(stepSize);
   const trialParameters = computeTrialParameters(currentParameters, searchDirection, clampedStepSize);
   const trialCost = costFunction(trialParameters);
+  // WHY: A reduced-space cost is undefined when state restoration fails. That
+  // point is not on f̃, so its gradient must not enter Wolfe or BFGS updates.
+  if (!isDefinedLineSearchCost(trialCost)) {
+    return {
+      stepSize: clampedStepSize,
+      cost: trialCost,
+      directionalDerivative: Number.NaN
+    };
+  }
   const trialGradient = gradientFunction(trialParameters);
   const trialDirectionalDerivative = dotProduct(trialGradient, searchDirection);
   return { stepSize: clampedStepSize, cost: trialCost, directionalDerivative: trialDirectionalDerivative };
@@ -142,7 +155,10 @@ function zoom(
       trialStepSize
     );
 
-    if (!satisfiesArmijoCondition(evaluation.cost, currentCost, wolfeC1, evaluation.stepSize, directionalDerivativeAtZero)) {
+    if (
+      !isDefinedLineSearchCost(evaluation.cost) ||
+      !satisfiesArmijoCondition(evaluation.cost, currentCost, wolfeC1, evaluation.stepSize, directionalDerivativeAtZero)
+    ) {
       stepSizeHigh = evaluation.stepSize;
       continue;
     }
@@ -166,7 +182,11 @@ function zoom(
     costAtStepSizeLow = evaluation.cost;
   }
 
-  // If zoom fails to find a point satisfying Strong Wolfe, return the best-known lower bound.
+  // WHY: A zero lower bound means no acceptable positive step was found.
+  // Returning the underflow clamp (1e-20) would look like a tiny valid step to BFGS.
+  if (stepSizeLow <= INVALID_STEP_SIZE) {
+    return INVALID_STEP_SIZE;
+  }
   return clampStepSize(stepSizeLow);
 }
 
@@ -211,14 +231,19 @@ export function strongWolfeLineSearch(
       stepSize
     );
 
-    const violatesArmijo = !satisfiesArmijoCondition(
-      evaluation.cost,
-      currentCost,
-      wolfeC1,
-      evaluation.stepSize,
-      directionalDerivativeAtZero
-    );
-    const isNotImprovingEnough = iteration > 0 && evaluation.cost >= previousCost;
+    const violatesArmijo =
+      !isDefinedLineSearchCost(evaluation.cost) ||
+      !satisfiesArmijoCondition(
+        evaluation.cost,
+        currentCost,
+        wolfeC1,
+        evaluation.stepSize,
+        directionalDerivativeAtZero
+      );
+    const isNotImprovingEnough =
+      iteration > 0 &&
+      isDefinedLineSearchCost(evaluation.cost) &&
+      evaluation.cost >= previousCost;
     if (violatesArmijo || isNotImprovingEnough) {
       return zoom(
         costFunction,
