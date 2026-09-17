@@ -7,8 +7,7 @@
 import {
   adjointBfgs,
   adjointGradientDescent,
-  printAdjointBfgsResult,
-  printAdjointGradientDescentResult
+  printResult
 } from '../src/index';
 import type { ConstrainedCostFn, ConstraintFn } from '../src/core/types';
 import { vectorNorm } from '../src/utils/matrix';
@@ -86,10 +85,10 @@ const result2DBfgs = adjointBfgs(
 const finalConstraint2D = constraint2D(result2D.finalParameters, result2D.finalStates);
 const finalConstraint2DBfgs = constraint2D(result2DBfgs.finalParameters, result2DBfgs.finalStates);
 console.log('Adjoint GD');
-printAdjointGradientDescentResult(result2D, { showSectionHeaders: false });
+printResult(result2D, { showSectionHeaders: false });
 console.log(`  ||c(p, x)|| = ${vectorNorm(finalConstraint2D).toFixed(8)}`);
 console.log('\nAdjoint BFGS');
-printAdjointBfgsResult(result2DBfgs, { showSectionHeaders: false });
+printResult(result2DBfgs, { showSectionHeaders: false });
 console.log(`  ||c(p, x)|| = ${vectorNorm(finalConstraint2DBfgs).toFixed(8)}`);
 console.log('  Analytical: p = [1, 2], x = [0, 0], f = 0\n');
 
@@ -142,10 +141,10 @@ const finalConstraintCircleBfgs = constraintCircle(
   resultCircleBfgs.finalStates
 );
 console.log('Adjoint GD');
-printAdjointGradientDescentResult(resultCircle, { showSectionHeaders: false });
+printResult(resultCircle, { showSectionHeaders: false });
 console.log(`  ||c(p, x)|| = ${vectorNorm(finalConstraintCircle).toFixed(8)}`);
 console.log('\nAdjoint BFGS');
-printAdjointBfgsResult(resultCircleBfgs, { showSectionHeaders: false });
+printResult(resultCircleBfgs, { showSectionHeaders: false });
 console.log(`  ||c(p, x)|| = ${vectorNorm(finalConstraintCircleBfgs).toFixed(8)}`);
 console.log('  Analytical: p = 1.0, x = 1.0, f = 0.0\n');
 

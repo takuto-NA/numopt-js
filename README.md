@@ -177,11 +177,11 @@ Full signatures and options: [TypeDoc API reference](https://takuto-na.github.io
 ## Convergence Options (quick map)
 
 - **GD / BFGS / L-BFGS / GN / Constrained GN / Adjoint GD / Adjoint BFGS**: `tolerance`
-- **LM / Constrained LM**: `tolGradient`, `tolStep`, `tolResidual`
+- **LM / Constrained LM**: `tolGradient`, `tolStep`, `tolResidual` (or `tolerance` as a fallback when those are omitted)
 - **CMA-ES**: `functionTolerance`, `parameterTolerance`, `targetCost`, `maxFunctionEvaluations`
 - **Adjoint (ill-conditioned ∂c/∂x)**: `regularization`
 
-Result printing helpers: `printResult` / `formatResult` (and typed variants) — see TypeDoc.
+Result printing helpers: `printResult` / `formatResult` — see TypeDoc. Typed `print*` / `format*` variants are deprecated.
 
 ## Troubleshooting
 

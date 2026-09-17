@@ -1,16 +1,5 @@
 /**
- * This file implements numerical differentiation methods for computing
- * gradients and Jacobian matrices when analytical derivatives are not available.
- * 
- * Role in system:
- * - Provides automatic gradient/Jacobian computation via finite differences
- * - Used when users don't provide analytical derivatives
- * - Critical for algorithms that require gradient information
- * 
- * For first-time readers:
- * - Start with finiteDiffGradient for general optimization
- * - finiteDiffJacobian is for nonlinear least squares problems
- * - Central difference is used for better accuracy than forward difference
+ * Central-difference gradients and Jacobians when analytical derivatives are omitted.
  */
 
 import { Matrix } from 'ml-matrix';

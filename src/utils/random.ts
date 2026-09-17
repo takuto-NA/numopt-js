@@ -1,15 +1,6 @@
 /**
- * This file provides deterministic random number generation utilities.
- *
- * Role in system:
- * - Enables reproducible stochastic optimizers (e.g., CMA-ES) via explicit seeds
- * - Provides uniform and standard normal sampling without external dependencies
- * - Keeps browser compatibility (no Node-specific APIs required)
- *
- * For first-time readers:
- * - Use createSeededRandom(seed) to get a generator
- * - Call nextUniform() for U[0,1), nextStandardNormal() for N(0,1)
- * - Seed behavior: seed > 0 is deterministic; seed is auto-generated if 0/undefined
+ * Seeded uniform and standard-normal draws for CMA-ES. Browser-safe (no Node APIs).
+ * seed > 0 is deterministic; 0 or omitted auto-generates a seed.
  */
 
 export type SeededRandom = {
