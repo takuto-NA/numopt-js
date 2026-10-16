@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Optional synchronous LM `linearSolver` selection, with explicit ml-matrix and prepared kibo WASM adapters.
+- Reproducible kibo WASM generation, real Node/Chromium LM comparisons, lifetime/fallback checks and manual copy-inclusive measurements.
+
 - File-header lint (`npm run lint:headers`) and CODING_RULES cleanup.
 - Typed `format*` / `print*` helpers are deprecated; use `formatResult` / `printResult`.
 - LM / Constrained LM treat `tolerance` as a fallback when `tolGradient` / `tolStep` / `tolResidual` are omitted.

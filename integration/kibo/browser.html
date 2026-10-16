@@ -1,0 +1,22 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>numopt-js LM kibo integration</title>
+<script type="module">
+import * as api from '../../dist/index.browser.js';
+import createModule from '../../.cache/kibo/kibo.mjs';
+import { LinearAlgebra } from '../../.cache/kibo/facade.mjs';
+import { runSmallComparisons, runResourceChecks } from './scenarios.mjs';
+import { runConfigurationChecks, runFallbackChecks } from './failures.mjs';
+try {
+  const started = performance.now();
+  const module = await createModule();
+  const initializationMilliseconds = performance.now() - started;
+  const cases = runSmallComparisons(api, module, LinearAlgebra);
+  const resources = runResourceChecks(api, module, LinearAlgebra);
+  const configurationFailures = runConfigurationChecks(api, module, LinearAlgebra);
+  const numericFallbacks = runFallbackChecks(api, module, LinearAlgebra);
+  window.kiboReport = { passed: true, initializationMilliseconds, cases, resources, configurationFailures, numericFallbacks };
+} catch (error) {
+  window.kiboReport = { passed: false, error: String(error), stack: error.stack };
+}
+</script>
