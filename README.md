@@ -134,6 +134,9 @@ Preparation uses the source SHA and image digest fixed in
 `integration/kibo/toolchains.json`, verifies a clean source, and records compiler,
 source tree and asset hashes in `.cache/kibo/manifest.json`. Generated assets
 include kibo's LICENSE/NOTICE. No kibo npm package or public release is required.
+The kibo source currently requires repository access; preparation uses your
+existing Git credentials. Hosted integration CI runs in the kibo repository,
+where it can check out that source and this public consumer at fixed commits.
 
 ```js
 import { createKiboLinearSolver, levenbergMarquardt } from './dist/index.js';
