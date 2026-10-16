@@ -36,3 +36,6 @@ benchmark-results/
 
 *.tgz
 
+# Fixed external WASM build inputs and generated assets
+.cache/
+

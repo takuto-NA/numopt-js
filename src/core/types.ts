@@ -3,6 +3,7 @@
  */
 
 import { Matrix } from 'ml-matrix';
+import type { LevenbergMarquardtLinearSolver } from './lmLinearSolver.js';
 
 /**
  * Function that computes the residual vector for nonlinear least squares problems.
@@ -307,6 +308,9 @@ export interface GaussNewtonOptions extends CommonOptimizationOptions {
  * Options for Levenberg-Marquardt algorithm.
  */
 export interface LevenbergMarquardtOptions extends GaussNewtonOptions {
+  /** Prepared synchronous solver; omitted selects ml-matrix Cholesky/LU. */
+  linearSolver?: LevenbergMarquardtLinearSolver;
+
   /**
    * Initial value of damping parameter lambda.
    * Default: 1e-3

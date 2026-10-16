@@ -8,7 +8,8 @@
  * Entry point: `levenbergMarquardt`.
  */
 
-import { Matrix, solve, CholeskyDecomposition } from 'ml-matrix';
+import { Matrix } from 'ml-matrix';
+import { createMlMatrixLinearSolver, LinearSolverConfigurationError, type LevenbergMarquardtLinearSolver } from './lmLinearSolver.js';
 import type {
   ResidualFn,
   JacobianFn,
@@ -71,7 +72,8 @@ function tryLevenbergMarquardtStep(
   currentCost: number,
   tolStep: number,
   iteration: number,
-  logger: Logger
+  logger: Logger,
+  linearSolver: LevenbergMarquardtLinearSolver
 ): {
   stepAccepted: boolean;
   newParameters?: Float64Array;
@@ -97,20 +99,7 @@ function tryLevenbergMarquardtStep(
     // Solve: (J^T J + λI) δ = -J^T r
     // Use Cholesky decomposition for efficiency (dampedHessian is always positive definite when λ > 0)
     const negativeJtr = jtr.mul(NEGATIVE_COEFFICIENT);
-    let stepMatrix: Matrix;
-    try {
-      const cholesky = new CholeskyDecomposition(dampedHessian);
-      if (cholesky.isPositiveDefinite()) {
-        stepMatrix = cholesky.solve(negativeJtr);
-      } else {
-        // Fallback to LU decomposition if Cholesky fails (should not happen when λ > 0)
-        stepMatrix = solve(dampedHessian, negativeJtr);
-      }
-    } catch (choleskyError) {
-      // Fallback to LU decomposition if Cholesky decomposition fails
-      stepMatrix = solve(dampedHessian, negativeJtr);
-    }
-    const step = matrixToFloat64Array(stepMatrix);
+    const step = linearSolver.solve(dampedHessian, negativeJtr);
     const stepNorm = vectorNorm(step);
 
     // Check step size convergence (termination test suggested in Lourakis 2005, Section 5)
@@ -151,6 +140,7 @@ function tryLevenbergMarquardtStep(
     ]);
     return { stepAccepted: false, newLambda };
   } catch (error) {
+    if (error instanceof LinearSolverConfigurationError) throw error;
     // Singular matrix or numerical issues: increase lambda and retry
     const newLambda = currentLambda * lambdaFactor;
     logger.warn('levenbergMarquardt', iteration, 'Singular matrix encountered, increasing lambda', [
@@ -183,6 +173,7 @@ export function levenbergMarquardt(
   options: LevenbergMarquardtOptions = {}
 ): LevenbergMarquardtResult {
   const actualOptions: LevenbergMarquardtOptions = options;
+  const linearSolver = actualOptions.linearSolver ?? createMlMatrixLinearSolver();
   const jacobianFunction: JacobianFn | undefined = actualOptions.jacobian;
 
   const maxIterations = actualOptions.maxIterations ?? DEFAULT_MAX_ITERATIONS;
@@ -268,7 +259,8 @@ export function levenbergMarquardt(
         cost,
         tolStep,
         iteration,
-        logger
+        logger,
+        linearSolver
       );
 
       // Early return: lambda too large
