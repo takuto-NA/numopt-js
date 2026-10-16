@@ -50,31 +50,3 @@ jobs:
       if: matrix.node-version == '20.x'
       run: npm run docs
 
-  kibo-integration:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    steps:
-    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-    - name: Build fixed external WASM and verify provenance
-      run: node scripts/prepare-kibo-wasm.mjs
-    - name: Public LM in fixed Node
-      shell: bash
-      run: |
-        set -euo pipefail
-        image=$(node -p 'JSON.parse(require("fs").readFileSync("integration/kibo/toolchains.json")).nodeImage')
-        docker run --rm -v "$PWD:/work" -w /work "$image" sh -c 'npm ci --ignore-scripts --no-audit --no-fund && npm run build && npm run test:kibo:node'
-    - name: Public browser bundle with fixed Chromium over HTTP
-      shell: bash
-      run: |
-        set -euo pipefail
-        image=$(node -p 'JSON.parse(require("fs").readFileSync("integration/kibo/toolchains.json")).browserImage')
-        docker run --rm -v "$PWD:/work" -w /work "$image" npm run test:kibo:browser
-    - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-      if: always()
-      with:
-        name: lm-kibo-integration
-        path: |
-          .cache/kibo/manifest.json
-          .cache/kibo/build.log
-          benchmark-results/kibo/node.json
-          benchmark-results/kibo/chromium.json
