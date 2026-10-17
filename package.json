@@ -42,6 +42,7 @@
     "test:kibo:browser": "node integration/kibo/check-browser.mjs",
     "example:lm:kibo": "node examples/lm-kibo.mjs",
     "benchmark:kibo": "tsx scripts/compare-kibo-lm.ts",
+    "benchmark:kibo:profile": "tsx scripts/profile-kibo-lm.ts",
     "example:gauss-newton": "tsx examples/gauss-newton-example.ts",
     "example:cma-es": "tsx examples/cma-es-example.ts",
     "example:layout-toy": "tsx examples/layout-toy-1d.ts",
