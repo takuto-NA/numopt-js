@@ -102,6 +102,95 @@ const lbfgsResult = lbfgs(new Float64Array([10, 10]), cost, grad, {
 });
 ```
 
+## Optional LM linear solvers
+
+LM accepts a prepared synchronous `linearSolver`. Omit it to keep the existing
+ml-matrix Cholesky/LU behavior, or pass `createMlMatrixLinearSolver()` explicitly.
+Residuals, Jacobians, damping, acceptance, callbacks and stopping tests stay in
+the same JavaScript LM loop.
+
+`createKiboLinearSolver` adapts the existing kibo WASM LLT facade. It takes the
+already damped matrix and signed right-hand side; it does not apply damping a
+second time. A numerical LLT failure uses the existing ml-matrix LU fallback.
+`statistics` reports actual WASM calls, successes, fallback attempts/reasons and
+conversion/backend-boundary timings. Configuration, ABI, shape, non-finite
+input/output and lifetime errors throw `LinearSolverConfigurationError`; changing
+lambda cannot repair those errors.
+
+The optional integration is available from a source checkout. Normal package
+imports and default LM need no WASM asset, initialization, fetch, or Docker.
+To generate the external assets, use Git and Docker, with Node 24.21.0 for the
+validated kibo execution environment:
+
+```sh
+npm ci
+npm run prepare:kibo
+npm run build
+npm run example:lm:kibo
+npm run test:kibo:node
+```
+
+Preparation uses the source SHA and image digest fixed in
+`integration/kibo/toolchains.json`, verifies a clean source, and records compiler,
+source tree and asset hashes in `.cache/kibo/manifest.json`. Generated assets
+include kibo's LICENSE/NOTICE. No kibo npm package or public release is required.
+The kibo source currently requires repository access; preparation uses your
+existing Git credentials. Hosted integration CI runs in the kibo repository,
+where it can check out that source and this public consumer at fixed commits.
+
+```js
+import { createKiboLinearSolver, levenbergMarquardt } from './dist/index.js';
+import createModule from './.cache/kibo/kibo.mjs';
+import { LinearAlgebra } from './.cache/kibo/facade.mjs';
+
+const module = await createModule(); // Initialize once before synchronous LM.
+const linearSolver = createKiboLinearSolver(
+  new LinearAlgebra(module, initialParameters.length, initialParameters.length)
+);
+try {
+  const result = levenbergMarquardt(initialParameters, residual, { linearSolver });
+  console.log(result.finalParameters, linearSolver.statistics);
+} finally {
+  linearSolver.dispose();
+}
+```
+
+Give each adapter a dedicated facade; do not resize/share it while in use. The
+adapter owns that facade, reuses its WASM workspace, and releases it on dispose.
+Returned solution copies survive subsequent calls, memory growth and disposal.
+The prepared C++ solve's allocation guarantee does not cover JS conversion/copy
+or module setup. `inputPayloadBytes`/`outputPayloadBytes` count logical payload,
+not every JS allocation or facade-internal copy. Backend-boundary time includes
+those facade copies and any LU fallback; it is not isolated C++ kernel time.
+
+`npm run test:kibo:browser` runs HTTP-served browser-bundle checks with the fixed
+Playwright/Chromium versions (use the browser Docker image from the toolchain
+file, or install its matching browser). The checks execute line, exponential and
+analytic-Jacobian fits in both backends, plus fatal boundary errors, injected
+numeric failures through public LM, and resource lifetime checks. Result files
+include numopt source/bundle hashes and the external WASM manifest. The
+validated browser is Chromium; other browser/Node versions are not covered by
+this opt-in integration's evidence.
+
+`npm run benchmark:kibo` manually collects five warmups and 30 samples for both
+backends, including a fixed, well-conditioned 128x32 problem. Raw samples,
+median/IQR, callback/solve counts and provenance go to ignored
+`benchmark-results/kibo/`. Initialization and setup are reported separately from
+copy-inclusive LM time. CI validates correctness and lifetime, without a speed
+threshold. Packing the default package remains independent of generated assets.
+
+`npm run benchmark:kibo:profile -- run-1` measures the same public LM with
+unmodified, solver-boundary-only and detailed phase timing, using 50 warmups and
+100 samples per configuration. Detailed probes are generated under
+`.cache/lm-profile/`; they do not change source modules, the shipped bundle, or
+the original external assets. Nested times are counted once, numerical results
+are checked against the unmodified LM, and paired runs report timer perturbation.
+An exact-Jacobian version of the same 128x32 fixture isolates differentiation cost.
+Independent V8 CPU profiles use the original modules. Reports and `.cpuprofile`
+files go to `benchmark-results/kibo/`. The WASM export measurement includes
+dispatch and ABI validation; it is not isolated C++ kernel time. Run this manually
+in the fixed Node image, separately from other tests or benchmarks.
+
 ## Adjoint BFGS
 
 Same inputs as adjoint gradient descent: design parameters \(p\), implicit states \(x\), and \(c(p,x)=0\). The search stays in \(p\); Strong Wolfe is on by default.

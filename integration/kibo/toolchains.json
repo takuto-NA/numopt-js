@@ -1,0 +1,9 @@
+{
+  "repository": "https://github.com/takuto-NA/kibo-linalg.git",
+  "commit": "ce6b8f8db59979bd592a0f6cf61c6ede02f2c47b",
+  "emscriptenVersion": "6.0.10",
+  "emscriptenImage": "emscripten/emsdk:6.0.10@sha256:e077d54e2b8970575ebc4f185ac1de0b95c05f2b266134d4ba27449af7aebf65",
+  "nodeImage": "node:24.21.0@sha256:22f6fe5f59fb7fed238b19623506d573dffaa932ce33b84ce541a9a2e0eade28",
+  "browserImage": "mcr.microsoft.com/playwright:v1.63.0-noble@sha256:eff16c30e6f3f4af0a03fa4b706120d5e9b0891c344a27d64559aff5900a4a27",
+  "playwrightVersion": "1.63.0"
+}
