@@ -63,6 +63,7 @@ export function mediumProblem() {
   // Singular values therefore lie in [1.5, 2.5], independently of the solver.
   return {
     name: 'dense-128x32', seed: FIXTURE_SEED,
+    fixedJacobian: { rows: MEDIUM_ROWS, columns: MEDIUM_COLUMNS, values: matrix },
     conditionUpperBound: (DIAGONAL_STRENGTH + PERTURBATION_NORM_BOUND) /
       (DIAGONAL_STRENGTH - PERTURBATION_NORM_BOUND),
     initial: Array(MEDIUM_COLUMNS).fill(0), expected: Array(MEDIUM_COLUMNS).fill(1),

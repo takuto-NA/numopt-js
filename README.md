@@ -179,6 +179,18 @@ median/IQR, callback/solve counts and provenance go to ignored
 copy-inclusive LM time. CI validates correctness and lifetime, without a speed
 threshold. Packing the default package remains independent of generated assets.
 
+`npm run benchmark:kibo:profile -- run-1` measures the same public LM with
+unmodified, solver-boundary-only and detailed phase timing, using 50 warmups and
+100 samples per configuration. Detailed probes are generated under
+`.cache/lm-profile/`; they do not change source modules, the shipped bundle, or
+the original external assets. Nested times are counted once, numerical results
+are checked against the unmodified LM, and paired runs report timer perturbation.
+An exact-Jacobian version of the same 128x32 fixture isolates differentiation cost.
+Independent V8 CPU profiles use the original modules. Reports and `.cpuprofile`
+files go to `benchmark-results/kibo/`. The WASM export measurement includes
+dispatch and ABI validation; it is not isolated C++ kernel time. Run this manually
+in the fixed Node image, separately from other tests or benchmarks.
+
 ## Adjoint BFGS
 
 Same inputs as adjoint gradient descent: design parameters \(p\), implicit states \(x\), and \(c(p,x)=0\). The search stays in \(p\); Strong Wolfe is on by default.
