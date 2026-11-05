@@ -4,7 +4,7 @@
  */
 
 import { CholeskyDecomposition, Matrix, solve } from 'ml-matrix';
-import type { AdjointNewtonOptions, CostFn } from './types.js';
+import type { AdjointDerivativeOptions, AdjointNewtonOptions, CostFn } from './types.js';
 import type { ReducedPartials } from './adjointReducedSpace.js';
 import { dotProduct, scaleVector } from '../utils/matrix.js';
 
@@ -17,7 +17,7 @@ const CENTRAL_SECOND_DIFFERENCE_FACTOR = 2;
 const MIXED_SECOND_DIFFERENCE_FACTOR = 4;
 const NEGATIVE_DIRECTION = -1;
 
-function checkedSymmetricMatrix(matrix: Matrix, dimension: number, name: string): Matrix {
+export function checkedSymmetricMatrix(matrix: Matrix, dimension: number, name: string): Matrix {
   if (matrix.rows !== dimension || matrix.columns !== dimension) {
     throw new Error(`${name} must be ${dimension} × ${dimension}`);
   }
@@ -57,7 +57,7 @@ function shiftedPoint(
 }
 
 /** Computes D^T ∇²f D with O(parameterCount²) samples, even when states are numerous. */
-function directionalHessian(cost: CostFn, base: Float64Array, directions: Matrix, relativeStep: number): Matrix {
+export function directionalHessian(cost: CostFn, base: Float64Array, directions: Matrix, relativeStep: number): Matrix {
   const dimension = directions.columns;
   const hessian = Matrix.zeros(dimension, dimension);
   const baseCost = finiteCost(cost, base);
@@ -90,13 +90,7 @@ function directionalHessian(cost: CostFn, base: Float64Array, directions: Matrix
   return checkedSymmetricMatrix(hessian, dimension, 'Numerical partial Hessian');
 }
 
-export function computeApproximateAdjointHessian(
-  parameters: Float64Array,
-  states: Float64Array,
-  cost: (parameters: Float64Array, states: Float64Array) => number,
-  partials: ReducedPartials,
-  options: AdjointNewtonOptions
-): Matrix {
+export function computeStateSensitivities(partials: ReducedPartials, options: AdjointDerivativeOptions): Matrix {
   // WHY: A matrix right-hand side reuses one factorization across all parameter sensitivities.
   const stateJacobian = partials.dcdx.clone();
   const regularization = options.regularization ?? 0;
@@ -112,6 +106,17 @@ export function computeApproximateAdjointHessian(
   if (sensitivities.to1DArray().some(value => !Number.isFinite(value))) {
     throw new Error('Non-finite state sensitivity; the implicit-state Jacobian must be nonsingular');
   }
+  return sensitivities;
+}
+
+export function computeApproximateAdjointHessian(
+  parameters: Float64Array,
+  states: Float64Array,
+  cost: (parameters: Float64Array, states: Float64Array) => number,
+  partials: ReducedPartials,
+  options: AdjointNewtonOptions
+): Matrix {
+  const sensitivities = computeStateSensitivities(partials, options);
   const parameterHessian = options.d2fdp2
     ? checkedSymmetricMatrix(options.d2fdp2(parameters, states), parameters.length, 'd2fdp2')
     : directionalHessian(values => cost(values, states), parameters,

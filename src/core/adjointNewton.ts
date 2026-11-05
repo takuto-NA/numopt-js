@@ -4,7 +4,7 @@
  */
 
 import type {
-  AdjointNewtonOptions, AdjointNewtonResult, AdjointNewtonStopReason,
+  AdjointNewtonOptions, AdjointNewtonExactOptions, AdjointNewtonResult, AdjointNewtonStopReason,
   ConstrainedCostFn, ConstrainedResidualFn, ConstraintFn, LineSearchOptions
 } from './types.js';
 import {
@@ -13,11 +13,11 @@ import {
   type AdjointReducedSpaceSettings, type ObjectiveKind, type ReducedGradientEvaluation
 } from './adjointReducedSpace.js';
 import { computeApproximateAdjointHessian, computeSafeguardedNewtonDirection } from './adjointNewtonModel.js';
+import { computeExactAdjointHessian } from './adjointNewtonExactModel.js';
 import { backtrackingLineSearch } from './lineSearch.js';
 import { Logger } from './logger.js';
 import { addVectors, dotProduct, scaleVector, vectorNorm } from '../utils/matrix.js';
 
-const ALGORITHM_NAME = 'adjointNewton';
 const DEFAULT_MAX_ITERATIONS = 1000;
 const DEFAULT_TOLERANCE = 1e-6;
 const DEFAULT_STEP_TOLERANCE = 1e-12;
@@ -26,20 +26,25 @@ const DEFAULT_ARMIJO_PARAMETER = 1e-4;
 const DEFAULT_CONTRACTION_FACTOR = 0.5;
 const DEFAULT_LINE_SEARCH_ITERATIONS = 50;
 const MAXIMUM_ARMIJO_PARAMETER = 0.5;
+const STATE_SOLVE_ROUNDOFF_FACTOR = 100;
+const MAX_UNCHANGED_COST_STEPS = 3;
 
-type RuntimeSettings = AdjointNewtonOptions & AdjointReducedSpaceSettings & {
+type NewtonOptions = AdjointNewtonOptions & AdjointNewtonExactOptions;
+type RuntimeSettings = NewtonOptions & AdjointReducedSpaceSettings & {
   maxIterations: number;
   tolerance: number;
   stepTolerance: number;
   hessianDamping: number;
   lineSearchOptions: Required<LineSearchOptions>;
+  hessianModel: 'approximate' | 'exact';
+  algorithmName: string;
 };
 
 function requirePositive(value: number, name: string): void {
   if (!Number.isFinite(value) || value <= 0) throw new Error(`${name} must be finite and positive`);
 }
 
-function resolveSettings(options: AdjointNewtonOptions): RuntimeSettings {
+function resolveSettings(options: NewtonOptions, hessianModel: 'approximate' | 'exact'): RuntimeSettings {
   const settings = {
     ...options,
     ...resolveAdjointReducedSpaceSettings(options),
@@ -47,6 +52,8 @@ function resolveSettings(options: AdjointNewtonOptions): RuntimeSettings {
     tolerance: options.tolerance ?? DEFAULT_TOLERANCE,
     stepTolerance: options.stepTolerance ?? DEFAULT_STEP_TOLERANCE,
     hessianDamping: options.hessianDamping ?? 0,
+    hessianModel,
+    algorithmName: hessianModel === 'exact' ? 'adjointNewtonExact' : 'adjointNewton',
     lineSearchOptions: {
       initialStepSize: options.lineSearchOptions?.initialStepSize ?? DEFAULT_INITIAL_STEP,
       contractionFactor: options.lineSearchOptions?.contractionFactor ?? DEFAULT_CONTRACTION_FACTOR,
@@ -57,7 +64,7 @@ function resolveSettings(options: AdjointNewtonOptions): RuntimeSettings {
   for (const name of ['tolerance', 'constraintTolerance', 'stepTolerance', 'stepSizeP', 'stepSizeX'] as const) {
     requirePositive(settings[name], name);
   }
-  for (const name of ['hessianStepSizeP', 'hessianStepSizeX'] as const) {
+  for (const name of ['hessianStepSizeP', 'hessianStepSizeX', 'hessianStepSize'] as const) {
     if (settings[name] !== undefined) requirePositive(settings[name]!, name);
   }
   for (const name of ['regularization', 'hessianDamping'] as const) {
@@ -107,7 +114,7 @@ function evaluateReduced(
 ): Iterate {
   const cost = knownCost ?? computeCost(objective, parameters, states, objectiveKind);
   const reduced = computeReducedGradient(parameters, states, objective, constraint,
-    settings, logger, ALGORITHM_NAME, objectiveKind);
+    settings, logger, settings.algorithmName, objectiveKind);
   if (!Number.isFinite(cost) || !reduced.gradient.every(Number.isFinite) || !Number.isFinite(vectorNorm(reduced.gradient))) {
     throw new Error('adjointNewton requires finite cost and reduced gradient at accepted states');
   }
@@ -120,7 +127,7 @@ function findStep(
   settings: RuntimeSettings, logger: Logger, objectiveKind: ObjectiveKind
 ): { parameters: Float64Array; states: Float64Array; cost: number } | undefined {
   const reducedObjective = createReducedObjective(current.parameters, current.states, objective,
-    constraint, settings, logger, ALGORITHM_NAME, objectiveKind, current.reduced.partials);
+    constraint, settings, logger, settings.algorithmName, objectiveKind, current.reduced.partials);
   let cachedParameters = current.parameters;
   let cachedCost = current.cost;
   const evaluateCost = (parameters: Float64Array): number => {
@@ -147,8 +154,10 @@ function proposeStep(
   current: Iterate, objective: ConstrainedCostFn | ConstrainedResidualFn, constraint: ConstraintFn,
   settings: RuntimeSettings, logger: Logger, objectiveKind: ObjectiveKind, diagnostics: Diagnostics
 ): ReturnType<typeof findStep> {
-  const hessian = computeApproximateAdjointHessian(current.parameters, current.states,
-    (parameters, states) => computeCost(objective, parameters, states, objectiveKind), current.reduced.partials, settings);
+  const cost = (parameters: Float64Array, states: Float64Array): number => computeCost(objective, parameters, states, objectiveKind);
+  const hessian = settings.hessianModel === 'exact'
+    ? computeExactAdjointHessian(current.parameters, current.states, cost, constraint, current.reduced, settings)
+    : computeApproximateAdjointHessian(current.parameters, current.states, cost, current.reduced.partials, settings);
   diagnostics.hessianEvaluations++;
   const direction = computeSafeguardedNewtonDirection(hessian, current.reduced.gradient, settings.hessianDamping);
   diagnostics.finalHessianDamping = direction.damping;
@@ -168,19 +177,34 @@ export function adjointNewton(
   objective: ConstrainedCostFn | ConstrainedResidualFn, constraint: ConstraintFn,
   options: AdjointNewtonOptions = {}
 ): AdjointNewtonResult {
-  const settings = resolveSettings(options);
+  return runAdjointNewton(initialParameters, initialStates, objective, constraint, options, 'approximate');
+}
+
+/** Shared globalized iteration: only the Hessian model differs between the two public Newton solvers. */
+export function runAdjointNewton(
+  initialParameters: Float64Array, initialStates: Float64Array,
+  objective: ConstrainedCostFn | ConstrainedResidualFn, constraint: ConstraintFn,
+  options: NewtonOptions, hessianModel: 'approximate' | 'exact'
+): AdjointNewtonResult {
+  const settings = resolveSettings(options, hessianModel);
   if (initialParameters.length === 0 || initialStates.length === 0 ||
       !initialParameters.every(Number.isFinite) || !initialStates.every(Number.isFinite)) {
     throw new Error('adjointNewton requires nonempty finite parameter and state vectors');
   }
   const logger = new Logger(settings.logLevel, settings.verbose);
+  // WHY: A fixed loose state residual can dominate the O(||g||²) decrease near a
+  // Newton solution, especially when f_x is nonzero. Respect the user's upper bound.
+  const stateRoundoff = STATE_SOLVE_ROUNDOFF_FACTOR * Number.EPSILON * Math.max(1, vectorNorm(initialStates));
+  settings.constraintTolerance = Math.min(settings.constraintTolerance,
+    Math.max(stateRoundoff, settings.tolerance * settings.tolerance));
   const start = initializeFeasibleReducedSpace(initialParameters, initialStates, objective,
-    constraint, settings, logger, ALGORITHM_NAME);
+    constraint, settings, logger, settings.algorithmName);
   let current = evaluateReduced(start.parameters, start.states, objective, constraint, settings, logger, start.objectiveKind, start.cost);
   const diagnostics: Diagnostics = {
     hessianEvaluations: 0, dampedSteps: 0, gradientFallbackSteps: 0,
     finalHessianDamping: 0, usedLineSearch: false
   };
+  let unchangedCostSteps = 0;
   for (let iteration = 0; iteration <= settings.maxIterations; iteration++) {
     const gradientNorm = vectorNorm(current.reduced.gradient);
     const constraintNorm = vectorNorm(constraint(current.parameters, current.states));
@@ -195,13 +219,17 @@ export function adjointNewton(
     if (next === undefined) return buildResult(current, constraint, iteration, 'lineSearchFailed', diagnostics);
     const stepNorm = vectorNorm(Float64Array.from(next.parameters, (value, index) => value - current.parameters[index]));
     const relativeThreshold = settings.stepTolerance * Math.max(1, vectorNorm(current.parameters));
-    logger.debug(ALGORITHM_NAME, iteration, 'Accepted Newton-adjoint step', [
+    logger.debug(settings.algorithmName, iteration, 'Accepted Newton-adjoint step', [
       { key: 'Cost:', value: current.cost }, { key: 'Gradient norm:', value: gradientNorm },
       { key: 'Step norm:', value: stepNorm }, { key: 'Hessian damping:', value: diagnostics.finalHessianDamping }
     ]);
+    unchangedCostSteps = next.cost === current.cost ? unchangedCostSteps + 1 : 0;
     current = evaluateReduced(next.parameters, next.states, objective, constraint, settings, logger, start.objectiveKind, next.cost);
     if (stepNorm <= relativeThreshold && vectorNorm(current.reduced.gradient) > settings.tolerance) {
       return buildResult(current, constraint, iteration + 1, 'stepStagnation', diagnostics);
+    }
+    if (unchangedCostSteps >= MAX_UNCHANGED_COST_STEPS && vectorNorm(current.reduced.gradient) > settings.tolerance) {
+      return buildResult(current, constraint, iteration + 1, 'costStagnation', diagnostics);
     }
   }
   // The inclusive loop always returns at maxIterations.

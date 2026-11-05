@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Add `adjointNewtonExact` with all terms of the reduced Hessian, analytical joint Hessian/Hessian-vector callbacks, and numerical projected Lagrangian curvature. Compare accuracy, convergence traces, and cost against approximate Newton and BFGS.
+- Try unshifted state/adjoint solves first when `regularization=0`; tighten Newton feasibility accuracy and report cost stagnation without false convergence.
 - Add `adjointNewton` with the partial-Hessian approximation `f_pp + S^T f_xx S`, numerical directional curvature, damped directions, and verified Armijo search. Include analytical/numerical comparisons and omitted-curvature counterexamples; quadratic convergence is not guaranteed.
 - Keep shared regularized solves from mutating caller-owned Jacobians, and reject non-finite feasibility residuals.
 - File-header lint (`npm run lint:headers`) and CODING_RULES cleanup.
