@@ -72,6 +72,7 @@ export type FeasibleReducedSpace = {
 export type ReducedGradientEvaluation = {
   gradient: Float64Array;
   partials: ReducedPartials;
+  lambda: Float64Array;
 };
 
 export function resolveAdjointReducedSpaceSettings(
@@ -376,7 +377,8 @@ export function computeReducedGradient(
   );
   return {
     gradient: computeAdjointGradient(partials.dfdp, lambda, partials.dcdp),
-    partials
+    partials,
+    lambda
   };
 }
 

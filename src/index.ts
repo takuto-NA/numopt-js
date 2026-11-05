@@ -13,6 +13,7 @@ export { cmaEs } from './core/cmaEs.js';
 export { adjointGradientDescent } from './core/adjointGradientDescent.js';
 export { adjointBfgs } from './core/adjointBfgs.js';
 export { adjointNewton } from './core/adjointNewton.js';
+export { adjointNewtonExact } from './core/adjointNewtonExact.js';
 export { constrainedGaussNewton } from './core/constrainedGaussNewton.js';
 export { constrainedLevenbergMarquardt } from './core/constrainedLevenbergMarquardt.js';
 
@@ -52,6 +53,9 @@ export type {
   AdjointGradientDescentOptions,
   AdjointBfgsOptions,
   AdjointNewtonOptions,
+  AdjointNewtonCommonOptions,
+  AdjointNewtonExactOptions,
+  AdjointNewtonExactResult,
   AdjointNewtonResult,
   AdjointNewtonStopReason,
   ConstrainedGaussNewtonOptions,

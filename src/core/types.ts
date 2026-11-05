@@ -491,7 +491,7 @@ export type AdjointBfgsResult = AdjointGradientDescentResult;
  * Newton-adjoint with the section-12 approximation H = f_pp + S^T f_xx S.
  * Omits mixed partials and state curvature; quadratic convergence is not guaranteed.
  */
-export interface AdjointNewtonOptions extends CommonOptimizationOptions, AdjointDerivativeOptions {
+export interface AdjointNewtonOptions extends AdjointNewtonCommonOptions {
   /** Partial Hessian f_pp, holding x fixed. Size parameterCount × parameterCount. */
   d2fdp2?: (parameters: Float64Array, states: Float64Array) => Matrix;
   /** Partial Hessian f_xx, holding p fixed. Size stateCount × stateCount. */
@@ -503,6 +503,10 @@ export interface AdjointNewtonOptions extends CommonOptimizationOptions, Adjoint
    * Without d2fdx2, evaluates S^T f_xx S directly without allocating f_xx.
    */
   hessianStepSizeX?: number;
+}
+
+/** Feasibility, damping, and line-search settings shared by both Newton-adjoint models. */
+export interface AdjointNewtonCommonOptions extends CommonOptimizationOptions, AdjointDerivativeOptions {
   /** Minimum diagonal shift of the approximate Hessian. Default: 0; raised if not positive definite. */
   hessianDamping?: number;
   /** Relative step threshold for stopping with converged=false if the gradient is still large. Default: 1e-12. */
@@ -511,10 +515,32 @@ export interface AdjointNewtonOptions extends CommonOptimizationOptions, Adjoint
   lineSearchOptions?: LineSearchOptions;
 }
 
+/** Full reduced Hessian Z^T ∇²(f - lambda^T c) Z, including all mixed and state-curvature terms. */
+export interface AdjointNewtonExactOptions extends AdjointNewtonCommonOptions {
+  /**
+   * Hessian of L=f-lambda^T c in joint coordinate order [p,x], holding lambda fixed.
+   * Returns a symmetric (parameterCount+stateCount) square matrix. Not the Hessian of f alone.
+   */
+  lagrangianHessian?: (parameters: Float64Array, states: Float64Array, lambda: Float64Array) => Matrix;
+  /**
+   * Alternative to lagrangianHessian: multiply that joint Hessian by direction [dp,dx].
+   * Avoids allocating the joint Hessian. Supply at most one analytical Hessian callback.
+   */
+  lagrangianHessianVector?: (
+    parameters: Float64Array, states: Float64Array, lambda: Float64Array, direction: Float64Array
+  ) => Float64Array;
+  /** Relative step for directional second differences of the fixed-lambda Lagrangian. Default: 1e-4. */
+  hessianStepSize?: number;
+}
+
+/** Both Newton-adjoint models report the same stationarity and safeguard diagnostics. */
+export type AdjointNewtonExactResult = AdjointNewtonResult;
+
 /** Termination distinguishes stationarity from stagnation and failed trial steps. */
 export type AdjointNewtonStopReason =
   | 'gradientTolerance'
   | 'stepStagnation'
+  | 'costStagnation'
   | 'lineSearchFailed'
   | 'maxIterations';
 

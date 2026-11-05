@@ -12,6 +12,7 @@ import { finiteDiffConstraintPartialX } from './finiteDiff.js';
 const NEGATIVE_COEFFICIENT = -1.0; // Coefficient for negating vectors
 const MAX_DIAG_LOG_DIM = 40; // upper bound to log row/col diagnostics
 const MAX_REGULARIZATION_ATTEMPTS = 8; // Maximum number of regularization attempts when solving linear systems
+const UNREGULARIZED_SOLVE_ATTEMPTS = 1;
 const REGULARIZATION_BASE = 10; // Base for exponential regularization scaling
 const REGULARIZATION_INITIAL_EXPONENT = -8; // Initial exponent for regularization: 10^(-8)
 const REGULARIZATION_MAX_EXPONENT = 7; // Maximum exponent for regularization: 10^7
@@ -96,9 +97,11 @@ function computeRegularizationLambda(
   baseReg: number,
   attempt: number
 ): number {
+  // WHY: An unconditional shift biases state/adjoint solves and prevents accurate Newton convergence.
+  if (baseReg === 0 && attempt === 0) return 0;
   return baseReg > 0
     ? baseReg * Math.pow(REGULARIZATION_BASE, attempt)
-    : Math.pow(REGULARIZATION_BASE, REGULARIZATION_INITIAL_EXPONENT + attempt);
+    : Math.pow(REGULARIZATION_BASE, REGULARIZATION_INITIAL_EXPONENT + attempt - UNREGULARIZED_SOLVE_ATTEMPTS);
 }
 
 /**
@@ -113,7 +116,8 @@ function trySolveWithRegularization(
   algorithmName: string
 ): Float64Array {
   let lastError: unknown;
-  for (let attempt = 0; attempt < MAX_REGULARIZATION_ATTEMPTS; attempt++) {
+  const maximumAttempts = MAX_REGULARIZATION_ATTEMPTS + (baseReg === 0 ? UNREGULARIZED_SOLVE_ATTEMPTS : 0);
+  for (let attempt = 0; attempt < maximumAttempts; attempt++) {
     const lambda = computeRegularizationLambda(baseReg, attempt);
     // WHY: ml-matrix add mutates; retries and callers must retain the original Jacobian.
     const AwithReg = A.clone().add(Matrix.eye(A.rows, A.columns).mul(lambda));

@@ -27,7 +27,7 @@ The published package ships `dist/`, this README, and the license. Runnable tuto
 | Minimize a scalar cost | Gradient Descent, BFGS, L-BFGS | `cost(p) -> number`, `grad(p) -> Float64Array` |
 | Black-box scalar cost | CMA-ES | `cost(p) -> number` |
 | Nonlinear least squares | Gauss–Newton, Levenberg–Marquardt | `residual(p) -> Float64Array` |
-| Equality constraints \(c(p,x)=0\) | Adjoint GD, Adjoint BFGS, Adjoint Newton, Constrained GN/LM | cost/residual + `constraint(p,x)` |
+| Equality constraints \(c(p,x)=0\) | Adjoint GD/BFGS, approximate/full Newton–Adjoint, Constrained GN/LM | cost/residual + `constraint(p,x)` |
 
 Adjoint is a reduced-space solver: the constraint defines \(x(p)\), so the optimizer searches only \(p\). That is the point when there are few design variables and many implicit states. Adjoint BFGS is standard dense BFGS on that reduced cost; the gradient is the adjoint. Constrained GN/LM use the same split and are usually better for small-residual least squares. A penalty method on the concatenated \((p,x)\) does not.
 
@@ -152,6 +152,36 @@ Without these callbacks, central second differences evaluate `f_pp` and the proj
 Results additionally include `stopReason`, `hessianEvaluations`, `dampedSteps`, `gradientFallbackSteps`, and `finalHessianDamping`. `regularization` affects the state/adjoint solves; `hessianDamping` is a separate minimum shift of H. Damping does not repair a missing or nonunique x(p).
 
 Run `npm run example:adjoint-newton` and `npm run benchmark:adjoint-newton` from a clone. The benchmark compares analytical and numerical derivatives, includes two omitted-curvature counterexamples, reports warmed median/IQR timing and evaluation counts, and writes gitignored Markdown/JSON under `benchmark-results/`. See [the analysis](research/newton-adjoint.md) for the exact missing terms and convergence limits.
+
+## Full Newton–Adjoint
+
+`adjointNewtonExact` includes the mixed partials and nonlinear state-curvature terms omitted by `adjointNewton`. With `L(p,x,λ)=f(p,x)-λ^T c(p,x)`, it uses the **full reduced Hessian**
+
+\[
+H=Z^T\nabla^2_{(p,x)}L\,Z,\qquad Z=\begin{bmatrix}I\\S\end{bmatrix},\quad S=-c_x^{-1}c_p.
+\]
+
+The constraint Hessian in L accounts for the contracted second state sensitivities; no second-sensitivity tensor is stored. This is a dense reduced Newton solver with the same feasibility, damping, and Armijo safeguards as the approximate version.
+
+```js
+import { adjointNewtonExact } from 'numopt-js';
+
+const result = adjointNewtonExact(
+  new Float64Array([1]), new Float64Array([1]),
+  (p, x) => (p[0] - 1) ** 2 / 2 + x[0],
+  (p, x) => new Float64Array([x[0] - p[0] ** 2])
+);
+// Full reduced cost: 3/2 p² - p + 1/2; optimum p=1/3.
+console.log(result.finalParameters, result.stopReason);
+```
+
+Supply either `lagrangianHessian(p,x,lambda)` (a symmetric joint matrix in **[p,x] order**) or `lagrangianHessianVector(p,x,lambda,direction)` (its action on a joint vector). Both differentiate **f - lambda^T c with lambda fixed**, including all constraint curvature. A Hessian of f alone is insufficient on nonlinear constraints. The vector callback avoids allocating the joint Hessian, while the solver still assembles a dense parameter-space Hessian.
+
+Without a callback, central directional differences of L include all terms, with `hessianStepSize` defaulting to `1e-4`. “Exact” identifies the complete mathematical Hessian model; numerical differentiation and state/adjoint solves still have errors. Accurate analytical derivatives and solves can give local quadratic convergence near a regular minimum, when damping vanishes and unit steps are accepted. This does not guarantee global convergence or lower total cost than BFGS.
+
+Both Newton solvers tighten state restoration as needed relative to the gradient tolerance, subject to a roundoff scale and the user's feasibility upper bound. A repeated unchanged cost with a large gradient reports `costStagnation`, rather than cycling or reporting success. Shared state/adjoint solves now try the unshifted system first when `regularization=0`; singular solves retain regularization retries.
+
+Run `npm run example:adjoint-newton-exact` or `npm run benchmark:adjoint-newton-exact`. The comparison measures BFGS, approximate Newton and full Newton at the same independently evaluated stationarity/parameter target, with analytical/numerical derivatives and dimension scaling. Reports and local convergence traces are saved under `benchmark-results/adjoint-newton-exact.*`. See [the derivation and cost analysis](research/newton-adjoint-exact.md).
 
 ## CMA-ES
 

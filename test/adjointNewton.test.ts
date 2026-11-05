@@ -53,8 +53,7 @@ describe('adjointNewton', () => {
     const problem = createNewtonAdjointProblems()[0];
     const newton = adjointNewton(problem.parameters, problem.states, problem.cost, problem.constraint, problem.derivatives);
     const bfgs = adjointBfgs(problem.parameters, problem.states, problem.cost, problem.constraint, problem.derivatives);
-    // The shared state/adjoint solver's automatic regularization can require a correction step.
-    expect(newton.iterations).toBeLessThanOrEqual(2);
+    expect(newton.iterations).toBe(1);
     expect(newton.iterations).toBeLessThan(bfgs.iterations);
   });
 
@@ -75,7 +74,7 @@ describe('adjointNewton', () => {
     const problem = createNewtonAdjointProblems()[0];
     const result = adjointNewton(problem.parameters, problem.states, problem.residual!, problem.constraint, problem.derivatives);
     expect(result.converged).toBe(true);
-    expect(result.iterations).toBeLessThanOrEqual(2);
+    expect(result.iterations).toBe(1);
   });
 
   it('restores a mildly infeasible start and isolates callback mutations', () => {
@@ -118,6 +117,15 @@ describe('adjointNewton', () => {
     expect(result.converged).toBe(false);
     expect(result.stopReason).toBe('stepStagnation');
     expect(result.finalGradientNorm).toBeGreaterThan(1);
+  });
+
+  it('reports cost stagnation instead of cycling when objective changes round away', () => {
+    const problem = createNewtonAdjointProblems()[3];
+    const result = adjointNewton(problem.parameters, problem.states,
+      (parameters, states) => 1e16 + problem.cost(parameters, states), problem.constraint, problem.derivatives);
+    expect(result.converged).toBe(false);
+    expect(result.stopReason).toBe('costStagnation');
+    expect(result.iterations).toBeLessThan(10);
   });
 
   it('rejects undefined trial costs without reporting convergence', () => {
