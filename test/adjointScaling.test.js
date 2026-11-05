@@ -7,7 +7,7 @@ import { createScalingProblem } from '../scripts/scaling/problems.mjs';
 import { compareTiming, summarize } from '../scripts/scaling/statistics.mjs';
 
 describe('scaling benchmark problems', () => {
-  for (const family of ['easy', 'curved', 'heterogeneous']) {
+  for (const family of ['easy', 'curved', 'heterogeneous', 'ill-conditioned']) {
     it(`has feasible implicit states and the declared reduced gradient: ${family}`, () => {
       const problem = createScalingProblem({ parameters: 3, states: 7, family });
       const parameters = problem.initialParameters;
@@ -31,7 +31,8 @@ describe('scaling benchmark problems', () => {
       const projected = basis.transpose().mmul(hessian).mmul(basis);
       for (let row = 0; row < parameters.length; row++) {
         const error = parameters[row] - 1;
-        const expectedCurvature = family === 'easy' ? 1 : 3 * error * error + 2 * error + 3;
+        const weight = family === 'ill-conditioned' ? 1000 ** (row / Math.max(1, parameters.length - 1)) : 1;
+        const expectedCurvature = weight * (family === 'easy' ? 1 : 3 * error * error + 2 * error + 3);
         for (let column = 0; column < parameters.length; column++) expect(projected.get(row, column))
           .toBeCloseTo(row === column ? expectedCurvature : 0, 12);
       }

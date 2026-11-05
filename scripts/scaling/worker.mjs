@@ -4,7 +4,7 @@
  */
 
 import { performance } from 'node:perf_hooks';
-import { adjointBfgs, adjointNewton, adjointNewtonExact } from '../../dist/index.js';
+import { adjointBfgs, adjointLbfgs, adjointNewton, adjointNewtonExact } from '../../dist/index.js';
 import { createScalingProblem } from './problems.mjs';
 
 const KIBIBYTE = 1024;
@@ -12,6 +12,7 @@ const GRADIENT_TARGET = 1e-6;
 const PARAMETER_TARGET = 1e-6;
 const CONSTRAINT_TARGET = 1e-12;
 const MAX_ITERATIONS = 100;
+const ILL_CONDITIONED_MAX_ITERATIONS = 1000;
 const SOLVER_TOLERANCE_FACTOR = 0.01;
 
 export function rootMeanSquare(values) {
@@ -41,10 +42,11 @@ function runSolve(problem, config) {
     return values;
   };
   const options = {
-    maxIterations: MAX_ITERATIONS,
+    maxIterations: config.family === 'ill-conditioned' ? ILL_CONDITIONED_MAX_ITERATIONS : MAX_ITERATIONS,
     tolerance: SOLVER_TOLERANCE_FACTOR * GRADIENT_TARGET * Math.sqrt(config.parameters),
     constraintTolerance: CONSTRAINT_TARGET * Math.sqrt(config.states)
   };
+  if (config.method.startsWith('lbfgs-')) options.historySize = Number(config.method.slice('lbfgs-'.length));
   for (const name of ['dfdp', 'dfdx', 'dcdp', 'dcdx']) {
     options[name] = (parameters, states) => {
       counts.firstPartials++;
@@ -68,7 +70,8 @@ function runSolve(problem, config) {
   options.onIteration = (iteration, cost, parameters) => {
     const gradientRms = rootMeanSquare(problem.reducedGradient(parameters));
     const errorRms = parameterError(parameters, problem.reference.target);
-    if (gradientRms > GRADIENT_TARGET || errorRms > PARAMETER_TARGET) return;
+    if (!Number.isFinite(gradientRms) || !Number.isFinite(errorRms) ||
+      gradientRms > GRADIENT_TARGET || errorRms > PARAMETER_TARGET) return;
     // Analytical derivative callbacks do not perturb the latest current-state constraint evaluation.
     if (!latestConstraint || !parameters.every((value, index) => value === latestConstraint.parameters[index])) {
       throw new Error('Cannot verify the state belonging to the target iterate');
@@ -78,7 +81,8 @@ function runSolve(problem, config) {
     throw new TargetReached({ status: 'success', iterations: iteration, elapsedMs: performance.now() - start,
       gradientRms, errorRms, constraintRms, counts: { ...counts } });
   };
-  const solver = config.method === 'bfgs' ? adjointBfgs : config.method.startsWith('approximate') ? adjointNewton : adjointNewtonExact;
+  const solver = config.method.startsWith('lbfgs') ? adjointLbfgs : config.method === 'bfgs' ? adjointBfgs :
+    config.method.startsWith('approximate') ? adjointNewton : adjointNewtonExact;
   try {
     const result = solver(problem.initialParameters, problem.initialStates, objective, constraint, options);
     const gradientRms = rootMeanSquare(problem.reducedGradient(result.finalParameters));
@@ -94,7 +98,7 @@ function runSolve(problem, config) {
 }
 
 export function runWorker(config) {
-  if (!['bfgs', 'approximate', 'full-dense', 'full-hvp', 'approximate-fd', 'full-fd'].includes(config.method)) throw new Error('Unknown method');
+  if (!['bfgs', 'lbfgs', 'lbfgs-5', 'lbfgs-20', 'approximate', 'full-dense', 'full-hvp', 'approximate-fd', 'full-fd'].includes(config.method)) throw new Error('Unknown method');
   if (!['timing', 'memory'].includes(config.kind)) throw new Error('Unknown worker kind');
   global.gc?.();
   const baseline = { memory: process.memoryUsage(), peakRssBytes: process.resourceUsage().maxRSS * KIBIBYTE };

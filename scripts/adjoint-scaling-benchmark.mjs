@@ -17,7 +17,7 @@ const DEFAULT_CHILD_TIMEOUT_MS = 240000;
 const CHILD_HEAP_LIMIT_MIB = 1024;
 const BYTES_PER_MIB = 1024 * 1024;
 const METHODS = ['bfgs', 'approximate', 'full-dense', 'full-hvp'];
-const AVAILABLE_METHODS = [...METHODS, 'approximate-fd', 'full-fd'];
+const AVAILABLE_METHODS = [...METHODS, 'approximate-fd', 'full-fd', 'lbfgs', 'lbfgs-5', 'lbfgs-20'];
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const WORKER = path.join(ROOT, 'scripts', 'scaling', 'worker.mjs');
 
@@ -41,7 +41,7 @@ if (!Number.isInteger(memoryRepeats) || memoryRepeats < 0) throw new Error('memo
 const name = option('name', `adjoint-scaling-${profile}`);
 if (!/^[a-z0-9-]+$/.test(name)) throw new Error('Invalid report name');
 const families = option('families', 'easy,curved').split(',');
-if (families.some(family => !['easy', 'curved', 'heterogeneous'].includes(family))) throw new Error('Invalid family');
+if (families.some(family => !['easy', 'curved', 'heterogeneous', 'ill-conditioned'].includes(family))) throw new Error('Invalid family');
 const selectedMethods = option('methods', METHODS.join(',')).split(',');
 if (selectedMethods.some(method => !AVAILABLE_METHODS.includes(method))) throw new Error('Invalid method');
 
@@ -131,9 +131,11 @@ const lines = ['# Newton–adjoint dimension scaling', '',
   'A benchmark callback terminates at true reduced gradient RMS <= 1e-6, parameter error RMS <= 1e-6 and actual state residual RMS <= 1e-12.',
   'First derivatives are analytical. Curvature is analytical except for methods ending in -fd (central second differences only).',
   'Full-dense, full-hvp and full-fd use the same complete mathematical Hessian model; HVP avoids the joint Hessian allocation.',
+  'lbfgs stores 10 correction pairs; lbfgs-5 and lbfgs-20 select 5 and 20. Only the quasi-Newton update is O(historySize * m); state solves remain dense.',
   'Both families have a well-conditioned coupled lower-bidiagonal state Jacobian, represented by dense ml-matrix matrices.',
   'easy: reduced cost 1/2 ||p-1||². curved: sum[e^4/4 + e^3/3 + 3e²/2], e=p-1, with persistent state curvature.',
   'heterogeneous: the curved objective with distinct initial component values, rather than a replicated scalar trajectory.',
+  'ill-conditioned: heterogeneous starts and logarithmically spaced parameter weights 1..1000 (reduced Hessian condition ratio 1000 at the solution); iteration limit 1000 instead of 100.',
   `Per-child wall limit ${childTimeoutMs / 1000}s and V8 old-heap cap ${CHILD_HEAP_LIMIT_MIB} MiB; failures/timeouts are not extrapolated timings.`, '',
   '| Family | m | n | Method | Status | Iterations | Time ms [IQR] | Peak RSS MiB [IQR] | Time / BFGS | Timing intervals vs BFGS |',
   '|---|---:|---:|---|---|---:|---:|---:|---:|---|'];

@@ -467,6 +467,24 @@ export interface AdjointGradientDescentOptions extends GradientDescentOptions, A
  */
 export interface AdjointBfgsOptions extends BfgsOptions, AdjointDerivativeOptions {}
 
+/** Reduced-space L-BFGS with at most historySize correction pairs (default 10). */
+export interface AdjointLbfgsOptions extends LbfgsOptions, AdjointDerivativeOptions {}
+
+export type AdjointLbfgsStopReason =
+  | 'gradientTolerance'
+  | 'stepStagnation'
+  | 'lineSearchFailure'
+  | 'stateRestorationFailure'
+  | 'nonFiniteEvaluation'
+  | 'maxIterations';
+
+/** Convergence requires both reduced-gradient and state-feasibility tolerances. */
+export interface AdjointLbfgsResult extends AdjointGradientDescentResult {
+  stopReason: AdjointLbfgsStopReason;
+  /** Maximum number of correction pairs retained during the solve. */
+  maxHistoryPairs: number;
+}
+
 /**
  * Result returned by adjoint gradient descent algorithm.
  */
