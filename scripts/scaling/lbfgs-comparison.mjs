@@ -12,7 +12,11 @@ const profiles = [
   { name: 'adjoint-lbfgs-heterogeneous', families: 'heterogeneous', methods: METHODS,
     sizes: '128x128,512x128,256x512' },
   { name: 'adjoint-lbfgs-conditioned', families: 'ill-conditioned',
-    methods: `${METHODS},lbfgs-5,lbfgs-20`, sizes: '32x64,128x128' }
+    methods: `${METHODS},lbfgs-5,lbfgs-20`, sizes: '32x64,128x128' },
+  { name: 'adjoint-lbfgs-refined', families: 'curved', methods: 'lbfgs,full-dense,full-hvp',
+    sizes: '48x128,64x128,80x128,96x128,112x128,128x128', warmups: 8, repeats: 7, 'memory-repeats': 0 },
+  { name: 'adjoint-lbfgs-conditioned-bfgs-refined', families: 'ill-conditioned', methods: 'bfgs',
+    sizes: '128x128', 'solver-tolerance-factor': 1e-6 }
 ];
 
 function run(profile) {
@@ -22,8 +26,13 @@ function run(profile) {
       cwd: ROOT, windowsHide: true, stdio: 'inherit'
     });
     child.once('error', reject);
-    child.once('close', code => code === 0 ? resolve() : reject(new Error(`${profile.name} exited ${code}`)));
+    child.once('close', code => resolve(code));
   });
 }
 
-for (const profile of profiles) await run(profile);
+const unsuccessful = [];
+for (const profile of profiles) if (await run(profile) !== 0) unsuccessful.push(profile.name);
+if (unsuccessful.length) {
+  console.error(`Retained incomplete results: ${unsuccessful.join(', ')}. Inspect their reports.`);
+  process.exitCode = 1;
+}
