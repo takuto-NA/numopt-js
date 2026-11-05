@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Add `adjointNewton` with the partial-Hessian approximation `f_pp + S^T f_xx S`, numerical directional curvature, damped directions, and verified Armijo search. Include analytical/numerical comparisons and omitted-curvature counterexamples; quadratic convergence is not guaranteed.
+- Keep shared regularized solves from mutating caller-owned Jacobians, and reject non-finite feasibility residuals.
 - File-header lint (`npm run lint:headers`) and CODING_RULES cleanup.
 - Typed `format*` / `print*` helpers are deprecated; use `formatResult` / `printResult`.
 - LM / Constrained LM treat `tolerance` as a fallback when `tolGradient` / `tolStep` / `tolResidual` are omitted.

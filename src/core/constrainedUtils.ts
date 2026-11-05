@@ -115,7 +115,8 @@ function trySolveWithRegularization(
   let lastError: unknown;
   for (let attempt = 0; attempt < MAX_REGULARIZATION_ATTEMPTS; attempt++) {
     const lambda = computeRegularizationLambda(baseReg, attempt);
-    const AwithReg = A.add(Matrix.eye(A.rows, A.columns).mul(lambda));
+    // WHY: ml-matrix add mutates; retries and callers must retain the original Jacobian.
+    const AwithReg = A.clone().add(Matrix.eye(A.rows, A.columns).mul(lambda));
     try {
       const chol = new CholeskyDecomposition(AwithReg);
       if (chol.isPositiveDefinite()) {
@@ -418,6 +419,7 @@ export function projectStatesToConstraints(
   for (let i = 0; i < maxIterations; i++) {
     const constraint = constraintFunction(parameters, projectedStates);
     const constraintNorm = vectorNorm(constraint);
+    if (!Number.isFinite(constraintNorm)) break;
     if (constraintNorm <= constraintTolerance) {
       break;
     }

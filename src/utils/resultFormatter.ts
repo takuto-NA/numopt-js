@@ -8,6 +8,7 @@ import type {
   LevenbergMarquardtResult,
   CmaEsResult,
   AdjointGradientDescentResult,
+  AdjointNewtonResult,
   ConstrainedGaussNewtonResult,
   ConstrainedLevenbergMarquardtResult
 } from '../core/types.js';
@@ -460,6 +461,10 @@ export function formatAdjointGradientDescentResult(
   return lines.join('\n');
 }
 
+function isAdjointNewtonResult(result: OptimizationResult): result is AdjointNewtonResult {
+  return 'hessianEvaluations' in result && 'dampedSteps' in result && 'finalStates' in result;
+}
+
 /**
  * Type-safe overloaded function for formatting any optimization result.
  */
@@ -503,6 +508,15 @@ export function formatResult(
   options?: ResultFormatterOptions
 ): string {
   // Type guards to determine which formatter to use
+  if (isAdjointNewtonResult(result)) {
+    const newtonResult = result;
+    return [formatAdjointGradientDescentResult(newtonResult, options),
+      `  Stop reason: ${newtonResult.stopReason}`,
+      `  Hessian evaluations: ${newtonResult.hessianEvaluations}`,
+      `  Damped steps: ${newtonResult.dampedSteps}`,
+      `  Gradient fallback steps: ${newtonResult.gradientFallbackSteps}`,
+      `  Final Hessian damping: ${newtonResult.finalHessianDamping}`].join('\n');
+  }
   if ('finalStates' in result && 'finalLambda' in result) {
     return formatConstrainedLevenbergMarquardtResult(result as ConstrainedLevenbergMarquardtResult, options);
   }

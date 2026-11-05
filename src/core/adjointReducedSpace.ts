@@ -199,7 +199,7 @@ export function projectAndVerify(
     }
   );
   const constraintNorm = vectorNorm(constraintFunction(parameters, projectedStates));
-  if (constraintNorm > settings.constraintTolerance) {
+  if (!Number.isFinite(constraintNorm) || constraintNorm > settings.constraintTolerance) {
     return { projectedStates: undefined, constraintNorm };
   }
   return { projectedStates, constraintNorm };
@@ -452,7 +452,11 @@ export function createReducedObjective(
   algorithmName: string,
   objectiveKind: ObjectiveKind,
   predictorPartials: ConstraintPartials
-): { evaluateCost: CostFn; evaluateGradient: GradientFn } {
+): {
+  evaluateCost: CostFn;
+  evaluateGradient: GradientFn;
+  restoreStates: (parameters: Float64Array) => Float64Array | undefined;
+} {
   let cachedParameters: Float64Array | undefined;
   let cachedStates: Float64Array | undefined;
 
@@ -507,5 +511,5 @@ export function createReducedObjective(
     ).gradient;
   }
 
-  return { evaluateCost, evaluateGradient };
+  return { evaluateCost, evaluateGradient, restoreStates: restoreTrial };
 }

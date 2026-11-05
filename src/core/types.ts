@@ -488,6 +488,48 @@ export interface AdjointGradientDescentResult extends GradientDescentResult {
 export type AdjointBfgsResult = AdjointGradientDescentResult;
 
 /**
+ * Newton-adjoint with the section-12 approximation H = f_pp + S^T f_xx S.
+ * Omits mixed partials and state curvature; quadratic convergence is not guaranteed.
+ */
+export interface AdjointNewtonOptions extends CommonOptimizationOptions, AdjointDerivativeOptions {
+  /** Partial Hessian f_pp, holding x fixed. Size parameterCount × parameterCount. */
+  d2fdp2?: (parameters: Float64Array, states: Float64Array) => Matrix;
+  /** Partial Hessian f_xx, holding p fixed. Size stateCount × stateCount. */
+  d2fdx2?: (parameters: Float64Array, states: Float64Array) => Matrix;
+  /** Relative central-second-difference step for f_pp. Default: 1e-4. */
+  hessianStepSizeP?: number;
+  /**
+   * Relative step for state directional second differences. Default: 1e-4.
+   * Without d2fdx2, evaluates S^T f_xx S directly without allocating f_xx.
+   */
+  hessianStepSizeX?: number;
+  /** Minimum diagonal shift of the approximate Hessian. Default: 0; raised if not positive definite. */
+  hessianDamping?: number;
+  /** Relative step threshold for stopping with converged=false if the gradient is still large. Default: 1e-12. */
+  stepTolerance?: number;
+  /** Armijo backtracking on restored states. Default initial step: 1. */
+  lineSearchOptions?: LineSearchOptions;
+}
+
+/** Termination distinguishes stationarity from stagnation and failed trial steps. */
+export type AdjointNewtonStopReason =
+  | 'gradientTolerance'
+  | 'stepStagnation'
+  | 'lineSearchFailed'
+  | 'maxIterations';
+
+/** Newton-adjoint result with counts of model construction and direction safeguards. */
+export interface AdjointNewtonResult extends AdjointGradientDescentResult {
+  finalGradientNorm: number;
+  finalConstraintNorm: number;
+  stopReason: AdjointNewtonStopReason;
+  hessianEvaluations: number;
+  dampedSteps: number;
+  gradientFallbackSteps: number;
+  finalHessianDamping: number;
+}
+
+/**
  * Options for constrained Gauss-Newton method.
  */
 export interface ConstrainedGaussNewtonOptions extends CommonOptimizationOptions {
