@@ -27,7 +27,7 @@ The published package ships `dist/`, this README, and the license. Runnable tuto
 | Minimize a scalar cost | Gradient Descent, BFGS, L-BFGS | `cost(p) -> number`, `grad(p) -> Float64Array` |
 | Black-box scalar cost | CMA-ES | `cost(p) -> number` |
 | Nonlinear least squares | Gauss–Newton, Levenberg–Marquardt | `residual(p) -> Float64Array` |
-| Equality constraints \(c(p,x)=0\) | Adjoint GD, Adjoint BFGS, Constrained GN/LM | cost/residual + `constraint(p,x)` |
+| Equality constraints \(c(p,x)=0\) | Adjoint GD, Adjoint BFGS, Adjoint Newton, Constrained GN/LM | cost/residual + `constraint(p,x)` |
 
 Adjoint is a reduced-space solver: the constraint defines \(x(p)\), so the optimizer searches only \(p\). That is the point when there are few design variables and many implicit states. Adjoint BFGS is standard dense BFGS on that reduced cost; the gradient is the adjoint. Constrained GN/LM use the same split and are usually better for small-residual least squares. A penalty method on the concatenated \((p,x)\) does not.
 
@@ -120,6 +120,39 @@ const result = adjointBfgs(new Float64Array([2]), new Float64Array([-1]), cost, 
 console.log(result.finalParameters, result.finalStates, result.finalConstraintNorm);
 ```
 
+## Newton–Adjoint with an approximate Hessian
+
+`adjointNewton` implements the approximation in [section 12 of “Newton's method and the Adjoint method”](https://qiita.com/naturemon/items/df0242e8a2e5814503f5):
+
+\[
+S=-c_x^{-1}c_p,\qquad H=f_{pp}+S^T f_{xx}S,\qquad H\Delta p=-\nabla\tilde f.
+\]
+
+It uses the adjoint for the reduced gradient, diagonal damping when the approximate Hessian is not positive definite, and Armijo backtracking starting at a unit step. Every accepted point has restored feasible states. Small steps with a large gradient stop with `converged: false`.
+
+```js
+import { adjointNewton } from 'numopt-js';
+
+const result = adjointNewton(
+  new Float64Array([2]), new Float64Array([-1]),
+  (p, x) => p[0] ** 2 + x[0] ** 2,
+  (p, x) => new Float64Array([p[0] + x[0] - 1]),
+  { tolerance: 1e-6 }
+);
+// p ≈ 0.5, x ≈ 0.5
+console.log(result.stopReason, result.finalGradientNorm, result.finalConstraintNorm);
+```
+
+Optional `d2fdp2(p,x)` and `d2fdx2(p,x)` return symmetric `ml-matrix` matrices of sizes parameterCount × parameterCount and stateCount × stateCount. They are **partial** Hessians of the scalar cost, holding the other argument fixed. Residual input is supported with cost `f = 1/2 ||r||²`; Hessian callbacks still differentiate that scalar cost.
+
+Without these callbacks, central second differences evaluate `f_pp` and the projected state curvature `S^T f_xx S` directly. This takes O(parameterCount²) objective samples per model, without constructing a dense state Hessian. `hessianStepSizeP` / `hessianStepSizeX` default to relative steps of `1e-4`; choose analytical blocks when finite differences suffer from noise, cancellation, or domain boundaries. Sensitivities use one dense state-Jacobian factorization with multiple right-hand sides.
+
+**This is an incomplete reduced Hessian.** It omits mixed p–x partials and curvature of the state solution x(p). It can outperform BFGS when those terms vanish or are small, but can converge only linearly or be substantially slower when they matter. It does not guarantee quadratic convergence. Dense sensitivity solves also add work relative to BFGS, especially with many parameters. Prefer `adjointBfgs` for a general scalar objective and Constrained GN/LM for small-residual least squares unless a comparison supports this model.
+
+Results additionally include `stopReason`, `hessianEvaluations`, `dampedSteps`, `gradientFallbackSteps`, and `finalHessianDamping`. `regularization` affects the state/adjoint solves; `hessianDamping` is a separate minimum shift of H. Damping does not repair a missing or nonunique x(p).
+
+Run `npm run example:adjoint-newton` and `npm run benchmark:adjoint-newton` from a clone. The benchmark compares analytical and numerical derivatives, includes two omitted-curvature counterexamples, reports warmed median/IQR timing and evaluation counts, and writes gitignored Markdown/JSON under `benchmark-results/`. See [the analysis](research/newton-adjoint.md) for the exact missing terms and convergence limits.
+
 ## CMA-ES
 
 ```js
@@ -180,6 +213,7 @@ Full signatures and options: [TypeDoc API reference](https://takuto-na.github.io
 - **LM / Constrained LM**: `tolGradient`, `tolStep`, `tolResidual` (or `tolerance` as a fallback when those are omitted)
 - **CMA-ES**: `functionTolerance`, `parameterTolerance`, `targetCost`, `maxFunctionEvaluations`
 - **Adjoint (ill-conditioned ∂c/∂x)**: `regularization`
+- **Adjoint Newton**: `tolerance` (reduced gradient), `constraintTolerance`, `stepTolerance` (stagnation); `hessianDamping` for the curvature model
 
 Result printing helpers: `printResult` / `formatResult` — see TypeDoc. Typed `print*` / `format*` variants are deprecated.
 
