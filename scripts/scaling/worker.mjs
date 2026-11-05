@@ -43,7 +43,7 @@ function runSolve(problem, config) {
   };
   const options = {
     maxIterations: config.family === 'ill-conditioned' ? ILL_CONDITIONED_MAX_ITERATIONS : MAX_ITERATIONS,
-    tolerance: SOLVER_TOLERANCE_FACTOR * GRADIENT_TARGET * Math.sqrt(config.parameters),
+    tolerance: (config.solverToleranceFactor ?? SOLVER_TOLERANCE_FACTOR) * GRADIENT_TARGET * Math.sqrt(config.parameters),
     constraintTolerance: CONSTRAINT_TARGET * Math.sqrt(config.states)
   };
   if (config.method.startsWith('lbfgs-')) options.historySize = Number(config.method.slice('lbfgs-'.length));
@@ -90,7 +90,7 @@ function runSolve(problem, config) {
     const constraintRms = rootMeanSquare(problem.constraint(result.finalParameters, result.finalStates));
     return { status: gradientRms <= GRADIENT_TARGET && errorRms <= PARAMETER_TARGET && constraintRms <= CONSTRAINT_TARGET ?
       'success' : 'target-missed', iterations: result.iterations, elapsedMs: performance.now() - start,
-      gradientRms, errorRms, constraintRms, counts, solverStopReason: result.stopReason };
+      gradientRms, errorRms, constraintRms, counts, solverStopReason: result.stopReason, solverConverged: result.converged };
   } catch (error) {
     if (error instanceof TargetReached) return error.point;
     return { status: 'error', message: String(error), elapsedMs: performance.now() - start, counts };

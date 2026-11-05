@@ -169,7 +169,7 @@ const result = adjointLbfgs(
 console.log(result.finalParameters, result.stopReason); // approximately [2], gradientTolerance
 ```
 
-With `q=historySize` (default 10), direction computation and correction storage cost O(q × parameterCount). No dense inverse Hessian is allocated. Dense state Jacobians and state/adjoint solves still contribute O(stateCount²) storage and O(stateCount³) factorization work. Increasing `q` can improve convergence on difficult problems, but does not guarantee fewer iterations or full BFGS convergence rates.
+With `q=historySize` (default 10), direction computation and correction storage cost O(q × parameterCount). No dense inverse Hessian is allocated. Dense state Jacobians and state/adjoint solves still contribute O(stateCount²) storage and O(stateCount³) factorization work; the constraint parameter Jacobian also uses O(stateCount × parameterCount) storage. Increasing `q` can improve convergence on difficult problems, but does not guarantee fewer iterations or full BFGS convergence rates.
 
 The solver tries a unit step in Strong Wolfe search, checks actual Armijo decrease before acceptance, clears unusable curvature history, and reports `converged=true` only when both gradient and feasibility tolerances pass. `stopReason` distinguishes `gradientTolerance`, `stepStagnation`, `lineSearchFailure`, `stateRestorationFailure`, `nonFiniteEvaluation` and `maxIterations`; `maxHistoryPairs` reports the largest retained history. Accepted gradients and restored states are reused to avoid redundant solves. See [the comparison protocol and measurements](research/adjoint-lbfgs.md).
 

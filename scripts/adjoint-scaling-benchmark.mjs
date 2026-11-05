@@ -44,6 +44,11 @@ const families = option('families', 'easy,curved').split(',');
 if (families.some(family => !['easy', 'curved', 'heterogeneous', 'ill-conditioned'].includes(family))) throw new Error('Invalid family');
 const selectedMethods = option('methods', METHODS.join(',')).split(',');
 if (selectedMethods.some(method => !AVAILABLE_METHODS.includes(method))) throw new Error('Invalid method');
+const explicitToleranceFactor = option('solver-tolerance-factor', undefined);
+const solverToleranceFactor = explicitToleranceFactor === undefined ? undefined : Number(explicitToleranceFactor);
+if (solverToleranceFactor !== undefined && (!Number.isFinite(solverToleranceFactor) || solverToleranceFactor <= 0)) {
+  throw new Error('solver-tolerance-factor must be finite and positive');
+}
 
 function grid() {
   const explicit = option('sizes', '');
@@ -85,7 +90,7 @@ fs.mkdirSync(outputDirectory, { recursive: true });
 const jsonPath = path.join(outputDirectory, `${name}.json`);
 const protocol = { profile, repeats, memoryRepeats, warmups, timeoutMs: childTimeoutMs,
   childHeapLimitMiB: CHILD_HEAP_LIMIT_MIB, families, methods: selectedMethods, sizes: grid(),
-  gradientRmsTarget: 1e-6, parameterRmsTarget: 1e-6, constraintRmsTarget: 1e-12 };
+  gradientRmsTarget: 1e-6, parameterRmsTarget: 1e-6, constraintRmsTarget: 1e-12, solverToleranceFactor };
 const environment = { timestamp: new Date().toISOString(), node: process.version, platform: process.platform,
   architecture: process.arch, cpu: os.cpus()[0]?.model, totalMemoryBytes: os.totalmem(),
   commit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: ROOT, encoding: 'utf8' }).trim() };
@@ -101,7 +106,7 @@ for (const family of families) {
     const methods = [...selectedMethods.slice(rotation), ...selectedMethods.slice(0, rotation)];
     for (const method of methods) {
       if (rows.some(row => row.family === family && row.parameters === size.parameters && row.states === size.states && row.method === method)) continue;
-      const config = { ...size, family, method, repeats, warmups };
+      const config = { ...size, family, method, repeats, warmups, solverToleranceFactor };
       const timing = await child({ ...config, kind: 'timing' });
       const memories = [];
       if (timing.trials?.every(trial => trial.status === 'success')) {
@@ -129,6 +134,7 @@ const lines = ['# Newton–adjoint dimension scaling', '',
   'Peak RSS is the entire process, including Node, imports, input matrices, JIT and solver allocations. It is not heapUsed or an allocation estimate.',
   'Time excludes Node startup and problem setup; memory includes them. Raw files retain pre-input and post-input RSS snapshots.',
   'A benchmark callback terminates at true reduced gradient RMS <= 1e-6, parameter error RMS <= 1e-6 and actual state residual RMS <= 1e-12.',
+  `Solver stopping tolerance = ${solverToleranceFactor ?? 0.01} * 1e-6 * sqrt(m), while the common target remains unchanged.`,
   'First derivatives are analytical. Curvature is analytical except for methods ending in -fd (central second differences only).',
   'Full-dense, full-hvp and full-fd use the same complete mathematical Hessian model; HVP avoids the joint Hessian allocation.',
   'lbfgs stores 10 correction pairs; lbfgs-5 and lbfgs-20 select 5 and 20. Only the quasi-Newton update is O(historySize * m); state solves remain dense.',
