@@ -183,6 +183,14 @@ Both Newton solvers tighten state restoration as needed relative to the gradient
 
 Run `npm run example:adjoint-newton-exact` or `npm run benchmark:adjoint-newton-exact`. The comparison measures BFGS, approximate Newton and full Newton at the same independently evaluated stationarity/parameter target, with analytical/numerical derivatives and dimension scaling. Reports and local convergence traces are saved under `benchmark-results/adjoint-newton-exact.*`. See [the derivation and cost analysis](research/newton-adjoint-exact.md).
 
+## Dimension scaling and peak memory
+
+Run `npm run benchmark:adjoint-scaling` to compare BFGS, approximate Newton, full Newton with a dense joint Hessian, and full Newton with a Hessian-vector callback. The sweep varies design and state counts separately, up to 512 designs and 1024 states on selected slices. It measures time to a common independently verified RMS accuracy and cold-process peak RSS, rather than final heap size. Solvers and measured processes run serially.
+
+`npm run benchmark:adjoint-scaling:followups` adds longer-budget reruns, crossover refinements, numerical second curvature (analytical first derivatives), and heterogeneous initial values. Then run `node scripts/summarize-adjoint-scaling.mjs` for a combined report under gitignored `benchmark-results/`. Optional PNG/SVG plots use `scripts/plot-adjoint-scaling.py` with Python/Matplotlib.
+
+The observed crossover depends on convergence difficulty and the Hessian representation. Peak RSS includes the runtime, cached model inputs, temporary matrices, and GC behavior. The current BFGS update also uses O(parameterCount³) dense matrix products; these measurements do not describe a rank-two-optimized BFGS or a sparse PDE solver. See [the protocol and interpretation](research/adjoint-scaling.md).
+
 ## CMA-ES
 
 ```js

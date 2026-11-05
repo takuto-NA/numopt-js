@@ -51,6 +51,8 @@
     "benchmark:paper": "tsx scripts/paper-benchmark.ts",
     "benchmark:adjoint-newton": "tsx scripts/adjoint-newton-benchmark.ts",
     "benchmark:adjoint-newton-exact": "tsx scripts/adjoint-newton-exact-benchmark.ts",
+    "benchmark:adjoint-scaling": "npm run build && node scripts/adjoint-scaling-benchmark.mjs",
+    "benchmark:adjoint-scaling:followups": "node scripts/scaling/followups.mjs",
     "docs": "typedoc"
   },
   "keywords": [

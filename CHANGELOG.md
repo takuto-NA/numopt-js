@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- Add process-isolated Newton–Adjoint scaling experiments with common accuracy targets, warm timings, cold OS peak RSS, crossover refinements, and reproducible plots. Include analytical/action/numerical-curvature paths and heterogeneous starts; solver algorithms are unchanged.
 - Add `adjointNewtonExact` with all terms of the reduced Hessian, analytical joint Hessian/Hessian-vector callbacks, and numerical projected Lagrangian curvature. Compare accuracy, convergence traces, and cost against approximate Newton and BFGS.
 - Try unshifted state/adjoint solves first when `regularization=0`; tighten Newton feasibility accuracy and report cost stagnation without false convergence.
 - Add `adjointNewton` with the partial-Hessian approximation `f_pp + S^T f_xx S`, numerical directional curvature, damped directions, and verified Armijo search. Include analytical/numerical comparisons and omitted-curvature counterexamples; quadratic convergence is not guaranteed.
