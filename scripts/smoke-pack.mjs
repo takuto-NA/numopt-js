@@ -62,6 +62,7 @@ if (typeof m.adjointNewton !== 'function') {
 if (typeof m.adjointNewtonExact !== 'function') {
   throw new Error('CJS: adjointNewtonExact export missing');
 }
+if (typeof m.adjointLbfgs !== 'function') throw new Error('CJS: adjointLbfgs export missing');
 console.log('CJS: ok');
 `.trimStart()
   );
@@ -71,7 +72,7 @@ console.log('CJS: ok');
   writeFile(
     path.join(tmpDir, 'esm.mjs'),
     `
-import { gradientDescent, adjointNewton, adjointNewtonExact } from 'numopt-js';
+import { gradientDescent, adjointNewton, adjointNewtonExact, adjointLbfgs } from 'numopt-js';
 if (typeof gradientDescent !== 'function') {
   throw new Error('ESM: gradientDescent export missing');
 }
@@ -81,6 +82,7 @@ if (typeof adjointNewton !== 'function') {
 if (typeof adjointNewtonExact !== 'function') {
   throw new Error('ESM: adjointNewtonExact export missing');
 }
+if (typeof adjointLbfgs !== 'function') throw new Error('ESM: adjointLbfgs export missing');
 console.log('ESM: ok');
 `.trimStart()
   );
@@ -128,7 +130,7 @@ const require = createRequire(import.meta.url);
 const entryPath = require.resolve('numopt-js');
 const pkgDir = path.resolve(path.dirname(entryPath), '..');
 const browserBundleUrl = pathToFileURL(path.join(pkgDir, 'dist/index.browser.js')).href;
-const { gradientDescent, adjointNewton, adjointNewtonExact } = await import(browserBundleUrl);
+const { gradientDescent, adjointNewton, adjointNewtonExact, adjointLbfgs } = await import(browserBundleUrl);
 
 const cost = (parameters) => parameters[0] * parameters[0] + parameters[1] * parameters[1];
 const gradient = (parameters) => new Float64Array([2 * parameters[0], 2 * parameters[1]]);
@@ -159,6 +161,14 @@ if (!fullResult.converged || Math.abs(fullResult.finalParameters[0] - 1 / 3) > 1
   throw new Error('BROWSER: adjointNewtonExact missed nonlinear state curvature');
 }
 console.log('BROWSER: adjointNewtonExact ok');
+const limitedResult = adjointLbfgs(new Float64Array([1.4]), new Float64Array([-10]),
+  (parameters, states) => (states[0] - 4) ** 2 + 0.1 * (parameters[0] - 2) ** 2,
+  (parameters, states) => new Float64Array([states[0] - parameters[0] ** 2]),
+  { historySize: 5, tolerance: 1e-7, constraintTolerance: 1e-12 });
+if (!limitedResult.converged || Math.abs(limitedResult.finalParameters[0] - 2) > 1e-6) {
+  throw new Error('BROWSER: adjointLbfgs did not recover the nonlinear feasible minimum');
+}
+console.log('BROWSER: adjointLbfgs ok');
 `.trimStart()
   );
   run('node browser-smoke.mjs', tmpDir);

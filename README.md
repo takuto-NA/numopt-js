@@ -27,7 +27,7 @@ The published package ships `dist/`, this README, and the license. Runnable tuto
 | Minimize a scalar cost | Gradient Descent, BFGS, L-BFGS | `cost(p) -> number`, `grad(p) -> Float64Array` |
 | Black-box scalar cost | CMA-ES | `cost(p) -> number` |
 | Nonlinear least squares | Gauss–Newton, Levenberg–Marquardt | `residual(p) -> Float64Array` |
-| Equality constraints \(c(p,x)=0\) | Adjoint GD/BFGS, approximate/full Newton–Adjoint, Constrained GN/LM | cost/residual + `constraint(p,x)` |
+| Equality constraints \(c(p,x)=0\) | Adjoint GD/BFGS/L-BFGS, approximate/full Newton–Adjoint, Constrained GN/LM | cost/residual + `constraint(p,x)` |
 
 Adjoint is a reduced-space solver: the constraint defines \(x(p)\), so the optimizer searches only \(p\). That is the point when there are few design variables and many implicit states. Adjoint BFGS is standard dense BFGS on that reduced cost; the gradient is the adjoint. Constrained GN/LM use the same split and are usually better for small-residual least squares. A penalty method on the concatenated \((p,x)\) does not.
 
@@ -152,6 +152,26 @@ Without these callbacks, central second differences evaluate `f_pp` and the proj
 Results additionally include `stopReason`, `hessianEvaluations`, `dampedSteps`, `gradientFallbackSteps`, and `finalHessianDamping`. `regularization` affects the state/adjoint solves; `hessianDamping` is a separate minimum shift of H. Damping does not repair a missing or nonunique x(p).
 
 Run `npm run example:adjoint-newton` and `npm run benchmark:adjoint-newton` from a clone. The benchmark compares analytical and numerical derivatives, includes two omitted-curvature counterexamples, reports warmed median/IQR timing and evaluation counts, and writes gitignored Markdown/JSON under `benchmark-results/`. See [the analysis](research/newton-adjoint.md) for the exact missing terms and convergence limits.
+
+## Adjoint L-BFGS
+
+`adjointLbfgs` applies L-BFGS to the reduced objective `f(p,x(p))`, using adjoint gradients and feasible state restoration. It accepts the same analytical first-partial callbacks as `adjointBfgs`; omitted callbacks use numerical differentiation.
+
+```js
+import { adjointLbfgs } from 'numopt-js';
+
+const result = adjointLbfgs(
+  new Float64Array([1.4]), new Float64Array([-10]),
+  (p, x) => (x[0] - 4) ** 2 + 0.1 * (p[0] - 2) ** 2,
+  (p, x) => new Float64Array([x[0] - p[0] ** 2]),
+  { historySize: 10, tolerance: 1e-7, constraintTolerance: 1e-12 }
+);
+console.log(result.finalParameters, result.stopReason); // approximately [2], gradientTolerance
+```
+
+With `q=historySize` (default 10), direction computation and correction storage cost O(q × parameterCount). No dense inverse Hessian is allocated. Dense state Jacobians and state/adjoint solves still contribute O(stateCount²) storage and O(stateCount³) factorization work. Increasing `q` can improve convergence on difficult problems, but does not guarantee fewer iterations or full BFGS convergence rates.
+
+The solver tries a unit step in Strong Wolfe search, checks actual Armijo decrease before acceptance, clears unusable curvature history, and reports `converged=true` only when both gradient and feasibility tolerances pass. `stopReason` distinguishes `gradientTolerance`, `stepStagnation`, `lineSearchFailure`, `stateRestorationFailure`, `nonFiniteEvaluation` and `maxIterations`; `maxHistoryPairs` reports the largest retained history. Accepted gradients and restored states are reused to avoid redundant solves. See [the comparison protocol and measurements](research/adjoint-lbfgs.md).
 
 ## Full Newton–Adjoint
 

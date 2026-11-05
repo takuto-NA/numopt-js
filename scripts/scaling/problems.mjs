@@ -11,12 +11,13 @@ const INITIAL_PARAMETER = 1.5;
 const FIRST_DERIVATIVE_FACTOR = 2;
 const INITIAL_PARAMETER_SPREAD = 0.3;
 const INITIAL_PHASE_INCREMENT = (1 + Math.sqrt(5)) / 2;
+const REDUCED_CONDITION_RATIO = 1000;
 
 export function createScalingProblem({ parameters: parameterCount, states: stateCount, family }) {
   if (!Number.isInteger(parameterCount) || parameterCount <= 0 || !Number.isInteger(stateCount) || stateCount <= 0) {
     throw new Error('Parameter and state counts must be positive integers');
   }
-  if (!['easy', 'curved', 'heterogeneous'].includes(family)) throw new Error('Unknown scaling problem family');
+  if (!['easy', 'curved', 'heterogeneous', 'ill-conditioned'].includes(family)) throw new Error('Unknown scaling problem family');
   const nonlinear = family !== 'easy';
   const assignments = Int32Array.from({ length: stateCount }, (_, index) => index % parameterCount);
   const repetitions = new Int32Array(parameterCount);
@@ -24,10 +25,12 @@ export function createScalingProblem({ parameters: parameterCount, states: state
   const weights = Float64Array.from(assignments, index => 1 / repetitions[index]);
   const stateJacobian = Matrix.eye(stateCount);
   for (let row = 1; row < stateCount; row++) stateJacobian.set(row, row - 1, -STATE_COUPLING);
-  const initialParameters = family === 'heterogeneous'
+  const initialParameters = ['heterogeneous', 'ill-conditioned'].includes(family)
     ? Float64Array.from({ length: parameterCount }, (_, index) =>
       INITIAL_PARAMETER + INITIAL_PARAMETER_SPREAD * Math.sin(index * INITIAL_PHASE_INCREMENT))
     : new Float64Array(parameterCount).fill(INITIAL_PARAMETER);
+  const parameterWeights = Float64Array.from({ length: parameterCount }, (_, index) =>
+    family === 'ill-conditioned' ? REDUCED_CONDITION_RATIO ** (index / Math.max(1, parameterCount - 1)) : 1);
   const stateValue = value => nonlinear ? value * value : value;
   const stateDerivative = value => nonlinear ? FIRST_DERIVATIVE_FACTOR * value : 1;
   const initialStates = Float64Array.from(assignments, index => stateValue(initialParameters[index]));
@@ -36,24 +39,24 @@ export function createScalingProblem({ parameters: parameterCount, states: state
   let cachedJointHessian;
 
   function reducedGradient(parameters) {
-    return Float64Array.from(parameters, value => {
+    return Float64Array.from(parameters, (value, index) => {
       const error = value - TARGET_PARAMETER;
-      return nonlinear ? error ** 3 + error ** 2 + 3 * error : error;
+      return parameterWeights[index] * (nonlinear ? error ** 3 + error ** 2 + 3 * error : error);
     });
   }
 
   function reducedCurvature(parameters) {
-    return Float64Array.from(parameters, value => {
+    return Float64Array.from(parameters, (value, index) => {
       const error = value - TARGET_PARAMETER;
-      return nonlinear ? 3 * error * error + 2 * error + 3 : 1;
+      return parameterWeights[index] * (nonlinear ? 3 * error * error + 2 * error + 3 : 1);
     });
   }
 
   function objective(parameters, states) {
     let cost = 0;
-    for (const parameter of parameters) {
-      const error = parameter - TARGET_PARAMETER;
-      cost += nonlinear ? error ** 4 / 4 + error ** 3 / 3 + 3 * error * error / 2 : error * error / 2;
+    for (let index = 0; index < parameters.length; index++) {
+      const error = parameters[index] - TARGET_PARAMETER;
+      cost += parameterWeights[index] * (nonlinear ? error ** 4 / 4 + error ** 3 / 3 + 3 * error * error / 2 : error * error / 2);
     }
     for (let row = 0; row < stateCount; row++) {
       cost += weights[row] * (states[row] - stateValue(parameters[assignments[row]]));
@@ -134,6 +137,7 @@ export function createScalingProblem({ parameters: parameterCount, states: state
       for (let index = 0; index < parameterCount; index++) product[index] = diagonal[index] * direction[index];
       return product;
     },
-    reference: { target: TARGET_PARAMETER, stateCoupling: STATE_COUPLING, curvatureAtSolution: nonlinear ? 3 : 1 }
+    reference: { target: TARGET_PARAMETER, stateCoupling: STATE_COUPLING, curvatureAtSolution: nonlinear ? 3 : 1,
+      reducedConditionRatio: family === 'ill-conditioned' ? REDUCED_CONDITION_RATIO : 1 }
   };
 }
