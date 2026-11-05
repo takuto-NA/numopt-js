@@ -141,4 +141,3 @@ export function updateHistoryIfCurvatureIsValid(
     history.reciprocalCurvatureHistory.shift();
   }
 }
-

@@ -19,9 +19,6 @@ const DEFAULT_USE_LINE_SEARCH = true;
 const DEFAULT_FIXED_STEP_SIZE = 1.0;
 const INVALID_STEP_SIZE = 0.0;
 
-
-
-
 function computeNextParameters(
   currentParameters: Float64Array,
   searchDirection: Float64Array,
@@ -142,4 +139,3 @@ export function lbfgs(
     finalGradientNorm: finalGradientNorm
   };
 }
-
