@@ -30,7 +30,7 @@ export {
   finiteDiffResidualPartialX
 } from './core/finiteDiff.js';
 export { createFiniteDiffGradient, createFiniteDiffJacobian } from './core/createGradientFunction.js';
-export { computeEffectiveJacobian, type EffectiveJacobianOptions } from './core/effectiveJacobian.js';
+export { computeEffectiveJacobian, type EffectiveJacobianOptions } from './core/implicitResidualJacobian.js';
 
 // Type definitions
 export type {
