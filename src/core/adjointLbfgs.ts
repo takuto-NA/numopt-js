@@ -25,7 +25,6 @@ const DEFAULT_MAX_ITERATIONS = 1000;
 const DEFAULT_TOLERANCE = 1e-6;
 const DEFAULT_STEP_SIZE = 1;
 const DEFAULT_ARMIJO_PARAMETER = 1e-4;
-const RELATIVE_CURVATURE_THRESHOLD = 1e-10;
 const ROUNDING_ALLOWANCE_FACTOR = 16;
 
 type Iterate = {
@@ -118,8 +117,7 @@ export function adjointLbfgs(
     const states = reducedObjective.restoreStates(parameters);
     if (states === undefined) return 'stateRestorationFailure';
     const cost = computeCost(costFunction, parameters, states, start.objectiveKind);
-    // WHY: The shared line search can exhaust its budget and return a trial step.
-    // Independently reject insufficient decrease before accepting that point.
+    // Recheck actual decrease before accepting the restored point.
     const allowance = ROUNDING_ALLOWANCE_FACTOR * Number.EPSILON * Math.max(1, Math.abs(current.cost));
     const armijoBound = current.cost + (options.lineSearchOptions?.wolfeC1 ?? DEFAULT_ARMIJO_PARAMETER) *
       stepSize * dotProduct(current.reduced.gradient, direction);
@@ -145,8 +143,7 @@ export function adjointLbfgs(
     const step = subtractVectors(next.parameters, current.parameters);
     const gradientChange = subtractVectors(next.reduced.gradient, current.reduced.gradient);
     updateHistoryIfCurvatureIsValid(
-      history, historySize, step, gradientChange, logger, iteration, next.cost, ALGORITHM_NAME,
-      RELATIVE_CURVATURE_THRESHOLD * vectorNorm(step) * vectorNorm(gradientChange)
+      history, historySize, step, gradientChange, logger, iteration, next.cost, ALGORITHM_NAME
     );
     maxHistoryPairs = Math.max(maxHistoryPairs, history.stepVectorHistory.length);
     current = next;

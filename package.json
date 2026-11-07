@@ -50,6 +50,7 @@
     "benchmark:constrained": "tsx scripts/constrained-benchmark.ts",
     "benchmark:curve-bending": "tsx scripts/curve-bending-benchmark.ts",
     "benchmark:mechanical-character": "tsx scripts/mechanical-character-benchmark.ts",
+    "benchmark:mechanical-character:robustness": "tsx scripts/mechanical-character-robustness.ts",
     "benchmark:paper": "tsx scripts/paper-benchmark.ts",
     "benchmark:adjoint-newton": "tsx scripts/adjoint-newton-benchmark.ts",
     "benchmark:adjoint-newton-exact": "tsx scripts/adjoint-newton-exact-benchmark.ts",

@@ -132,7 +132,8 @@ const require = createRequire(import.meta.url);
 const entryPath = require.resolve('numopt-js');
 const pkgDir = path.resolve(path.dirname(entryPath), '..');
 const browserBundleUrl = pathToFileURL(path.join(pkgDir, 'dist/index.browser.js')).href;
-const { gradientDescent, adjointNewton, adjointNewtonExact, adjointLbfgs, computeEffectiveJacobian } = await import(browserBundleUrl);
+const { gradientDescent, adjointBfgs, adjointNewton, adjointNewtonExact, adjointLbfgs,
+  computeEffectiveJacobian, strongWolfeLineSearch, levenbergMarquardt } = await import(browserBundleUrl);
 
 const effective = computeEffectiveJacobian(new Float64Array([1.5]), new Float64Array([2.25]),
   (parameters, states) => new Float64Array([parameters[0] - 1, states[0] - 2]),
@@ -141,6 +142,23 @@ if (Math.abs(effective.get(0, 0) - 1) > 1e-6 || Math.abs(effective.get(1, 0) - 3
   throw new Error('BROWSER: effective Jacobian did not recover redundant implicit derivatives');
 }
 console.log('BROWSER: computeEffectiveJacobian ok');
+
+const failedSearch = strongWolfeLineSearch(parameters => parameters[0] ** 2 / 2,
+  parameters => new Float64Array([parameters[0]]), new Float64Array([1]), new Float64Array([-1]),
+  { initialStepSize: 0.01, maxIterations: 1, wolfeC2: 0.1 });
+if (failedSearch !== 0) throw new Error('BROWSER: unverified Wolfe step was accepted');
+const stagnant = adjointBfgs(new Float64Array([1]), new Float64Array([1]), parameters => parameters[0] ** 2,
+  (parameters, states) => new Float64Array([states[0] - parameters[0]]),
+  { useLineSearch: false, stepSize: 1e-12, stepTolerance: 1e-10 });
+if (stagnant.converged || stagnant.stopReason !== 'stepStagnation') {
+  throw new Error('BROWSER: a tiny step was misreported as convergence');
+}
+const retried = levenbergMarquardt(new Float64Array([0.1]),
+  parameters => new Float64Array([parameters[0] ** 2 - 1]), { lambdaInitial: 1e-6 });
+if (!retried.converged || Math.abs(retried.finalParameters[0] - 1) > 1e-5) {
+  throw new Error('BROWSER: rejected LM trials changed the descent direction');
+}
+console.log('BROWSER: exhaustion, stagnation, and LM retries ok');
 
 const cost = (parameters) => parameters[0] * parameters[0] + parameters[1] * parameters[1];
 const gradient = (parameters) => new Float64Array([2 * parameters[0], 2 * parameters[1]]);

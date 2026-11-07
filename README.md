@@ -120,6 +120,16 @@ const result = adjointBfgs(new Float64Array([2]), new Float64Array([-1]), cost, 
 console.log(result.finalParameters, result.finalStates, result.finalConstraintNorm);
 ```
 
+Convergence requires both the reduced gradient and the constraint residual to pass their tolerances.
+`stopReason` distinguishes `gradientTolerance`, `stepStagnation`, `lineSearchFailure`,
+`stateRestorationFailure`, `nonFiniteEvaluation`, and `maxIterations`. A small step alone
+does not establish convergence. `stepTolerance` controls relative parameter-step stagnation
+(default `16 * Number.EPSILON`), separately from gradient `tolerance`.
+
+Both line-search helpers return `0` when their budgets expire without a verified step.
+Strong Wolfe requires sufficient decrease and its curvature condition; Armijo backtracking
+requires sufficient decrease. Quasi-Newton callers stop unsuccessfully when a search fails.
+
 ## Implicit residual derivatives
 
 `computeEffectiveJacobian(p, x, residual, constraint, options)` returns
@@ -293,6 +303,7 @@ Manual benchmarks (not CI):
 - `npm run benchmark:paper` — paper-grade comparison of every public solver class. Warmup 1 run is discarded; deterministic solvers repeat 7 times (median and IQR); CMA-ES uses 5 seeds (warmup seed 1, timed seeds 1–5). Success is parameter error (and constraint norm when constrained), never `result.converged`. GD / BFGS / L-BFGS / Adjoint GD / Adjoint BFGS use analytical derivatives; GN / LM / Constrained / Penalty use numeric Jacobians. Rosenbrock CMA-ES uses IPOP; Rosenbrock GD may hit a 10000-iteration cap and still succeed on parameter error. Primary metrics are evaluation counts and success; wall-clock is secondary and machine-dependent. Writes `benchmark-results/paper-benchmark.md` and `.json` (gitignored). Hypothesis failures set exit code 1; do not commit the generated numbers.
 - `npm run benchmark:constrained`, `npm run benchmark:curve-bending` — informal single-run smokes.
 - `npm run benchmark:mechanical-character` — reachable and distorted four-bar targets, independent held-out geometry checks, warmed median/IQR timings, and gradient work counts. Writes Markdown/JSON under `benchmark-results/`; returns exit code 1 if a strict accuracy check fails. This is a synthetic validation of section 4.2, not a reproduction of the original characters or the full paper. Optional plots: `python scripts/plot-mechanical-character.py` (Matplotlib).
+- `npm run benchmark:mechanical-character:robustness` — three initial designs for four-bars and slider-cranks, near-toggle sensitivities, and expected failures for inconsistent or infeasible states. Writes separate JSON/Markdown reports; accuracy and safety checks determine the exit code.
 
 Full signatures and options: [TypeDoc API reference](https://takuto-na.github.io/numopt-js/).
 
@@ -303,6 +314,7 @@ Full signatures and options: [TypeDoc API reference](https://takuto-na.github.io
 - **CMA-ES**: `functionTolerance`, `parameterTolerance`, `targetCost`, `maxFunctionEvaluations`
 - **Adjoint (ill-conditioned ∂c/∂x)**: `regularization`
 - **Adjoint Newton**: `tolerance` (reduced gradient), `constraintTolerance`, `stepTolerance` (stagnation); `hessianDamping` for the curvature model
+- **Adjoint BFGS**: `tolerance` (reduced gradient), `constraintTolerance`, separate relative `stepTolerance` (stagnation)
 
 Result printing helpers: `printResult` / `formatResult` — see TypeDoc. Typed `print*` / `format*` variants are deprecated.
 

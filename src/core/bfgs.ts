@@ -39,7 +39,7 @@ function handleLineSearchFailure(
   gradientNorm: number,
   logger: Logger
 ): OptimizationResult {
-  logger.warn('bfgs', iteration, 'Line search failed (non-descent direction).', [
+  logger.warn('bfgs', iteration, 'Line search failed to find a verified step.', [
     { key: 'Cost:', value: currentCost },
     { key: 'Gradient norm:', value: gradientNorm }
   ]);
