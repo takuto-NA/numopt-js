@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Keep GN/LM normal equations unchanged across damping retries, including unconstrained LM. Attempt undamped GN before ridge fallback.
+- Return zero from exhausted Wolfe/Armijo searches instead of an unverified step. Adjoint BFGS now distinguishes verified gradient convergence from step stagnation and exposes `stopReason` plus a separate relative `stepTolerance`.
+- Add multistart four-bar and slider-crank validation, near-toggle sensitivity probes, and inconsistent/infeasible-state checks (`benchmark:mechanical-character:robustness`).
 - Expose `computeEffectiveJacobian` for BFGS/custom reduced objectives, including consistent redundant constraints. Reuse a single LU/QR solve across parameter columns and validate partial-derivative dimensions and finite results.
 - Use relative curvature checks in BFGS/L-BFGS so small positive secant pairs remain usable; skip invalid dense updates without discarding the previous model. Add objective-scaling regressions and synthetic mechanical-character fitting examples and benchmarks.
 - Add `adjointLbfgs` with shared two-loop recursion, bounded correction history, restored-state adjoint gradients, verified decrease and explicit stagnation/failure reasons. Compare time, peak RSS and convergence with dense BFGS and approximate/full Newton–Adjoint.

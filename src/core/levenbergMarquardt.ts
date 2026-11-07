@@ -92,11 +92,11 @@ function tryLevenbergMarquardtStep(
     // Add damping: J^T J + λI
     const parameterCount = jtj.rows;
     const identity = Matrix.eye(parameterCount, parameterCount);
-    const dampedHessian = jtj.add(identity.mul(currentLambda));
+    const dampedHessian = jtj.clone().add(identity.mul(currentLambda));
 
     // Solve: (J^T J + λI) δ = -J^T r
     // Use Cholesky decomposition for efficiency (dampedHessian is always positive definite when λ > 0)
-    const negativeJtr = jtr.mul(NEGATIVE_COEFFICIENT);
+    const negativeJtr = jtr.clone().mul(NEGATIVE_COEFFICIENT);
     let stepMatrix: Matrix;
     try {
       const cholesky = new CholeskyDecomposition(dampedHessian);

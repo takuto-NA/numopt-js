@@ -73,7 +73,8 @@ function compareSolvers() {
 function main(): void {
   const sourceRoot = path.resolve(OUTPUT_DIRECTORY, '..');
   const sourceFiles = ['src/core/bfgsUpdate.ts', 'src/core/curvature.ts', 'src/core/effectiveJacobian.ts',
-    'src/core/leastSquaresMultiple.ts', 'examples/mechanical-character/four-bar.ts', 'examples/mechanical-character/solvers.ts'];
+    'src/core/leastSquaresMultiple.ts', 'src/core/adjointBfgs.ts', 'src/core/lineSearch.ts',
+    'src/core/constrainedNormalEquations.ts', 'examples/mechanical-character/four-bar.ts', 'examples/mechanical-character/solvers.ts'];
   const sourceHashes = Object.fromEntries(sourceFiles.map(file =>
     [file, createHash('sha256').update(fs.readFileSync(path.join(sourceRoot, file))).digest('hex')]));
   const environment = { ...collectPaperEnvironment(), gitDirty: execFileSync('git', ['status', '--porcelain']).length > 0, sourceHashes };

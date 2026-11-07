@@ -12,7 +12,7 @@ const GRADIENT_NORM_THRESHOLD = 1e-10; // Threshold below which we use default s
 const DEFAULT_CONTRACTION_FACTOR = 0.5;
 const DEFAULT_ARMIJO_PARAMETER = 1e-4;
 const DEFAULT_MAX_LINE_SEARCH_ITERATIONS = 50;
-const INVALID_STEP_SIZE = 0.0; // Returned when search direction is not a descent direction
+const INVALID_STEP_SIZE = 0.0; // No verified step: non-descent, invalid samples, or exhausted budget
 const NON_DESCENT_DIRECTION_THRESHOLD = 0.0; // Threshold for directional derivative: >= 0 means not a descent direction
 
 // Typical Strong Wolfe defaults (Nocedal & Wright, 2nd ed.)
@@ -147,7 +147,7 @@ function zoom(
     );
 
     if (
-      !isDefinedLineSearchCost(evaluation.cost) ||
+      !isDefinedLineSearchCost(evaluation.cost) || !Number.isFinite(evaluation.directionalDerivative) ||
       !satisfiesArmijoCondition(evaluation.cost, currentCost, wolfeC1, evaluation.stepSize, directionalDerivativeAtZero)
     ) {
       stepSizeHigh = evaluation.stepSize;
@@ -173,12 +173,8 @@ function zoom(
     costAtStepSizeLow = evaluation.cost;
   }
 
-  // WHY: A zero lower bound means no acceptable positive step was found.
-  // Returning the underflow clamp (1e-20) would look like a tiny valid step to BFGS.
-  if (stepSizeLow <= INVALID_STEP_SIZE) {
-    return INVALID_STEP_SIZE;
-  }
-  return clampStepSize(stepSizeLow);
+  // A decreasing lower bracket bound still need not satisfy the curvature condition.
+  return INVALID_STEP_SIZE;
 }
 
 /**
@@ -186,6 +182,7 @@ function zoom(
  *
  * WHY: For quasi-Newton methods, satisfying the curvature condition improves the chance that
  * the update will maintain a stable approximation (e.g., positive definiteness).
+ * Returns zero if no sampled step satisfies both conditions, including budget exhaustion.
  */
 export function strongWolfeLineSearch(
   costFunction: CostFn,
@@ -201,11 +198,12 @@ export function strongWolfeLineSearch(
   const stepSizeGrowthFactor = options.stepSizeGrowthFactor ?? DEFAULT_STEP_SIZE_GROWTH_FACTOR;
 
   const currentCost = costFunction(currentParameters);
+  if (!Number.isFinite(currentCost)) return INVALID_STEP_SIZE;
   const currentGradient = gradientFunction(currentParameters);
   const directionalDerivativeAtZero = dotProduct(currentGradient, searchDirection);
 
   // Strong Wolfe requires a descent direction (phi'(0) < 0). Otherwise, a line search is ill-posed.
-  if (directionalDerivativeAtZero >= NON_DESCENT_DIRECTION_THRESHOLD) {
+  if (!Number.isFinite(directionalDerivativeAtZero) || directionalDerivativeAtZero >= NON_DESCENT_DIRECTION_THRESHOLD) {
     return INVALID_STEP_SIZE;
   }
 
@@ -223,7 +221,7 @@ export function strongWolfeLineSearch(
     );
 
     const violatesArmijo =
-      !isDefinedLineSearchCost(evaluation.cost) ||
+      !isDefinedLineSearchCost(evaluation.cost) || !Number.isFinite(evaluation.directionalDerivative) ||
       !satisfiesArmijoCondition(
         evaluation.cost,
         currentCost,
@@ -281,11 +279,11 @@ export function strongWolfeLineSearch(
     stepSize = clampStepSize(evaluation.stepSize * stepSizeGrowthFactor);
   }
 
-  // If we couldn't satisfy Strong Wolfe within the iteration limit, return the last tried step size.
-  return clampStepSize(stepSize);
+  return INVALID_STEP_SIZE;
 }
 
 /**
+ * Returns zero when no sampled positive step satisfies Armijo, including budget exhaustion.
  * Performs backtracking line search to find a step size that satisfies
  * the Armijo condition (sufficient decrease). This follows the textbook
  * backtracking scheme in Nocedal & Wright, "Numerical Optimization"
@@ -320,6 +318,7 @@ export function backtrackingLineSearch(
   const maxIterations = options.maxIterations ?? DEFAULT_MAX_LINE_SEARCH_ITERATIONS;
 
   const currentCost = costFunction(currentParameters);
+  if (!Number.isFinite(currentCost)) return INVALID_STEP_SIZE;
   const currentGradient = gradientFunction(currentParameters);
 
   // Determine initial step size: use provided value, or scale by gradient norm if not provided
@@ -350,11 +349,12 @@ export function backtrackingLineSearch(
 
   // Early return if search direction is not a descent direction
   // Directional derivative >= 0 means moving in this direction increases the cost
-  if (directionalDerivative >= NON_DESCENT_DIRECTION_THRESHOLD) {
+  if (!Number.isFinite(directionalDerivative) || directionalDerivative >= NON_DESCENT_DIRECTION_THRESHOLD) {
     return INVALID_STEP_SIZE;
   }
 
   let stepSize = initialStepSize;
+  if (!Number.isFinite(stepSize) || stepSize <= INVALID_STEP_SIZE) return INVALID_STEP_SIZE;
 
   for (let iteration = 0; iteration < maxIterations; iteration++) {
     // Compute trial point: x + α * d
@@ -368,7 +368,7 @@ export function backtrackingLineSearch(
     // Armijo condition: f(x + αd) <= f(x) + c * α * ∇f(x)^T * d
     const armijoThreshold = currentCost + armijoParameter * stepSize * directionalDerivative;
 
-    if (trialCost <= armijoThreshold) {
+    if (Number.isFinite(trialCost) && trialCost <= armijoThreshold) {
       return stepSize;
     }
 
@@ -376,7 +376,6 @@ export function backtrackingLineSearch(
     stepSize *= contractionFactor;
   }
 
-  // If we couldn't find a suitable step size, return a very small value
-  return stepSize;
+  return INVALID_STEP_SIZE;
 }
 

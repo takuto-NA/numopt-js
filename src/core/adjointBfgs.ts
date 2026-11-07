@@ -7,6 +7,7 @@
 import type {
   AdjointBfgsOptions,
   AdjointBfgsResult,
+  AdjointBfgsStopReason,
   ConstrainedCostFn,
   ConstrainedResidualFn,
   ConstraintFn
@@ -39,6 +40,8 @@ const DEFAULT_FIXED_STEP_SIZE = 1.0;
 const INVALID_STEP_SIZE = 0.0;
 const DEFAULT_STRONG_WOLFE_INITIAL_STEP_SIZE = 1.0;
 const MAX_DIMENSION_FOR_DETAILED_LOGGING = 3;
+const STEP_ROUNDING_FACTOR = 16;
+const DEFAULT_STEP_TOLERANCE = STEP_ROUNDING_FACTOR * Number.EPSILON;
 
 type AdjointBfgsRuntimeSettings = AdjointBfgsOptions &
   AdjointReducedSpaceSettings & {
@@ -46,16 +49,20 @@ type AdjointBfgsRuntimeSettings = AdjointBfgsOptions &
     tolerance: number;
     useLineSearch: boolean;
     stepSize: number;
+    stepTolerance: number;
   };
 
 function resolveAdjointBfgsRuntimeSettings(options: AdjointBfgsOptions): AdjointBfgsRuntimeSettings {
+  const stepTolerance = options.stepTolerance ?? DEFAULT_STEP_TOLERANCE;
+  if (!Number.isFinite(stepTolerance) || stepTolerance < 0) throw new RangeError('stepTolerance must be finite and nonnegative');
   return {
     ...options,
     ...resolveAdjointReducedSpaceSettings(options),
     maxIterations: options.maxIterations ?? DEFAULT_MAX_ITERATIONS,
     tolerance: options.tolerance ?? DEFAULT_TOLERANCE,
     useLineSearch: options.useLineSearch ?? DEFAULT_USE_LINE_SEARCH,
-    stepSize: options.stepSize ?? DEFAULT_FIXED_STEP_SIZE
+    stepSize: options.stepSize ?? DEFAULT_FIXED_STEP_SIZE,
+    stepTolerance
   };
 }
 
@@ -126,7 +133,8 @@ function buildConstrainedResult(
   cost: number,
   gradientNorm: number,
   constraintNorm: number,
-  usedLineSearch: boolean
+  usedLineSearch: boolean,
+  stopReason: AdjointBfgsStopReason = converged ? 'gradientTolerance' : 'maxIterations'
 ): AdjointBfgsResult {
   return {
     finalParameters: parameters,
@@ -137,7 +145,8 @@ function buildConstrainedResult(
     finalGradientNorm: gradientNorm,
     usedLineSearch,
     finalStates: states,
-    finalConstraintNorm: constraintNorm
+    finalConstraintNorm: constraintNorm,
+    stopReason
   };
 }
 
@@ -199,6 +208,11 @@ export function adjointBfgs(
     const currentGradient = reduced.gradient;
     const currentPartials = reduced.partials;
     const gradientNorm = vectorNorm(currentGradient);
+
+    if (![currentCost, gradientNorm, constraintNorm].every(Number.isFinite)) {
+      return buildConstrainedResult(currentParameters, currentStates, iteration, false,
+        currentCost, gradientNorm, constraintNorm, usedLineSearch, 'nonFiniteEvaluation');
+    }
 
     if (settings.onIteration) {
       settings.onIteration(iteration, currentCost, currentParameters);
@@ -272,7 +286,7 @@ export function adjointBfgs(
       stepSize = settings.stepSize;
     }
 
-    if (stepSize === INVALID_STEP_SIZE) {
+    if (!Number.isFinite(stepSize) || stepSize <= INVALID_STEP_SIZE) {
       logger.warn(ADJOINT_BFGS_ALGORITHM_NAME, iteration, 'Line search failed', [
         { key: 'Cost:', value: currentCost },
         { key: 'Gradient norm:', value: gradientNorm }
@@ -285,7 +299,8 @@ export function adjointBfgs(
         currentCost,
         gradientNorm,
         constraintNorm,
-        usedLineSearch
+        usedLineSearch,
+        'lineSearchFailure'
       );
     }
 
@@ -316,7 +331,8 @@ export function adjointBfgs(
         currentCost,
         gradientNorm,
         constraintNorm,
-        usedLineSearch
+        usedLineSearch,
+        'stateRestorationFailure'
       );
     }
 
@@ -335,25 +351,33 @@ export function adjointBfgs(
     const stepVector = subtractVectors(newParameters, currentParameters);
     const stepNorm = vectorNorm(stepVector);
     const gradientChangeVector = subtractVectors(nextReduced.gradient, currentGradient);
+    const nextGradientNorm = vectorNorm(nextReduced.gradient);
+    const nextConstraintNorm = vectorNorm(constraintFunction(newParameters, newStates));
 
-    if (
-      constraintNorm <= settings.constraintTolerance &&
-      checkStepSizeConvergence(stepNorm, settings.tolerance, iteration)
-    ) {
-      logger.info(ADJOINT_BFGS_ALGORITHM_NAME, iteration, 'Converged', [
-        { key: 'Cost:', value: currentCost },
-        { key: 'Gradient norm:', value: gradientNorm },
+    if (![newCost, nextGradientNorm, nextConstraintNorm, stepNorm].every(Number.isFinite)) {
+      return buildConstrainedResult(currentParameters, currentStates, iteration, false,
+        currentCost, gradientNorm, constraintNorm, usedLineSearch, 'nonFiniteEvaluation');
+    }
+
+    const nextConverged = nextConstraintNorm <= settings.constraintTolerance &&
+      checkGradientConvergence(nextGradientNorm, settings.tolerance, iteration);
+    const stepThreshold = settings.stepTolerance * Math.max(1, vectorNorm(newParameters));
+    if (nextConverged || checkStepSizeConvergence(stepNorm, stepThreshold, iteration)) {
+      logger.info(ADJOINT_BFGS_ALGORITHM_NAME, iteration, nextConverged ? 'Converged' : 'Step stagnation', [
+        { key: 'Cost:', value: newCost },
+        { key: 'Gradient norm:', value: nextGradientNorm },
         { key: 'Step size:', value: stepNorm }
       ]);
       return buildConstrainedResult(
-        currentParameters,
-        currentStates,
-        iteration,
-        true,
-        currentCost,
-        gradientNorm,
-        constraintNorm,
-        usedLineSearch
+        newParameters,
+        newStates,
+        iteration + 1,
+        nextConverged,
+        newCost,
+        nextGradientNorm,
+        nextConstraintNorm,
+        usedLineSearch,
+        nextConverged ? 'gradientTolerance' : 'stepStagnation'
       );
     }
 
@@ -399,22 +423,27 @@ export function adjointBfgs(
   );
   const finalGradientNorm = vectorNorm(finalReduced.gradient);
   const finalConstraintNorm = vectorNorm(constraintFunction(currentParameters, currentStates));
+  const finalFinite = [currentCost, finalGradientNorm, finalConstraintNorm].every(Number.isFinite);
+  const finalConverged = finalFinite && finalGradientNorm < settings.tolerance && finalConstraintNorm <= settings.constraintTolerance;
 
-  logger.warn(ADJOINT_BFGS_ALGORITHM_NAME, undefined, 'Maximum iterations reached', [
-    { key: 'Iterations:', value: settings.maxIterations },
-    { key: 'Final cost:', value: currentCost },
-    { key: 'Final gradient norm:', value: finalGradientNorm },
-    { key: 'Final constraint norm:', value: finalConstraintNorm }
-  ]);
+  if (!finalConverged) {
+    logger.warn(ADJOINT_BFGS_ALGORITHM_NAME, undefined, finalFinite ? 'Maximum iterations reached' : 'Non-finite evaluation', [
+      { key: 'Iterations:', value: settings.maxIterations },
+      { key: 'Final cost:', value: currentCost },
+      { key: 'Final gradient norm:', value: finalGradientNorm },
+      { key: 'Final constraint norm:', value: finalConstraintNorm }
+    ]);
+  }
 
   return buildConstrainedResult(
     currentParameters,
     currentStates,
     settings.maxIterations,
-    false,
+    finalConverged,
     currentCost,
     finalGradientNorm,
     finalConstraintNorm,
-    usedLineSearch
+    usedLineSearch,
+    !finalFinite ? 'nonFiniteEvaluation' : finalConverged ? 'gradientTolerance' : 'maxIterations'
   );
 }

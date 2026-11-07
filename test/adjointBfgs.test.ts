@@ -159,13 +159,18 @@ describe('Adjoint BFGS', () => {
       new Float64Array([0.0]),
       onlyDefinedAtStart,
       simpleConstraint,
-      { maxIterations: 10, tolerance: 1e-12 }
+      {
+        maxIterations: 10, tolerance: 1e-12,
+        dfdp: parameters => new Float64Array([2 * parameters[0]]),
+        dfdx: (_parameters, states) => new Float64Array([2 * states[0]])
+      }
     );
 
     expect(result.converged).toBe(false);
     expect(result.usedLineSearch).toBe(true);
     expect(result.finalParameters[0]).toBe(start);
     expect(result.iterations).toBeLessThan(10);
+    expect(result.stopReason).toBe('lineSearchFailure');
   });
 
   it('does not claim line search was used when a zero fixed step stops the loop', () => {

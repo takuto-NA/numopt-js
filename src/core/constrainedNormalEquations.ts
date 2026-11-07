@@ -42,8 +42,7 @@ export function solveUndampedNormalEquations(
   jtr: Matrix,
   ridgeRegularization: number = DEFAULT_RIDGE_REGULARIZATION
 ): Float64Array {
-  const negativeRightHandSide = jtr.mul(NEGATIVE_COEFFICIENT);
-  const jittered = jtj.add(Matrix.eye(jtj.rows, jtj.columns).mul(ridgeRegularization));
+  const negativeRightHandSide = jtr.clone().mul(NEGATIVE_COEFFICIENT);
 
   try {
     const cholesky = new CholeskyDecomposition(jtj);
@@ -54,6 +53,7 @@ export function solveUndampedNormalEquations(
     // Fall through to ridge regularization
   }
 
+  const jittered = jtj.clone().add(Matrix.eye(jtj.rows, jtj.columns).mul(ridgeRegularization));
   try {
     const choleskyRidge = new CholeskyDecomposition(jittered);
     if (choleskyRidge.isPositiveDefinite()) {
@@ -74,8 +74,9 @@ export function solveDampedNormalEquations(
 ): { step: Float64Array; stepNorm: number } | { newLambda: number } {
   const parameterCount = jtj.rows;
   const identity = Matrix.eye(parameterCount, parameterCount);
-  const dampedHessian = jtj.add(identity.mul(currentLambda));
-  const negativeJtr = jtr.mul(NEGATIVE_COEFFICIENT);
+  // Rejected LM trials reuse these normal equations with a different damping value.
+  const dampedHessian = jtj.clone().add(identity.mul(currentLambda));
+  const negativeJtr = jtr.clone().mul(NEGATIVE_COEFFICIENT);
 
   try {
     const cholesky = new CholeskyDecomposition(dampedHessian);

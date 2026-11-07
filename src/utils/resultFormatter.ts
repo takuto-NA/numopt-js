@@ -448,6 +448,9 @@ export function formatAdjointGradientDescentResult(
   }
 
   lines.push(`  Used line search: ${result.usedLineSearch}`);
+  if ('stopReason' in result && typeof result.stopReason === 'string') {
+    lines.push(`  Stop reason: ${result.stopReason}`);
+  }
 
   // Execution time
   if (opts.showExecutionTime && opts.elapsedTimeMs > 0) {
@@ -511,7 +514,6 @@ export function formatResult(
   if (isAdjointNewtonResult(result)) {
     const newtonResult = result;
     return [formatAdjointGradientDescentResult(newtonResult, options),
-      `  Stop reason: ${newtonResult.stopReason}`,
       `  Hessian evaluations: ${newtonResult.hessianEvaluations}`,
       `  Damped steps: ${newtonResult.dampedSteps}`,
       `  Gradient fallback steps: ${newtonResult.gradientFallbackSteps}`,

@@ -71,6 +71,7 @@ export type {
   CmaEsResult,
   AdjointGradientDescentResult,
   AdjointBfgsResult,
+  AdjointBfgsStopReason,
   ConstrainedGaussNewtonResult,
   ConstrainedLevenbergMarquardtResult
 } from './core/types.js';

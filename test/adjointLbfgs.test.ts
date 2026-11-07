@@ -14,6 +14,22 @@ const derivatives = {
 };
 
 describe('adjoint L-BFGS', () => {
+  it('uses a dimensionless curvature threshold for objectives with large units', () => {
+    const scale = 1e12;
+    const result = adjointLbfgs(new Float64Array([2, 2]), new Float64Array([4]),
+      parameters => scale * ((parameters[0] - 1) ** 2 + 2 * (parameters[1] - 1) ** 2) / 2,
+      (parameters, states) => new Float64Array([states[0] - parameters[0] - parameters[1]]), {
+        dfdp: parameters => new Float64Array([scale * (parameters[0] - 1), 2 * scale * (parameters[1] - 1)]),
+        dfdx: () => new Float64Array([0]), dcdp: () => new Matrix([[-1, -1]]), dcdx: () => Matrix.eye(1),
+        maxIterations: 120, tolerance: 1e-10 * scale, constraintTolerance: 1e-9,
+        lineSearchOptions: { maxIterations: 60, maxZoomIterations: 60 }
+      });
+    expect(result.converged).toBe(true);
+    expect(result.maxHistoryPairs).toBeGreaterThan(0);
+    expect(result.iterations).toBeLessThanOrEqual(10);
+    result.finalParameters.forEach(value => expect(value).toBeCloseTo(1, 10));
+  });
+
   it.each([1, 5, 10, 20])('restores nonlinear states and converges with historySize=%i', historySize => {
     const initialParameters = new Float64Array([1.4]);
     const initialStates = new Float64Array([-10]);

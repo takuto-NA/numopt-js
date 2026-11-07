@@ -465,7 +465,10 @@ export interface AdjointGradientDescentOptions extends GradientDescentOptions, A
 /**
  * Options for reduced-space BFGS. Line search matches unconstrained BFGS (Strong Wolfe).
  */
-export interface AdjointBfgsOptions extends BfgsOptions, AdjointDerivativeOptions {}
+export interface AdjointBfgsOptions extends BfgsOptions, AdjointDerivativeOptions {
+  /** Relative parameter-step threshold for stagnation, independent of gradient tolerance. Default: 16 * Number.EPSILON. */
+  stepTolerance?: number;
+}
 
 /** Reduced-space L-BFGS with at most historySize correction pairs (default 10). */
 export interface AdjointLbfgsOptions extends LbfgsOptions, AdjointDerivativeOptions {}
@@ -501,9 +504,14 @@ export interface AdjointGradientDescentResult extends GradientDescentResult {
 }
 
 /**
- * Result returned by reduced-space BFGS. Same fields as adjoint gradient descent.
+ * Termination reasons shared by reduced-space BFGS and L-BFGS.
  */
-export type AdjointBfgsResult = AdjointGradientDescentResult;
+export type AdjointBfgsStopReason = AdjointLbfgsStopReason;
+
+/** Convergence requires a small reduced gradient and feasible states; tiny steps may be stagnation. */
+export interface AdjointBfgsResult extends AdjointGradientDescentResult {
+  stopReason: AdjointBfgsStopReason;
+}
 
 /**
  * Newton-adjoint with the section-12 approximation H = f_pp + S^T f_xx S.
