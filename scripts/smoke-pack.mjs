@@ -63,6 +63,7 @@ if (typeof m.adjointNewtonExact !== 'function') {
   throw new Error('CJS: adjointNewtonExact export missing');
 }
 if (typeof m.adjointLbfgs !== 'function') throw new Error('CJS: adjointLbfgs export missing');
+if (typeof m.computeEffectiveJacobian !== 'function') throw new Error('CJS: computeEffectiveJacobian export missing');
 console.log('CJS: ok');
 `.trimStart()
   );
@@ -72,7 +73,7 @@ console.log('CJS: ok');
   writeFile(
     path.join(tmpDir, 'esm.mjs'),
     `
-import { gradientDescent, adjointNewton, adjointNewtonExact, adjointLbfgs } from 'numopt-js';
+import { gradientDescent, adjointNewton, adjointNewtonExact, adjointLbfgs, computeEffectiveJacobian } from 'numopt-js';
 if (typeof gradientDescent !== 'function') {
   throw new Error('ESM: gradientDescent export missing');
 }
@@ -83,6 +84,7 @@ if (typeof adjointNewtonExact !== 'function') {
   throw new Error('ESM: adjointNewtonExact export missing');
 }
 if (typeof adjointLbfgs !== 'function') throw new Error('ESM: adjointLbfgs export missing');
+if (typeof computeEffectiveJacobian !== 'function') throw new Error('ESM: computeEffectiveJacobian export missing');
 console.log('ESM: ok');
 `.trimStart()
   );
@@ -130,7 +132,15 @@ const require = createRequire(import.meta.url);
 const entryPath = require.resolve('numopt-js');
 const pkgDir = path.resolve(path.dirname(entryPath), '..');
 const browserBundleUrl = pathToFileURL(path.join(pkgDir, 'dist/index.browser.js')).href;
-const { gradientDescent, adjointNewton, adjointNewtonExact, adjointLbfgs } = await import(browserBundleUrl);
+const { gradientDescent, adjointNewton, adjointNewtonExact, adjointLbfgs, computeEffectiveJacobian } = await import(browserBundleUrl);
+
+const effective = computeEffectiveJacobian(new Float64Array([1.5]), new Float64Array([2.25]),
+  (parameters, states) => new Float64Array([parameters[0] - 1, states[0] - 2]),
+  (parameters, states) => new Float64Array([states[0] - parameters[0] ** 2, 2 * (states[0] - parameters[0] ** 2)]));
+if (Math.abs(effective.get(0, 0) - 1) > 1e-6 || Math.abs(effective.get(1, 0) - 3) > 1e-6) {
+  throw new Error('BROWSER: effective Jacobian did not recover redundant implicit derivatives');
+}
+console.log('BROWSER: computeEffectiveJacobian ok');
 
 const cost = (parameters) => parameters[0] * parameters[0] + parameters[1] * parameters[1];
 const gradient = (parameters) => new Float64Array([2 * parameters[0], 2 * parameters[1]]);

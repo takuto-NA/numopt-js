@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Expose `computeEffectiveJacobian` for BFGS/custom reduced objectives, including consistent redundant constraints. Reuse a single LU/QR solve across parameter columns and validate partial-derivative dimensions and finite results.
+- Use relative curvature checks in BFGS/L-BFGS so small positive secant pairs remain usable; skip invalid dense updates without discarding the previous model. Add objective-scaling regressions and synthetic mechanical-character fitting examples and benchmarks.
 - Add `adjointLbfgs` with shared two-loop recursion, bounded correction history, restored-state adjoint gradients, verified decrease and explicit stagnation/failure reasons. Compare time, peak RSS and convergence with dense BFGS and approximate/full Newton–Adjoint.
 - Add process-isolated Newton–Adjoint scaling experiments with common accuracy targets, warm timings, cold OS peak RSS, crossover refinements, and reproducible plots. Include analytical/action/numerical-curvature paths and heterogeneous starts; solver algorithms are unchanged.
 - Add `adjointNewtonExact` with all terms of the reduced Hessian, analytical joint Hessian/Hessian-vector callbacks, and numerical projected Lagrangian curvature. Compare accuracy, convergence traces, and cost against approximate Newton and BFGS.
