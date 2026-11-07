@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- Add fixed-topology four-bar fitting with only three adjustable link lengths, an offline iteration/phase replay, and 54 repeated independently checked trials (`example:linkage-trajectory`, `benchmark:linkage-trajectory`).
 - Keep GN/LM normal equations unchanged across damping retries, including unconstrained LM. Attempt undamped GN before ridge fallback.
 - Return zero from exhausted Wolfe/Armijo searches instead of an unverified step. Adjoint BFGS now distinguishes verified gradient convergence from step stagnation and exposes `stopReason` plus a separate relative `stepTolerance`.
 - Add multistart four-bar and slider-crank validation, near-toggle sensitivity probes, and inconsistent/infeasible-state checks (`benchmark:mechanical-character:robustness`).

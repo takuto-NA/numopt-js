@@ -93,7 +93,7 @@ export function markerPosition(parameters: Float64Array, states: Float64Array, p
 }
 
 /** Fixed states matter here: changing a marker's local coordinates also changes its path. */
-function markerParameterJacobian(parameters: Float64Array, states: Float64Array, phase: number): Matrix {
+export function markerParameterJacobian(parameters: Float64Array, states: Float64Array, phase: number): Matrix {
   const cosine = Math.cos(states[0]);
   const sine = Math.sin(states[0]);
   const crankDerivative = lengthDerivative(parameters, 0);
@@ -103,7 +103,7 @@ function markerParameterJacobian(parameters: Float64Array, states: Float64Array,
   ]);
 }
 
-function markerStateJacobian(parameters: Float64Array, states: Float64Array): Matrix {
+export function markerStateJacobian(parameters: Float64Array, states: Float64Array): Matrix {
   const cosine = Math.cos(states[0]);
   const sine = Math.sin(states[0]);
   const along = parameters[MARKER_ALONG_INDEX];
