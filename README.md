@@ -297,6 +297,7 @@ Recommended order:
 8. `npm run example:adjoint-reduced` — few parameters vs many implicit states
 9. `npm run example:layout-toy` — small layout toy
 10. `npm run example:mechanical-character` — synthetic four-bar trajectory fitting based on Coros et al. (2013), section 4.2; compares BFGS with reference/public/redundant implicit gradients, full finite differences, Adjoint BFGS, and Constrained GN/LM. Reports strict accuracy failures with exit code 1; see [scope, capabilities, and validation](research/mechanical-character.md).
+11. `npm run example:linkage-trajectory` — fit only three moving link lengths, keeping ground pivots, marker attachment and topology fixed. Generates an offline HTML replay with iteration/phase sliders, animation and independently verified reachable/distorted targets. See [the experiment and reproducible checks](research/linkage-trajectory-example.md).
 
 Manual benchmarks (not CI):
 
@@ -304,6 +305,7 @@ Manual benchmarks (not CI):
 - `npm run benchmark:constrained`, `npm run benchmark:curve-bending` — informal single-run smokes.
 - `npm run benchmark:mechanical-character` — reachable and distorted four-bar targets, independent held-out geometry checks, warmed median/IQR timings, and gradient work counts. Writes Markdown/JSON under `benchmark-results/`; returns exit code 1 if a strict accuracy check fails. This is a synthetic validation of section 4.2, not a reproduction of the original characters or the full paper. Optional plots: `python scripts/plot-mechanical-character.py` (Matplotlib).
 - `npm run benchmark:mechanical-character:robustness` — three initial designs for four-bars and slider-cranks, near-toggle sensitivities, and expected failures for inconsistent or infeasible states. Writes separate JSON/Markdown reports; accuracy and safety checks determine the exit code.
+- `npm run benchmark:linkage-trajectory` — three initial designs × two targets × public-IFT BFGS / full-FD BFGS / Constrained LM, with three timed repeats (54 trials). Checks unused phases, closure, assembly branch and every recorded iteration. Optional plot after the Example: `python scripts/plot-linkage-trajectory.py` (Matplotlib).
 
 Full signatures and options: [TypeDoc API reference](https://takuto-na.github.io/numopt-js/).
 

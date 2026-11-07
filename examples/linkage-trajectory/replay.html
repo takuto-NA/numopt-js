@@ -1,0 +1,172 @@
+<!-- Offline replay of measured trajectory fitting, using numerical assemblies recorded by the TypeScript example. -->
+<!doctype html>
+<html lang="ja">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>四節リンクの軌跡フィッティング — numopt-js</title>
+<style>
+  :root { color-scheme: light dark; --ink: #172e3a; --surface: #fff; --muted: #65757d; --grid: #d7dfe2;
+    --current: #087e65; --target: #b84428; --initial: #88959b; background: #f4f7f8; color: var(--ink); font: 16px/1.6 system-ui, sans-serif; }
+  @media (prefers-color-scheme: dark) { :root { --ink: #e5edf0; --surface: #18242a; --muted: #a4b4bd; --grid: #3c4e57;
+    --current: #5cddba; --target: #ff9e81; --initial: #8b9da6; background: #101a20; } }
+  * { box-sizing: border-box; }
+  body { max-width: 1150px; margin: auto; padding: 24px; }
+  h1 { font-size: 25px; margin: 0 0 8px; } h2 { font-size: 17px; font-weight: 500; margin: 0; }
+  p { margin: 8px 0; } .muted { color: var(--muted); }
+  .controls { display: flex; flex-wrap: wrap; gap: 16px 24px; align-items: end; margin: 22px 0; }
+  label { display: grid; gap: 6px; } .slider { flex: 1 1 230px; }
+  select, button { padding: 8px 12px; color: inherit; background: var(--surface); border: 1px solid var(--grid); border-radius: 5px; font: inherit; }
+  input { width: 100%; accent-color: var(--current); min-height: 32px; }
+  .plots { display: grid; grid-template-columns: 1.25fr 1fr; gap: 20px; }
+  .plot { min-width: 0; background: var(--surface); padding: 14px; }
+  svg { width: 100%; height: auto; overflow: visible; }
+  svg text { fill: var(--ink); font: 13px system-ui, sans-serif; }
+  .legend { display: flex; flex-wrap: wrap; gap: 18px; margin: 12px 0; }
+  .swatch { display: inline-block; width: 22px; margin-right: 6px; border-top: 3px solid; vertical-align: middle; }
+  .target { color: var(--target); } .initial { color: var(--initial); } .current { color: var(--current); }
+  .metrics { display: flex; flex-wrap: wrap; gap: 12px 32px; margin: 18px 0; }
+  .metrics strong { font-size: 21px; font-variant-numeric: tabular-nums; font-weight: 500; }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; font-variant-numeric: tabular-nums; }
+  th, td { text-align: left; border-bottom: 1px solid var(--grid); padding: 7px; } th { font-weight: 500; }
+  @media (max-width: 680px) { body { padding: 14px; } .plots { grid-template-columns: 1fr; } h1 { font-size: 21px; } }
+</style>
+<h1>リンク長だけを変えて、固定した目標軌跡へ近づける</h1>
+<p>接続・固定支点・マーカー取付位置を固定した四節リンク。調整するのはクランク・連接棒・ロッカーの長さだけです。</p>
+<p class="muted">BFGS + 公開IFTで計算した反復の再生です。ブラウザ内での再最適化ではありません。長さと誤差は無次元です。</p>
+<div class="controls">
+  <label>目標<select id="target"><option value="0">実現可能な軌跡</option><option value="1">3次の変形を加えた軌跡</option></select></label>
+  <label class="slider">最適化の反復 <output id="iteration-label"></output><input id="iteration" type="range" min="0" value="0" step="1"></label>
+  <button id="play-iterations" type="button">反復を再生</button>
+</div>
+<div class="legend" aria-label="軌跡の凡例">
+  <span><i class="swatch target"></i>目標</span><span><i class="swatch initial"></i>初期軌跡（破線）</span><span><i class="swatch current"></i>現在の軌跡</span>
+</div>
+<div class="plots">
+  <section class="plot"><h2>機構全体とマーカー</h2><svg id="mechanism" viewBox="0 0 520 370" role="img" aria-label="四節リンクと、そのマーカー軌跡"></svg></section>
+  <section class="plot"><h2>軌跡の拡大・同じ入力位相の誤差</h2><svg id="trajectory" viewBox="0 0 440 370" role="img" aria-label="目標、初期、現在の軌跡を同じ尺度で比較"></svg></section>
+</div>
+<div class="controls">
+  <label class="slider">入力クランクの位相 <output id="phase-label"></output><input id="phase" type="range" min="0" value="0" step="1"></label>
+  <button id="play-phase" type="button">機構を動かす</button>
+</div>
+<div class="metrics" aria-live="polite" id="metrics"></div>
+<table><thead><tr><th>リンク</th><th>初期長</th><th>現在の長さ</th><th>設計変数</th></tr></thead><tbody id="lengths"></tbody></table>
+<p class="muted">目的関数は同じ入力位相同士の位置誤差の二乗平均 × 1/2。位相をずらした点集合の形状比較ではありません。</p>
+<p class="muted" id="verification"></p>
+<script id="data" type="application/json">__TRAJECTORY_DATA__</script>
+<script>
+(() => {
+  'use strict';
+  const report = JSON.parse(document.getElementById('data').textContent);
+  const elements = Object.fromEntries(['target', 'iteration', 'iteration-label', 'phase', 'phase-label', 'mechanism',
+    'trajectory', 'metrics', 'lengths', 'verification', 'play-iterations', 'play-phase'].map(id => [id, document.getElementById(id)]));
+  const SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
+  const PADDING = 32;
+  const COORDINATES = 2;
+  const LENGTH_NAMES = ['クランク', '連接棒', 'ロッカー', '固定支点の間隔'];
+  const DEGREES_PER_TURN = 360;
+  let iterationTimer;
+  let phaseTimer;
+  const activeRow = () => report.rows[Number(elements.target.value)];
+  function mark(parent, tag, attributes, label) {
+    const node = document.createElementNS(SVG_NAMESPACE, tag);
+    for (const [name, value] of Object.entries(attributes)) node.setAttribute(name, value);
+    if (label) node.textContent = label;
+    parent.appendChild(node);
+    return node;
+  }
+  function projection(points, width, height) {
+    const minima = Array.from({length: COORDINATES}, (_, axis) => Math.min(...points.map(point => point[axis])));
+    const maxima = Array.from({length: COORDINATES}, (_, axis) => Math.max(...points.map(point => point[axis])));
+    const scale = Math.min((width - PADDING * COORDINATES) / (maxima[0] - minima[0]),
+      (height - PADDING * COORDINATES) / (maxima[1] - minima[1]));
+    return point => [width / COORDINATES + scale * (point[0] - (minima[0] + maxima[0]) / COORDINATES),
+      height / COORDINATES - scale * (point[1] - (minima[1] + maxima[1]) / COORDINATES)];
+  }
+  function line(parent, points, project, stroke, width, dashed = false, closed = false) {
+    mark(parent, 'polyline', {points: [...points, ...(closed ? [points[0]] : [])].map(project).map(point => point.join(',')).join(' '),
+      fill: 'none', stroke, 'stroke-width': width, ...(dashed ? {'stroke-dasharray': '6 5'} : {})});
+  }
+  function dot(parent, point, project, color, label) {
+    const [x, y] = project(point);
+    mark(parent, 'circle', {cx: x, cy: y, r: 4, fill: color});
+    if (label) mark(parent, 'text', {x: x + 8, y: y - 9}, label);
+  }
+  function draw(row, snapshot, phaseIndex) {
+    const initial = row.snapshots[0];
+    const [crank, coupler, , ground] = snapshot.lengths;
+    const angle = row.phases[phaseIndex];
+    const origin = [0, 0]; const anchor = [ground, 0];
+    const jointA = [crank * Math.cos(angle), crank * Math.sin(angle)];
+    const beta = snapshot.couplerAngles[phaseIndex];
+    const jointB = [jointA[0] + coupler * Math.cos(beta), jointA[1] + coupler * Math.sin(beta)];
+    const marker = snapshot.curve[phaseIndex];
+    const allCurves = [row.target, ...row.snapshots.map(item => item.curve)].flat();
+    for (const [name, width, points] of [['mechanism', 520, [...allCurves, [-1, -1], [ground, 0]]], ['trajectory', 440, allCurves]]) {
+      const svg = elements[name]; svg.replaceChildren();
+      const project = projection(points, width, 370);
+      line(svg, row.target, project, 'var(--target)', 2, false, true);
+      line(svg, initial.curve, project, 'var(--initial)', 2, true, true);
+      line(svg, snapshot.curve, project, 'var(--current)', 2.5, false, true);
+      if (name === 'mechanism') {
+        line(svg, [origin, anchor], project, 'var(--initial)', 3);
+        line(svg, [origin, jointA, jointB, anchor], project, 'var(--ink)', 3);
+        line(svg, [jointA, marker, jointB], project, 'var(--muted)', 1.5);
+        for (const [point, label] of [[origin, 'O'], [anchor, 'D'], [jointA, 'A'], [jointB, 'B']]) dot(svg, point, project, 'var(--ink)', label);
+      }
+      line(svg, [marker, row.target[phaseIndex]], project, 'var(--target)', 1.5, true);
+      dot(svg, row.target[phaseIndex], project, 'var(--target)');
+      dot(svg, marker, project, 'var(--current)', name === 'mechanism' ? 'M' : '');
+    }
+  }
+  function render() {
+    const row = activeRow(); const snapshot = row.snapshots[Number(elements.iteration.value)];
+    elements['iteration-label'].value = `${snapshot.iteration} / ${row.snapshots[row.snapshots.length - 1].iteration}`;
+    renderPhase();
+    elements.metrics.replaceChildren();
+    for (const [label, value] of [['現在の最適化32位相 RMS', Math.sqrt(COORDINATES * snapshot.cost)],
+      ['最終の未使用257位相 RMS', row.verification.heldOutError]]) {
+      const box = document.createElement('div'); const number = document.createElement('strong');
+      number.textContent = value.toExponential(3); box.append(label, document.createElement('br'), number); elements.metrics.append(box);
+    }
+    elements.lengths.replaceChildren();
+    snapshot.lengths.forEach((length, index) => {
+      const rowNode = document.createElement('tr');
+      for (const value of [LENGTH_NAMES[index], row.snapshots[0].lengths[index].toFixed(6), length.toFixed(6), index < 3 ? '調整' : '固定']) {
+        const cell = document.createElement('td'); cell.textContent = value; rowNode.append(cell);
+      }
+      elements.lengths.append(rowNode);
+    });
+    elements.verification.textContent = `独立検証: ${row.verification.passed ? '合格' : '失敗'}。全反復で目的関数の減少・リンク閉路・同一組立分岐を検査。${row.targetCase === 'distorted' ? '目標の変形は 0.02 × [cos(3θ), sin(3θ)]。' : ''}`;
+  }
+  function renderPhase() {
+    const row = activeRow(); const phaseIndex = Number(elements.phase.value);
+    elements['phase-label'].value = `${(DEGREES_PER_TURN * phaseIndex / row.phases.length).toFixed(1)}°`;
+    draw(row, row.snapshots[Number(elements.iteration.value)], phaseIndex);
+  }
+  function stopIterations() { clearInterval(iterationTimer); iterationTimer = undefined; elements['play-iterations'].textContent = '反復を再生'; }
+  function stopPhase() { clearInterval(phaseTimer); phaseTimer = undefined; elements['play-phase'].textContent = '機構を動かす'; }
+  function selectTarget() {
+    stopIterations(); stopPhase();
+    elements.iteration.max = activeRow().snapshots.length - 1; elements.iteration.value = 0;
+    elements.phase.max = activeRow().phases.length - 1; elements.phase.value = 0; render();
+  }
+  elements.target.addEventListener('change', selectTarget);
+  elements.iteration.addEventListener('input', () => { stopIterations(); render(); });
+  elements.phase.addEventListener('input', () => { stopPhase(); renderPhase(); });
+  elements['play-iterations'].addEventListener('click', () => {
+    if (iterationTimer) return stopIterations();
+    if (Number(elements.iteration.value) === Number(elements.iteration.max)) elements.iteration.value = 0;
+    elements['play-iterations'].textContent = '反復を停止';
+    iterationTimer = setInterval(() => { elements.iteration.stepUp(); render(); if (Number(elements.iteration.value) === Number(elements.iteration.max)) stopIterations(); }, 250);
+  });
+  elements['play-phase'].addEventListener('click', () => {
+    if (phaseTimer) return stopPhase();
+    elements['play-phase'].textContent = '機構を停止';
+    phaseTimer = setInterval(() => { elements.phase.value = (Number(elements.phase.value) + 1) % activeRow().phases.length; renderPhase(); }, 40);
+  });
+  document.addEventListener('visibilitychange', () => { if (document.hidden) { stopIterations(); stopPhase(); } });
+  selectTarget();
+})();
+</script>
+</html>
