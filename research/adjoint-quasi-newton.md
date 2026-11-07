@@ -96,11 +96,11 @@ s=\Delta p,\qquad y=\nabla\tilde f(p_+\,)-\nabla\tilde f(p)
 
 曲率が弱いとき:
 
-- 現行 `bfgs.ts` は閾値以下で \(H\) を単位行列に戻す。
+- 現行 `bfgs` / `adjointBfgs` は \(s^\top y/(\|s\|\|y\|)\) の相対閾値を使い、不適切な曲率ペアの更新をスキップして既存の \(H\) を維持する。絶対閾値でのリセットによる停滞は[機構ベンチマーク](mechanical-character.md)で再現し、修正した。
 - SciPy `_minimize_bfgs` は Wolfe 直線探索のあと (6.17) を適用する。\(y^\top s=0\) のとき \(\rho\) を大きな値に置き、更新を捨てない（数値上の応急処置）。[SciPy-BFGS]
 - Powell 減衰 \(\bar y=\theta y+(1-\theta)Bs\) は、Lagrange Hessian の更新を生き延びさせる技法。[Powell1978]
 
-(推奨) 第1弾は現行 `bfgs.ts` に合わせ、弱い \(s^\top y\) では更新を捨てて \(H\leftarrow I\)。Powell 減衰は全空間 SQP をやるまで入れない。
+(実装) 密BFGSは弱い曲率の更新をスキップする。非降下方向を検出した場合には \(H\leftarrow I\) と最急降下へのフォールバックを行う。Powell 減衰は導入していない。
 
 ### 5. dense BFGS を先に出す理由
 

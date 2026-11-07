@@ -5,9 +5,9 @@
 
 import { dotProduct, scaleVector } from '../utils/matrix.js';
 import { Logger } from './logger.js';
+import { hasUsableCurvature, MINIMUM_CURVATURE_COSINE } from './curvature.js';
 
 const NEGATIVE_GRADIENT_DIRECTION = -1.0;
-const MINIMUM_CURVATURE_THRESHOLD = 1e-10;
 const DEFAULT_INITIAL_SCALING_FACTOR = 1.0;
 
 export type LbfgsHistory = {
@@ -115,11 +115,10 @@ export function updateHistoryIfCurvatureIsValid(
   iteration: number,
   currentCost: number,
   algorithmName = 'lbfgs',
-  minimumCurvature = MINIMUM_CURVATURE_THRESHOLD
+  minimumCurvatureCosine = MINIMUM_CURVATURE_COSINE
 ): void {
   const stepDotGradientChange = dotProduct(stepVector, gradientChangeVector);
-  const curvatureIsTooWeak = !Number.isFinite(stepDotGradientChange) || stepDotGradientChange <= minimumCurvature ||
-    !Number.isFinite(1 / stepDotGradientChange);
+  const curvatureIsTooWeak = !hasUsableCurvature(stepVector, gradientChangeVector, minimumCurvatureCosine);
   if (curvatureIsTooWeak) {
     // WHY: Weak/negative curvature can destabilize updates; clearing history is the simplest safe recovery.
     clearHistory(history);

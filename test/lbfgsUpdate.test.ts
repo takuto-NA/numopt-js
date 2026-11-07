@@ -7,6 +7,17 @@ import {
 } from '../src/core/lbfgsUpdate.js';
 
 describe('shared L-BFGS updates', () => {
+  it('retains a valid tiny positive-curvature pair instead of clearing history', () => {
+    const history = createEmptyHistory();
+    const smallStep = 1e-7;
+    updateHistoryIfCurvatureIsValid(history, 2, new Float64Array([1]), new Float64Array([2]), new Logger(undefined, undefined), 0, 0);
+    updateHistoryIfCurvatureIsValid(history, 2, new Float64Array([smallStep]), new Float64Array([4 * smallStep]),
+      new Logger(undefined, undefined), 1, 0);
+    expect(history.stepVectorHistory).toHaveLength(2);
+    const direction = computeLbfgsSearchDirection(new Float64Array([1]), history);
+    expect(direction[0]).toBeCloseTo(-0.25, 12);
+  });
+
   it('matches dense BFGS applied to retained pairs with the same initial scaling', () => {
     const history = createEmptyHistory();
     const pairs = [

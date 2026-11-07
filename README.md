@@ -120,6 +120,35 @@ const result = adjointBfgs(new Float64Array([2]), new Float64Array([-1]), cost, 
 console.log(result.finalParameters, result.finalStates, result.finalConstraintNorm);
 ```
 
+## Implicit residual derivatives
+
+`computeEffectiveJacobian(p, x, residual, constraint, options)` returns
+`J_eff = r_p - r_x C_x^+ C_p`. For `f = 1/2 ||r||²`, use `J_eff.transpose() * r`
+as the reduced gradient passed to ordinary BFGS. Omitted partials use finite differences;
+options `drdp`, `drdx`, `dcdp`, and `dcdx` accept analytical `ml-matrix` matrices.
+
+```js
+import { computeEffectiveJacobian } from 'numopt-js';
+import { Matrix } from 'ml-matrix';
+
+const residual = (p, x) => new Float64Array([p[0] - 1, x[0] - 2]);
+const constraint = (p, x) => {
+  const closure = x[0] - p[0] ** 2;
+  return new Float64Array([closure, 2 * closure]); // consistent redundant rows
+};
+const p = new Float64Array([1.5]);
+const x = new Float64Array([p[0] ** 2]); // solve states first at every trial p
+const jacobian = computeEffectiveJacobian(p, x, residual, constraint);
+const gradient = jacobian.transpose().mmul(Matrix.columnVector(residual(p, x))).to1DArray();
+```
+
+The caller must provide feasible states on a consistent branch. A true implicit derivative
+requires a nonsingular square state Jacobian, or a full-column-rank rectangular one with
+compatible parameter derivatives. Otherwise the result is a least-squares/regularized
+linearization and does not establish a feasible state function. Regular square/tall systems
+use one LU/QR factorization for all parameter columns. The four-bar example includes state
+solves, BFGS integration, and redundant constraints; see [the validation](research/mechanical-character.md).
+
 ## Newton–Adjoint with an approximate Hessian
 
 `adjointNewton` implements the approximation in [section 12 of “Newton's method and the Adjoint method”](https://qiita.com/naturemon/items/df0242e8a2e5814503f5):
@@ -257,11 +286,13 @@ Recommended order:
 7. `npm run example:adjoint-advanced` — harder adjoint cases (GD and BFGS)
 8. `npm run example:adjoint-reduced` — few parameters vs many implicit states
 9. `npm run example:layout-toy` — small layout toy
+10. `npm run example:mechanical-character` — synthetic four-bar trajectory fitting based on Coros et al. (2013), section 4.2; compares BFGS with reference/public/redundant implicit gradients, full finite differences, Adjoint BFGS, and Constrained GN/LM. Reports strict accuracy failures with exit code 1; see [scope, capabilities, and validation](research/mechanical-character.md).
 
 Manual benchmarks (not CI):
 
 - `npm run benchmark:paper` — paper-grade comparison of every public solver class. Warmup 1 run is discarded; deterministic solvers repeat 7 times (median and IQR); CMA-ES uses 5 seeds (warmup seed 1, timed seeds 1–5). Success is parameter error (and constraint norm when constrained), never `result.converged`. GD / BFGS / L-BFGS / Adjoint GD / Adjoint BFGS use analytical derivatives; GN / LM / Constrained / Penalty use numeric Jacobians. Rosenbrock CMA-ES uses IPOP; Rosenbrock GD may hit a 10000-iteration cap and still succeed on parameter error. Primary metrics are evaluation counts and success; wall-clock is secondary and machine-dependent. Writes `benchmark-results/paper-benchmark.md` and `.json` (gitignored). Hypothesis failures set exit code 1; do not commit the generated numbers.
 - `npm run benchmark:constrained`, `npm run benchmark:curve-bending` — informal single-run smokes.
+- `npm run benchmark:mechanical-character` — reachable and distorted four-bar targets, independent held-out geometry checks, warmed median/IQR timings, and gradient work counts. Writes Markdown/JSON under `benchmark-results/`; returns exit code 1 if a strict accuracy check fails. This is a synthetic validation of section 4.2, not a reproduction of the original characters or the full paper. Optional plots: `python scripts/plot-mechanical-character.py` (Matplotlib).
 
 Full signatures and options: [TypeDoc API reference](https://takuto-na.github.io/numopt-js/).
 

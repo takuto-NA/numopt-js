@@ -15,8 +15,7 @@ import {
   finiteDiffConstraintPartialX
 } from './finiteDiff.js';
 import { Logger } from './logger.js';
-import { float64ArrayToMatrix } from '../utils/matrix.js';
-import { solveLeastSquares } from './constrainedUtils.js';
+import { solveLeastSquaresMultiple } from './leastSquaresMultiple.js';
 
 const DEFAULT_STEP_SIZE_P = 1e-6;
 const DEFAULT_STEP_SIZE_X = 1e-6;
@@ -71,13 +70,15 @@ export interface EffectiveJacobianOptions {
  * 
  * Algorithm:
  * 1. Compute partial derivatives: r_p, r_x, C_p, C_x
- * 2. For each column j (parameter j):
- *    a. Extract j-th column of C_p: (C_p)_j
- *    b. Solve: C_x dx = (C_p)_j to get dx = C_x^-1 (C_p)_j
- *    c. Compute column: (J_eff)_j = (r_p)_j - r_x dx
- * 3. Return effective Jacobian matrix
+ * 2. Solve C_x X = C_p with all parameter columns as right-hand sides.
+ * 3. Return r_p - r_x X.
  * 
- * The C_x decomposition is reused across all columns for efficiency.
+ * Regular square/tall systems reuse one LU/QR decomposition across columns.
+ * This is a reduced derivative only where a feasible, locally unique x(p) exists:
+ * C_x must have full column rank and C_p must lie in its column space.
+ * Otherwise rectangular least-squares/regularization gives a linearization, not proof of x(p).
+ * Inputs must already be feasible; this function does not solve or project states.
+ * For f=1/2 ||r||², the reduced gradient is J_eff^T r.
  * 
  * @param parameters - Parameter vector p
  * @param states - State vector x (satisfies c(p, x) = 0)
@@ -94,7 +95,7 @@ export function computeEffectiveJacobian(
   residualFunction: ConstrainedResidualFn,
   constraintFunction: ConstraintFn,
   options: EffectiveJacobianOptions = {},
-  logger: Logger,
+  logger: Logger = new Logger(undefined, undefined),
   algorithmName: string = 'constrainedOptimization'
 ): Matrix {
   const stepSizeP = options.stepSizeP ?? DEFAULT_STEP_SIZE_P;
@@ -117,96 +118,20 @@ export function computeEffectiveJacobian(
     ? options.dcdx(parameters, states)
     : finiteDiffConstraintPartialX(parameters, states, constraintFunction, { stepSize: stepSizeX });
 
-  // Get dimensions
-  const residualCount = r_p.rows;
-  const parameterCount = r_p.columns;
-  const stateCount = c_x.columns;
-
-  // Constrained GN/LM allow a rectangular ∂c/∂x. adjointGradientDescent
-  // rejects that case at its own entry point.
-
-  if (r_x.columns !== stateCount) {
-    const errorMsg = `Residual Jacobian ∂r/∂x must have stateCount columns. ` +
-      `Got ${r_x.rows} × ${r_x.columns}, expected ${r_x.rows} × ${stateCount}. Algorithm: ${algorithmName}`;
-    logger.warn(algorithmName, undefined, errorMsg);
-    throw new Error(errorMsg);
-  }
-
-  if (c_p.columns !== parameterCount) {
-    const errorMsg = `Constraint Jacobian ∂c/∂p must have parameterCount columns. ` +
-      `Got ${c_p.rows} × ${c_p.columns}, expected ${c_p.rows} × ${parameterCount}. Algorithm: ${algorithmName}`;
-    logger.warn(algorithmName, undefined, errorMsg);
-    throw new Error(errorMsg);
-  }
-
-  // Initialize effective Jacobian matrix (residualCount × parameterCount)
-  const effectiveJacobianData: number[][] = [];
-  for (let i = 0; i < residualCount; i++) {
-    effectiveJacobianData.push(new Array(parameterCount).fill(0));
-  }
-
-  // Compute each column of effective Jacobian
-  for (let paramIndex = 0; paramIndex < parameterCount; paramIndex++) {
-    const column = computeEffectiveJacobianColumn(
-      paramIndex,
-      c_p,
-      c_x,
-      r_p,
-      r_x,
-      stateCount,
-      residualCount,
-      logger,
-      algorithmName
-    );
-    for (let i = 0; i < residualCount; i++) {
-      effectiveJacobianData[i][paramIndex] = column[i];
-    }
-  }
-
-  return new Matrix(effectiveJacobianData);
+  const residualCount = residualFunction(parameters, states).length;
+  const constraintCount = constraintFunction(parameters, states).length;
+  assertShape(r_p, residualCount, parameters.length, 'Residual Jacobian ∂r/∂p');
+  assertShape(r_x, residualCount, states.length, 'Residual Jacobian ∂r/∂x');
+  assertShape(c_p, constraintCount, parameters.length, 'Constraint Jacobian ∂c/∂p');
+  assertShape(c_x, constraintCount, states.length, 'Constraint Jacobian ∂c/∂x');
+  const sensitivity = solveLeastSquaresMultiple(c_x, c_p, logger, algorithmName);
+  const effectiveJacobian = r_p.clone().sub(r_x.mmul(sensitivity));
+  if (!effectiveJacobian.to1DArray().every(Number.isFinite)) throw new Error('Effective residual Jacobian contains NaN or Infinity');
+  return effectiveJacobian;
 }
 
-/**
- * Computes a single column of the effective Jacobian.
- * For parameter j: (J_eff)_j = (r_p)_j - r_x dx, where dx solves C_x dx = (C_p)_j
- */
-function computeEffectiveJacobianColumn(
-  paramIndex: number,
-  constraintJacobianP: Matrix,
-  constraintJacobianX: Matrix,
-  residualJacobianP: Matrix,
-  residualJacobianX: Matrix,
-  stateCount: number,
-  residualCount: number,
-  logger: Logger,
-  algorithmName: string
-): Float64Array {
-  // Extract j-th column of C_p: (C_p)_j
-  const constraintCount = constraintJacobianP.rows;
-  const constraintJacobianPColumn = new Float64Array(constraintCount);
-  for (let k = 0; k < constraintCount; k++) {
-    constraintJacobianPColumn[k] = constraintJacobianP.get(k, paramIndex);
+function assertShape(matrix: Matrix, rows: number, columns: number, label: string): void {
+  if (matrix.rows !== rows || matrix.columns !== columns) {
+    throw new Error(`${label} must be ${rows} × ${columns}; got ${matrix.rows} × ${matrix.columns}`);
   }
-
-  // Solve: C_x dx = (C_p)_j to get dx = C_x^+ (C_p)_j
-  // Uses hierarchical solver that handles both square and non-square matrices
-  const constraintJacobianPColumnMatrix = float64ArrayToMatrix(constraintJacobianPColumn);
-  const stateSensitivity = solveLeastSquares(
-    constraintJacobianX,
-    constraintJacobianPColumnMatrix,
-    logger,
-    algorithmName
-  );
-
-  // Compute: (J_eff)_j = (r_p)_j - r_x dx
-  const effectiveJacobianColumn = new Float64Array(residualCount);
-  for (let i = 0; i < residualCount; i++) {
-    let residualJacobianXTimesStateSensitivity = 0;
-    for (let k = 0; k < stateCount; k++) {
-      residualJacobianXTimesStateSensitivity += residualJacobianX.get(i, k) * stateSensitivity[k];
-    }
-    effectiveJacobianColumn[i] = residualJacobianP.get(i, paramIndex) - residualJacobianXTimesStateSensitivity;
-  }
-
-  return effectiveJacobianColumn;
 }

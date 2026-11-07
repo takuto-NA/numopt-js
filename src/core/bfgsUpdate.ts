@@ -6,9 +6,9 @@
 import { Matrix } from 'ml-matrix';
 import { Logger } from './logger.js';
 import { dotProduct, scaleVector } from '../utils/matrix.js';
+import { hasUsableCurvature } from './curvature.js';
 
 const NEGATIVE_GRADIENT_DIRECTION = -1.0;
-const MINIMUM_CURVATURE_THRESHOLD = 1e-10;
 
 export function createIdentityInverseHessian(dimension: number): Matrix {
   // NOTE: Provide both dimensions to stay compatible with our (older) local typing history
@@ -80,14 +80,13 @@ export function updateInverseHessianApproximation(
   algorithmName: string
 ): Matrix {
   const stepDotGradientChange = dotProduct(stepVector, gradientChangeVector);
-  const curvatureIsTooWeak = stepDotGradientChange <= MINIMUM_CURVATURE_THRESHOLD;
-  if (curvatureIsTooWeak) {
-    // WHY: If curvature is weak/negative, the BFGS update can break positive definiteness.
-    logger.warn(algorithmName, iteration, 'Curvature condition too weak; resetting inverse Hessian approximation.', [
+  if (!hasUsableCurvature(stepVector, gradientChangeVector)) {
+    // A skipped pair preserves the previous positive-definite model, even at small objective scales.
+    logger.warn(algorithmName, iteration, 'Unusable curvature; skipping inverse Hessian update.', [
       { key: 'Cost:', value: currentCost },
       { key: 'stepDotGradientChange:', value: stepDotGradientChange }
     ]);
-    return createIdentityInverseHessian(stepVector.length);
+    return inverseHessianApproximation;
   }
 
   const curvatureScaling = 1.0 / stepDotGradientChange;
@@ -106,5 +105,6 @@ export function updateInverseHessianApproximation(
   const rankTwoPart = leftFactor.mmul(inverseHessianApproximation).mmul(rightFactor);
   const rankOnePart = stepMatrix.mmul(stepMatrix.transpose()).mul(curvatureScaling);
 
-  return rankTwoPart.add(rankOnePart);
+  const updated = rankTwoPart.add(rankOnePart);
+  return updated.to1DArray().every(Number.isFinite) ? updated : inverseHessianApproximation;
 }
