@@ -1,5 +1,7 @@
 # Computational Design of Mechanical Characters と numopt-js
 
+論文の式・Fig.4の駆動方式・§7.1の勾配計時に沿った追加検証と、境界付近で見つかった不合格例は[論文基準の検証](mechanical-character-paper-validation.md)を参照。
+
 接続・固定支点・マーカーを固定し、動く3本のリンク長だけを変える具体的なExampleと反復再生は、[固定四節リンクの軌跡フィッティング](linkage-trajectory-example.md)を参照。
 
 対象は [Coros et al., Computational Design of Mechanical Characters, SIGGRAPH 2013](https://publications.ri.cmu.edu/storage/publications/pub_files/2013/0/CDMC_final.pdf)。論文の章・式番号を以下に示す。これは著者のキャラクター・機構パラメータ・訓練データを用いた実験再現ではなく、既存APIの適用範囲の調査と、§4.2の数式を使った新しい4節リンクの検証である。
