@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-08
+
+- Publish once per version tag, use Node.js 24 for npm Trusted Publishing, and validate the release ref without shell interpolation.
 - Add paper-guided mechanism validation with geared five-bars, chain-rule negative controls, quadrature/gradient timing checks, and independent detection of tanh saturation. Preserve two failed single-start fits alongside verified best-of-three results (`benchmark:mechanical-character:paper`).
 - Add fixed-topology four-bar fitting with only three adjustable link lengths, an offline iteration/phase replay, and 54 repeated independently checked trials (`example:linkage-trajectory`, `benchmark:linkage-trajectory`).
 - Keep GN/LM normal equations unchanged across damping retries, including unconstrained LM. Attempt undamped GN before ridge fallback.

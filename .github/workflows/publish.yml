@@ -4,14 +4,16 @@ on:
   push:
     tags:
       - 'v*'
-  release:
-    types: [published]
   workflow_dispatch:
     inputs:
       publish_ref:
         description: 'Git ref to publish (e.g., v0.3.0)'
         required: true
-        default: 'v0.5.0'
+        default: 'v0.6.0'
+
+concurrency:
+  group: npm-publish
+  cancel-in-progress: false
 
 jobs:
   publish:
@@ -24,14 +26,14 @@ jobs:
     - name: Checkout publish ref
       uses: actions/checkout@v4
       with:
-        ref: ${{ github.event_name == 'release' && github.event.release.tag_name || github.event_name == 'push' && github.ref || inputs.publish_ref }}
+        ref: ${{ github.event_name == 'push' && github.ref || inputs.publish_ref }}
 
     - name: Use Node.js
       uses: actions/setup-node@v6
       with:
-        node-version: '20.x'
+        node-version: '24.x'
         registry-url: https://registry.npmjs.org
-        cache: 'npm'
+        package-manager-cache: false
 
     - name: Upgrade npm (Trusted Publishing requires newer npm)
       run: |
@@ -51,8 +53,17 @@ jobs:
       run: npm install --no-save --no-package-lock @rollup/rollup-linux-x64-gnu
 
     - name: Verify ref matches package.json version
+      env:
+        PUBLISH_REF: ${{ github.event_name == 'push' && github.ref || inputs.publish_ref }}
       run: |
-        node -e "const v=require('./package.json').version; const ref='${{ github.event_name == 'release' && github.event.release.tag_name || github.event_name == 'push' && github.ref || inputs.publish_ref }}'.replace(/^refs\\//,'').replace(/^tags\\//,''); const tag=ref.replace(/^v/,''); if(v!==tag){console.error(`package.json version ${v} does not match ref ${ref}`); process.exit(1);} console.log('Version OK:', v);"
+        node --input-type=commonjs <<'NODE'
+        const version = require('./package.json').version;
+        const tag = process.env.PUBLISH_REF.replace(/^refs\/tags\//, '');
+        if (tag !== `v${version}`) {
+          throw new Error(`package.json version ${version} does not match ref ${tag}`);
+        }
+        console.log('Version OK:', version);
+        NODE
 
     - name: Run tests
       run: npm test
